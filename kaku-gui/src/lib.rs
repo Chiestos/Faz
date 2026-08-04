@@ -20,4 +20,5 @@ pub mod inline_ai_control;
 pub mod soul;
 
 mod ai_auth;
+mod codex_connection;
 pub mod thread_util;

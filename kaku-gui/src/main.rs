@@ -96,6 +96,7 @@ mod ai_conversations;
 mod ai_remote;
 mod ai_state;
 mod ai_tools;
+mod codex_connection;
 mod colorease;
 mod commands;
 mod customglyph;

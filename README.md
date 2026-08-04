@@ -73,7 +73,7 @@ Run `kaku ai` to configure the assistant fields directly:
 
 | Field | Use |
 | :--- | :--- |
-| Auth Type | API key or Codex CLI login |
+| Auth Type | API key or Follow Codex user connection |
 | Simple Model | Lightweight command generation and quick chat model |
 | Deep Model | Primary `Cmd + L` / `k` chat model |
 | Base URL | OpenAI-compatible API root, such as `https://api.openai.com/v1` |
