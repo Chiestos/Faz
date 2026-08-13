@@ -2918,18 +2918,6 @@ local function launch_lazygit(window, pane)
     return
   end
 
-  local path = pane_cwd(pane)
-  if path == "" then
-    show_lazygit_toast(window, pane, "kaku-toast-lazygit-no-cwd")
-    return
-  end
-
-  local repo_root = detect_git_repo_root(path)
-  if not repo_root then
-    show_lazygit_toast(window, pane, "kaku-toast-lazygit-not-git")
-    return
-  end
-
   local lazygit_cmd = resolve_lazygit_command()
   if not lazygit_cmd then
     show_lazygit_toast(window, pane, "kaku-toast-lazygit-missing")
@@ -2948,7 +2936,10 @@ local function launch_lazygit(window, pane)
     show_lazygit_toast(window, pane, "kaku-toast-lazygit-dispatch-failed")
     return
   end
-  mark_repo_lazygit_used(repo_root)
+  -- The shell that receives this input owns the real working directory. In a
+  -- nested terminal (for example Herdr or tmux), Kaku's outer pane cwd can be
+  -- stale, so do not preflight Git here. Lazygit reports a non-repository
+  -- directory itself after the current shell resolves the command.
 end
 
 local function launch_yazi(window, pane)
