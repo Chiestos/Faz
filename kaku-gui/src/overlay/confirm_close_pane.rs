@@ -9,7 +9,7 @@ use mux::Mux;
 pub fn confirm_close_pane(
     pane_id: PaneId,
     mut term: TermWizTerminal,
-    mux_window_id: WindowId,
+    _mux_window_id: WindowId,
     window: ::window::Window,
 ) -> anyhow::Result<()> {
     if confirm::run_confirmation(
@@ -18,9 +18,15 @@ pub fn confirm_close_pane(
     )? {
         promise::spawn::spawn_into_main_thread(async move {
             let mux = Mux::get();
-            let tab = match mux.get_active_tab_for_window(mux_window_id) {
-                Some(tab) => tab,
-                None => return,
+            // Resolve the pane's own tab rather than whichever tab is active
+            // when the prompt is answered: switching tabs while the prompt is
+            // up would otherwise aim kill_pane at a tab that never held this
+            // pane, and the pane would silently survive the confirmation.
+            let Some((_domain_id, _window_id, tab_id)) = mux.resolve_pane_id(pane_id) else {
+                return;
+            };
+            let Some(tab) = mux.get_tab(tab_id) else {
+                return;
             };
             tab.kill_pane(pane_id);
         })
