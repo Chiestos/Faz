@@ -1288,6 +1288,18 @@ return tab, {{ tab }}, panes, effective_config
             "Kaku Dark should render Hermes black foregrounds as readable light text"
         );
     }
+
+    #[test]
+    fn bundled_kaku_light_keeps_claude_selection_visibly_blue() {
+        let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+
+        assert!(
+            content.contains("['#205EA6'] = '#C9DDF0'"),
+            "Kaku Light should not flatten Claude Code's blue selected row into the cream background"
+        );
+    }
 }
 
 pub fn set_config_file_override(path: &Path) {
