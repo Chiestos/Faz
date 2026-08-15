@@ -5788,6 +5788,10 @@ impl TermWindow {
                 promise::spawn::spawn(future).detach();
             }
         } else {
+            // Same bookkeeping as close_current_tab: the close button and the
+            // middle click must feed ReopenLastClosedTab too, or Cmd+Shift+T
+            // silently does nothing for tabs closed with the mouse.
+            self.record_closed_tab_cwd(&tab);
             mux.remove_tab(tab_id);
         }
     }
@@ -5808,10 +5812,9 @@ impl TermWindow {
                 tab.can_close_without_prompting(CloseReason::Tab)
             });
         if should_confirm {
-            // Tab has running processes; ask the user first.
-            // We do not record the cwd here: the user may cancel, and we cannot
-            // reliably hook the async confirmation result from this call site.
-            // In practice, tabs with active processes are rare to close with reopen-intent.
+            // Tab has running processes; ask the user first. The cwd is
+            // recorded from the confirmed branch of confirm_close_tab, which is
+            // the only place that knows the user did not cancel.
             if let Some(window) = self.window.clone() {
                 let (overlay, future) = start_overlay(self, &tab, move |tab_id, term| {
                     confirm_close_tab(tab_id, term, mux_window_id, window)
@@ -5826,7 +5829,7 @@ impl TermWindow {
         }
     }
 
-    fn record_closed_tab_cwd(&mut self, tab: &Arc<Tab>) {
+    pub(crate) fn record_closed_tab_cwd(&mut self, tab: &Arc<Tab>) {
         if let Some(pane) = tab.get_active_pane() {
             if let Some(cwd) = pane
                 .get_current_working_dir(mux::pane::CachePolicy::AllowStale)

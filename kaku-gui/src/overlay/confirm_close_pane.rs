@@ -1,10 +1,12 @@
 use super::confirm;
+use crate::termwindow::TermWindowNotif;
 use crate::TermWindow;
 use mux::pane::PaneId;
 use mux::tab::TabId;
 use mux::termwiztermtab::TermWizTerminal;
 use mux::window::WindowId;
 use mux::Mux;
+use window::WindowOps;
 
 pub fn confirm_close_pane(
     pane_id: PaneId,
@@ -47,11 +49,17 @@ pub fn confirm_close_tab(
         "Close this tab?\nAll panes in this tab will be terminated.",
         &mut term,
     )? {
-        promise::spawn::spawn_into_main_thread(async move {
+        // Record the cwd from here rather than at the call site: the user may
+        // still cancel, and only this branch knows they did not. Without it,
+        // every tab that needed a confirmation would be missing from
+        // ReopenLastClosedTab.
+        window.notify(TermWindowNotif::Apply(Box::new(move |term_window| {
             let mux = Mux::get();
+            if let Some(tab) = mux.get_tab(tab_id) {
+                term_window.record_closed_tab_cwd(&tab);
+            }
             mux.remove_tab(tab_id);
-        })
-        .detach();
+        })));
     }
     TermWindow::schedule_cancel_overlay(window, tab_id, None);
 
