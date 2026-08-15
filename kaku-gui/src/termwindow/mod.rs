@@ -4479,6 +4479,14 @@ impl TermWindow {
             if modal.perform_assignment(assignment, self) {
                 return Ok(PerformAssignmentResult::Handled);
             }
+            // The modal declined this command. Menu key equivalents still reach
+            // us while a modal is up, because AppKit routes them ahead of
+            // keyDown, and a modal swallows every key event it does get. Leaving
+            // it open would strand any confirmation overlay the command opens,
+            // so the modal gives way to the command.
+            if !matches!(assignment, Nop | DisableDefaultAssignment) {
+                self.cancel_modal();
+            }
         }
 
         match pane.perform_assignment(assignment) {
