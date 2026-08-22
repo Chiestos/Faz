@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use wezterm_term::TerminalSize;
 use wezterm_toast_notification::persistent_toast_notification;
 use window::WindowOps;
@@ -513,39 +513,19 @@ fn collect_leaf_entries(node: &SavedPaneNode, out: &mut Vec<SavedPaneEntry>) {
     }
 }
 
-/// Lowercase host names that identify this machine in a `file://` URL.
-///
-/// OSC 7 is conventionally reported as `file://$HOST$PWD`, and shells
-/// variously report the full hostname or just its first label, so accept
-/// both. A trailing dot (FQDN form) is stripped by the caller.
-fn local_file_url_hostnames() -> &'static [String] {
-    // The hostname cannot change while the app is running, and this lookup
-    // happens once per restored pane, so compute it lazily exactly once.
-    static NAMES: OnceLock<Vec<String>> = OnceLock::new();
-    NAMES.get_or_init(|| {
-        let mut names = Vec::new();
-        if let Ok(hostname) = hostname::get() {
-            // The URL parser lowercases domain hosts, so the comparison
-            // baseline must be lowercase too; this makes the match
-            // case-insensitive (macOS hostnames are often mixed case).
-            let hostname = hostname.to_string_lossy().to_lowercase();
-            // For an FQDN like "my-mac.local", also accept the short form
-            // "my-mac": zsh's $HOST, `hostname`, and `scutil LocalHostName`
-            // disagree on whether the domain part is included.
-            if let Some((short, _)) = hostname.split_once('.') {
-                names.push(short.to_string());
-            }
-            names.push(hostname);
-        }
-        names
-    })
-}
-
 /// Convert a saved `file://` working-directory URL into a spawnable path.
 ///
 /// Returns `None` for non-file schemes and for hosts that do not identify
 /// this machine, so a foreign (e.g. ssh) cwd never leaks into a local spawn.
 fn cwd_from_working_dir(working_dir: Option<&SerdeUrl>) -> Option<String> {
+    let local_hostname = crate::local_hostname::current();
+    cwd_from_working_dir_with_hostname(working_dir, local_hostname.as_deref())
+}
+
+fn cwd_from_working_dir_with_hostname(
+    working_dir: Option<&SerdeUrl>,
+    local_hostname: Option<&str>,
+) -> Option<String> {
     let url = working_dir?;
     if url.url.scheme() != "file" {
         return None;
@@ -554,17 +534,14 @@ fn cwd_from_working_dir(working_dir: Option<&SerdeUrl>) -> Option<String> {
     if let Some(host) = url.host_str() {
         // `to_file_path` refuses any host other than empty or `localhost`,
         // but OSC 7 reporters conventionally use the real local hostname.
-        // Treat this machine's own names as local; any other host keeps the
+        // Treat this machine's exact hostname as local; any other host keeps the
         // strict behavior so a remote cwd cannot leak into a local spawn.
-        //
-        // Tolerate a trailing dot: "my-mac.local." is the FQDN spelling of
-        // the same host and some tools emit it verbatim.
-        let host = host.trim_end_matches('.');
-        if local_file_url_hostnames().iter().any(|name| name == host) {
-            // Strip the now-proven-local host so `to_file_path` accepts the
-            // URL. Propagate failure (only possible for cannot-be-a-base
-            // URLs, which file URLs are not) as a refused conversion.
-            url.set_host(None).ok()?;
+        if crate::local_hostname::is_local_file_host(Some(host), local_hostname) {
+            // `Url::set_host(None)` updates the serialized file URL but leaves
+            // its internal host value intact in url 2.5.7, so `to_file_path`
+            // still rejects it. Rewrite a proven-local host to the one value
+            // that `to_file_path` explicitly accepts.
+            url.set_host(Some("localhost")).ok()?;
         }
     }
     url.to_file_path()
@@ -582,7 +559,7 @@ fn is_ssh_domain_name(name: &str) -> bool {
 /// `to_file_path` refuses remote-host URLs, so those panes used to restore
 /// into the remote home directory. The path component is meaningful on the
 /// remote side, so pass it through for ssh domains. Local domains accept
-/// empty/`localhost` hosts plus this machine's own host names (see
+/// empty/`localhost` hosts plus this machine's exact hostname (see
 /// `cwd_from_working_dir`); any other host still fails conversion, so a
 /// leftover remote path cannot leak into a local spawn.
 fn cwd_for_restore(domain_name: &str, working_dir: Option<&SerdeUrl>) -> Option<String> {
@@ -1527,32 +1504,32 @@ mod tests {
     }
 
     #[test]
-    fn restore_cwd_local_domain_accepts_local_hostname() {
-        // OSC 7 reporters conventionally use the real local hostname, which
-        // `to_file_path` would otherwise reject on unix.
-        let hostname = hostname::get()
-            .expect("local hostname")
-            .to_string_lossy()
-            .into_owned();
+    fn restore_cwd_local_domain_accepts_exact_local_hostname() {
         // URL parsing lowercases the host; the comparison must not care.
-        let url = format!("file://{}/Users/a/src", hostname.to_uppercase());
         assert_eq!(
-            cwd_for_restore("local", Some(&serde_url(&url))).as_deref(),
+            cwd_from_working_dir_with_hostname(
+                Some(&serde_url("file://MAC.LOCAL/Users/a/src")),
+                Some("mac.local"),
+            )
+            .as_deref(),
             Some("/Users/a/src")
         );
-        // Shells variously report just the first label of an FQDN.
-        if let Some((short, _)) = hostname.split_once('.') {
-            let url = format!("file://{short}/Users/a/src");
-            assert_eq!(
-                cwd_for_restore("local", Some(&serde_url(&url))).as_deref(),
-                Some("/Users/a/src")
-            );
-        }
         // A trailing dot (FQDN form) still identifies this machine.
-        let url = format!("file://{hostname}./Users/a/src");
         assert_eq!(
-            cwd_for_restore("local", Some(&serde_url(&url))).as_deref(),
+            cwd_from_working_dir_with_hostname(
+                Some(&serde_url("file://mac.local./Users/a/src")),
+                Some("mac.local"),
+            )
+            .as_deref(),
             Some("/Users/a/src")
+        );
+        // A short remote host with the same first label is not local proof.
+        assert_eq!(
+            cwd_from_working_dir_with_hostname(
+                Some(&serde_url("file://mac/Users/a/src")),
+                Some("mac.local"),
+            ),
+            None
         );
     }
 
