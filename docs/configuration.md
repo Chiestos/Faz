@@ -218,8 +218,11 @@ config.tab_title_show_basename_only = true         -- show "dirname" instead of 
 config.tab_title_show_foreground_process = true    -- show "dirname·codex" while commands run
 ```
 
-Background tabs that emit BEL show a small dot in the tab title by default.
-Disable the indicator if you do not want tab-level bell notifications:
+The trailing cell stays blank when idle and is shared by lightweight task
+status: a quiet green dot means work is running, while amber means a pane needs
+attention. `kaku ai` can enable this integration for Claude Code. Background
+tabs that emit BEL also use the amber state by default. Disable only the BEL
+part if you do not want tab-level bell notifications:
 
 ```lua
 config.bell_tab_indicator = false

@@ -10,6 +10,12 @@ Open the AI settings panel inside Kaku. Configure external coding tools (Claude 
 kaku ai
 ```
 
+For Claude Code, set **Tab Status** to **On** to install Kaku's managed hooks.
+The trailing Tab cell then stays blank while idle, shows a quiet green dot while
+Claude is working, and switches to amber when Claude needs input or an unseen
+completion arrives. Existing Claude hooks are preserved when this option is
+enabled or disabled.
+
 ## kaku chat
 
 Start Kaku's standalone AI chat from any shell. This is a discoverable alias for

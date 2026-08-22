@@ -1,6 +1,7 @@
 //! Interactive TUI for `kaku ai`.
 
 use crate::assistant_config;
+use crate::claude_status_hook::HOOK_COMMAND as CLAUDE_STATUS_HOOK_COMMAND;
 use crate::utils::{is_jsonc_path, open_path_in_editor, parse_json_or_jsonc, write_atomic};
 use anyhow::Context;
 use crossterm::event::{
@@ -28,6 +29,19 @@ mod ui;
 use providers::*;
 
 const FOLLOW_CODEX_MODEL: &str = "Follow Codex";
+const CLAUDE_STATUS_HOOK_EVENTS: &[&str] = &[
+    "SessionStart",
+    "UserPromptSubmit",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "PermissionRequest",
+    "Notification",
+    "Stop",
+    "StopFailure",
+    "SessionEnd",
+    "Elicitation",
+    "ElicitationResult",
+];
 
 fn codex_home_dir() -> PathBuf {
     kaku_ai_utils::codex_home_dir(&config::HOME_DIR)
@@ -2175,6 +2189,111 @@ fn read_models_dev(provider_id: &str) -> Vec<String> {
         .collect()
 }
 
+fn is_kaku_claude_status_hook(value: &serde_json::Value) -> bool {
+    value.get("type").and_then(|value| value.as_str()) == Some("command")
+        && value.get("command").and_then(|value| value.as_str()) == Some(CLAUDE_STATUS_HOOK_COMMAND)
+}
+
+fn claude_event_has_status_hook(value: &serde_json::Value) -> bool {
+    value.as_array().is_some_and(|groups| {
+        groups.iter().any(|group| {
+            group
+                .get("hooks")
+                .and_then(|hooks| hooks.as_array())
+                .is_some_and(|hooks| hooks.iter().any(is_kaku_claude_status_hook))
+        })
+    })
+}
+
+fn claude_status_hooks_state(val: &serde_json::Value) -> &'static str {
+    let hooks = val.get("hooks").and_then(|hooks| hooks.as_object());
+    let installed = CLAUDE_STATUS_HOOK_EVENTS
+        .iter()
+        .filter(|event| {
+            hooks
+                .and_then(|hooks| hooks.get(**event))
+                .is_some_and(claude_event_has_status_hook)
+        })
+        .count();
+
+    if installed == CLAUDE_STATUS_HOOK_EVENTS.len() {
+        "On"
+    } else if installed == 0 {
+        "Off"
+    } else {
+        "Partial"
+    }
+}
+
+fn set_claude_status_hooks(val: &mut serde_json::Value, enabled: bool) -> anyhow::Result<()> {
+    let root = val.as_object_mut().context("root is not object")?;
+    if enabled {
+        let hooks = root
+            .entry("hooks")
+            .or_insert_with(|| serde_json::json!({}))
+            .as_object_mut()
+            .context("hooks is not an object")?;
+        for event in CLAUDE_STATUS_HOOK_EVENTS {
+            let groups = hooks
+                .entry((*event).to_string())
+                .or_insert_with(|| serde_json::json!([]))
+                .as_array_mut()
+                .with_context(|| format!("hooks.{event} is not an array"))?;
+            let exists = groups.iter().any(|group| {
+                group
+                    .get("hooks")
+                    .and_then(|hooks| hooks.as_array())
+                    .is_some_and(|hooks| hooks.iter().any(is_kaku_claude_status_hook))
+            });
+            if !exists {
+                groups.push(serde_json::json!({
+                    "hooks": [{
+                        "type": "command",
+                        "command": CLAUDE_STATUS_HOOK_COMMAND,
+                        "timeout": 5
+                    }]
+                }));
+            }
+        }
+        return Ok(());
+    }
+
+    let mut remove_hooks_object = false;
+    if let Some(hooks) = root
+        .get_mut("hooks")
+        .and_then(|hooks| hooks.as_object_mut())
+    {
+        for event in CLAUDE_STATUS_HOOK_EVENTS {
+            let mut remove_event = false;
+            if let Some(groups) = hooks.get_mut(*event).and_then(|value| value.as_array_mut()) {
+                for group in groups.iter_mut() {
+                    if let Some(handlers) = group
+                        .get_mut("hooks")
+                        .and_then(|handlers| handlers.as_array_mut())
+                    {
+                        handlers.retain(|handler| !is_kaku_claude_status_hook(handler));
+                    }
+                }
+                groups.retain(|group| {
+                    group
+                        .get("hooks")
+                        .and_then(|handlers| handlers.as_array())
+                        .is_none_or(|handlers| !handlers.is_empty())
+                });
+                remove_event = groups.is_empty();
+            }
+            if remove_event {
+                hooks.remove(*event);
+            }
+        }
+        remove_hooks_object = hooks.is_empty();
+    }
+    if remove_hooks_object {
+        root.remove("hooks");
+    }
+    Ok(())
+}
+
 fn extract_claude_code_fields(val: &serde_json::Value) -> Vec<FieldEntry> {
     let model = json_str(val, "model");
 
@@ -2196,6 +2315,13 @@ fn extract_claude_code_fields(val: &serde_json::Value) -> Vec<FieldEntry> {
         options: model_options,
         ..Default::default()
     }];
+
+    fields.push(FieldEntry {
+        key: "Tab Status".into(),
+        value: claude_status_hooks_state(val).into(),
+        options: vec!["On".into(), "Off".into()],
+        ..Default::default()
+    });
 
     if let Some(auth_status) = read_claude_auth_status() {
         fields.push(FieldEntry {
@@ -3703,42 +3829,46 @@ fn save_field(tool: Tool, field_key: &str, new_val: &str) -> anyhow::Result<()> 
             save_factory_droid_field(obj, field_key, new_val)?;
         }
         Tool::ClaudeCode => {
-            let env_key = match field_key {
-                "Base URL" => Some("ANTHROPIC_BASE_URL"),
-                "API Key" => Some("ANTHROPIC_AUTH_TOKEN"),
-                _ => None,
-            };
-            let top_key = match field_key {
-                "Model" => Some("model"),
-                _ => None,
-            };
-
-            if let Some(ek) = env_key {
-                let obj = parsed.as_object_mut().context("root is not object")?;
-                let env = obj.entry("env").or_insert_with(|| serde_json::json!({}));
-                if let Some(env_obj) = env.as_object_mut() {
-                    if new_val == "-" || new_val.is_empty() {
-                        env_obj.remove(ek);
-                    } else {
-                        env_obj.insert(
-                            ek.to_string(),
-                            serde_json::Value::String(new_val.to_string()),
-                        );
-                    }
-                }
-            } else if let Some(tk) = top_key {
-                if let Some(obj) = parsed.as_object_mut() {
-                    if new_val == "-" || new_val.is_empty() {
-                        obj.remove(tk);
-                    } else {
-                        obj.insert(
-                            tk.to_string(),
-                            serde_json::Value::String(new_val.to_string()),
-                        );
-                    }
-                }
+            if field_key == "Tab Status" {
+                set_claude_status_hooks(&mut parsed, new_val == "On")?;
             } else {
-                return Ok(());
+                let env_key = match field_key {
+                    "Base URL" => Some("ANTHROPIC_BASE_URL"),
+                    "API Key" => Some("ANTHROPIC_AUTH_TOKEN"),
+                    _ => None,
+                };
+                let top_key = match field_key {
+                    "Model" => Some("model"),
+                    _ => None,
+                };
+
+                if let Some(ek) = env_key {
+                    let obj = parsed.as_object_mut().context("root is not object")?;
+                    let env = obj.entry("env").or_insert_with(|| serde_json::json!({}));
+                    if let Some(env_obj) = env.as_object_mut() {
+                        if new_val == "-" || new_val.is_empty() {
+                            env_obj.remove(ek);
+                        } else {
+                            env_obj.insert(
+                                ek.to_string(),
+                                serde_json::Value::String(new_val.to_string()),
+                            );
+                        }
+                    }
+                } else if let Some(tk) = top_key {
+                    if let Some(obj) = parsed.as_object_mut() {
+                        if new_val == "-" || new_val.is_empty() {
+                            obj.remove(tk);
+                        } else {
+                            obj.insert(
+                                tk.to_string(),
+                                serde_json::Value::String(new_val.to_string()),
+                            );
+                        }
+                    }
+                } else {
+                    return Ok(());
+                }
             }
         }
         Tool::OpenClaw => {
@@ -4645,6 +4775,70 @@ mod tests {
                 Some("5h remain 94% · reset 2h0m")
             ),
             Some("5h remain 94% · reset 2h0m".into())
+        );
+    }
+
+    #[test]
+    fn claude_tab_status_field_reports_off_partial_and_on() {
+        let mut config = serde_json::json!({});
+        assert_eq!(claude_status_hooks_state(&config), "Off");
+
+        config = serde_json::json!({
+            "hooks": {
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": CLAUDE_STATUS_HOOK_COMMAND
+                    }]
+                }]
+            }
+        });
+        assert_eq!(claude_status_hooks_state(&config), "Partial");
+
+        set_claude_status_hooks(&mut config, true).expect("enable status hooks");
+        assert_eq!(claude_status_hooks_state(&config), "On");
+        assert_eq!(
+            extract_claude_code_fields(&config)
+                .iter()
+                .find(|field| field.key == "Tab Status")
+                .map(|field| field.value.as_str()),
+            Some("On")
+        );
+    }
+
+    #[test]
+    fn claude_status_hooks_preserve_existing_hook_handlers() {
+        let mut config = serde_json::json!({
+            "model": "claude-sonnet-4-6",
+            "hooks": {
+                "Stop": [{
+                    "matcher": "",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "/usr/local/bin/my-stop-hook"
+                    }]
+                }]
+            }
+        });
+
+        set_claude_status_hooks(&mut config, true).expect("enable status hooks");
+        assert_eq!(claude_status_hooks_state(&config), "On");
+        assert_eq!(
+            config.get("model").and_then(|value| value.as_str()),
+            Some("claude-sonnet-4-6")
+        );
+
+        set_claude_status_hooks(&mut config, false).expect("disable status hooks");
+        assert_eq!(claude_status_hooks_state(&config), "Off");
+        let stop_handlers = config["hooks"]["Stop"][0]["hooks"]
+            .as_array()
+            .expect("existing Stop handlers");
+        assert_eq!(stop_handlers.len(), 1);
+        assert_eq!(
+            stop_handlers[0]
+                .get("command")
+                .and_then(|value| value.as_str()),
+            Some("/usr/local/bin/my-stop-hook")
         );
     }
 

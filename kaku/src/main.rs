@@ -28,6 +28,7 @@ use wezterm_gui_subcommands::*;
 mod ai_config;
 mod assistant_config;
 mod chat;
+mod claude_status_hook;
 mod cli;
 mod config_cmd;
 mod config_tui;
@@ -130,6 +131,9 @@ enum SubCommand {
         about = "Start the AI chat in this terminal (alias for `k`)"
     )]
     Chat(chat::ChatCommand),
+
+    #[command(name = "claude-status-hook", hide = true)]
+    ClaudeStatusHook(claude_status_hook::ClaudeStatusHookCommand),
 
     #[command(name = "config", about = "Configure Kaku settings")]
     Config(config_cmd::ConfigCommand),
@@ -373,6 +377,7 @@ fn run() -> anyhow::Result<()> {
             opts.skip_config,
         ),
         SubCommand::Chat(cmd) => cmd.run(),
+        SubCommand::ClaudeStatusHook(cmd) => cmd.run(),
     }
 }
 
