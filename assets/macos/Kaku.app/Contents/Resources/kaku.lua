@@ -3188,12 +3188,11 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, effective_config, hove
   local tab_bg = tab_bar_colors and tab_bar_colors.background
   local is_light = tab_bg == '#FFFCF0' or tab_bg == '#fffcf0'
   local attention_dot_color = is_light and '#AD8301' or KAKU.ORANGE
-  local running_dot_color = is_light and 'rgba(83,105,7,0.45)' or 'rgba(88,216,173,0.45)'
-  local needs_attention = tab_status == 'attention'
+  -- Only attention gets a dot; a running state would need someone to keep
+  -- feeding the terminal progress events to stay honest.
+  local status_dot = tab_status == 'attention'
     or (has_bell and effective_config.bell_tab_indicator ~= false)
-  local is_running = not needs_attention and tab_status == 'running'
-  local status_dot = needs_attention or is_running
-  local status_dot_color = needs_attention and attention_dot_color or running_dot_color
+  local status_dot_color = attention_dot_color
 
   local fg_active = KAKU.WHITE
   local fg_inactive_pane = KAKU.GRAY

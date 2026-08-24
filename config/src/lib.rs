@@ -1190,13 +1190,7 @@ return tab, {{ tab }}, panes, effective_config
                     Ok((last_text, last_color))
                 };
 
-                assert_eq!(
-                    render_status("running", false)?,
-                    (
-                        "\u{2022}".to_string(),
-                        Some("rgba(88,216,173,0.45)".to_string())
-                    )
-                );
+                assert_eq!(render_status("running", false)?.0, " ");
                 assert_eq!(
                     render_status("attention", false)?,
                     ("\u{2022}".to_string(), Some("#daae76".to_string()))

@@ -448,19 +448,9 @@ fn build_default_title(
 
     let attention = matches!(tab.progress, Progress::Paused | Progress::Error(_))
         || (config.bell_tab_indicator && tab.has_unread_bell);
-    let running = matches!(
-        tab.progress,
-        Progress::Percentage(_) | Progress::Indeterminate
-    );
     if attention {
         items.push(FormatItem::Foreground(FormatColor::Color(
             "#daae76".to_string(),
-        )));
-        items.push(FormatItem::Text("\u{2022}".to_string()));
-        items.push(FormatItem::Foreground(FormatColor::Default));
-    } else if running {
-        items.push(FormatItem::Foreground(FormatColor::Color(
-            "rgba(88,216,173,0.45)".to_string(),
         )));
         items.push(FormatItem::Text("\u{2022}".to_string()));
         items.push(FormatItem::Foreground(FormatColor::Default));
@@ -1427,9 +1417,10 @@ mod test {
         let idle = build_default_title(&tab, &config, "claude", false, false);
         assert!(plain_text(&idle).ends_with(' '));
 
+        // A running pane deliberately shows nothing: only attention gets a dot.
         tab.progress = Progress::Indeterminate;
         let running = build_default_title(&tab, &config, "claude", false, false);
-        assert!(plain_text(&running).ends_with('\u{2022}'));
+        assert!(plain_text(&running).ends_with(' '));
 
         tab.progress = Progress::Paused;
         let attention = build_default_title(&tab, &config, "claude", false, false);

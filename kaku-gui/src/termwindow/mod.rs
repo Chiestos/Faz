@@ -818,43 +818,29 @@ pub struct PaneState {
     bell_start: Option<Instant>,
     pub has_unread_bell: bool,
     pub has_unread_notification: bool,
-    /// Claude Code does not emit its Stop hook after a user interrupt. Hide
-    /// the stale status until another progress event or submitted prompt.
-    pub suppress_progress: bool,
     pub mouse_terminal_coords: Option<(ClickPosition, StableRowIndex)>,
 }
 
+/// The trailing tab cell only reports attention, never a running state:
+/// a running indicator needs someone to keep feeding the terminal progress
+/// events, while attention is a one-shot signal any program can emit.
 fn aggregate_tab_progress<I>(panes: I) -> Progress
 where
-    I: IntoIterator<Item = (Progress, bool, bool)>,
+    I: IntoIterator<Item = (Progress, bool)>,
 {
-    let mut has_running_pane = false;
-
-    for (progress, has_unread_notification, suppress_progress) in panes {
+    for (progress, has_unread_notification) in panes {
         if has_unread_notification || matches!(progress, Progress::Paused | Progress::Error(_)) {
-            if !suppress_progress || has_unread_notification {
-                return Progress::Paused;
-            }
-        }
-        if !suppress_progress
-            && matches!(progress, Progress::Percentage(_) | Progress::Indeterminate)
-        {
-            has_running_pane = true;
+            return Progress::Paused;
         }
     }
 
-    if has_running_pane {
-        Progress::Indeterminate
-    } else {
-        Progress::None
-    }
+    Progress::None
 }
 
 fn tab_status_name(progress: &Progress) -> &'static str {
     match progress {
         Progress::Paused | Progress::Error(_) => "attention",
-        Progress::Percentage(_) | Progress::Indeterminate => "running",
-        Progress::None => "none",
+        Progress::Percentage(_) | Progress::Indeterminate | Progress::None => "none",
     }
 }
 
@@ -2430,7 +2416,7 @@ impl TermWindow {
                     alert: Alert::Progress(_),
                     pane_id,
                 } => {
-                    self.pane_state(pane_id).suppress_progress = false;
+                    let _ = pane_id;
                     self.update_title();
                 }
                 MuxNotification::WindowTitleChanged { .. }
@@ -6613,7 +6599,6 @@ impl TermWindow {
                     (
                         pos.pane.get_progress(),
                         state.is_some_and(|state| state.has_unread_notification),
-                        state.is_some_and(|state| state.suppress_progress),
                     )
                 }));
                 let has_unread_bell = panes.iter().any(|pos| {
@@ -6813,36 +6798,27 @@ mod tests {
     #[test]
     fn tab_progress_prioritizes_attention_across_panes() {
         assert_eq!(
-            aggregate_tab_progress([
-                (Progress::Indeterminate, false, false),
-                (Progress::None, true, false),
-            ]),
+            aggregate_tab_progress([(Progress::Indeterminate, false), (Progress::None, true)]),
             Progress::Paused
         );
         assert_eq!(
-            aggregate_tab_progress([
-                (Progress::Percentage(50), false, false),
-                (Progress::Paused, false, false),
-            ]),
+            aggregate_tab_progress([(Progress::Percentage(50), false), (Progress::Paused, false)]),
             Progress::Paused
         );
     }
 
     #[test]
-    fn tab_progress_collapses_running_and_idle_states() {
+    fn tab_progress_ignores_running_panes() {
         assert_eq!(
-            aggregate_tab_progress([
-                (Progress::None, false, false),
-                (Progress::Percentage(25), false, false),
-            ]),
-            Progress::Indeterminate
-        );
-        assert_eq!(
-            aggregate_tab_progress([(Progress::None, false, false)]),
+            aggregate_tab_progress([(Progress::None, false), (Progress::Percentage(25), false),]),
             Progress::None
         );
         assert_eq!(
-            aggregate_tab_progress([(Progress::Indeterminate, false, true)]),
+            aggregate_tab_progress([(Progress::Indeterminate, false)]),
+            Progress::None
+        );
+        assert_eq!(
+            aggregate_tab_progress([(Progress::None, false)]),
             Progress::None
         );
     }

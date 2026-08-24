@@ -1033,15 +1033,6 @@ impl super::TermWindow {
         if window_key.key_is_down {
             let mut state = self.pane_state(pane.pane_id());
             state.has_unread_notification = false;
-            // OSC 9;4 progress can otherwise remain stuck after Ctrl+C because
-            // Claude Code deliberately skips Stop hooks on user interrupts.
-            if matches!(&window_key.key, KeyCode::Char('c') | KeyCode::Char('C'))
-                && window_key.modifiers == Modifiers::CTRL
-            {
-                state.suppress_progress = true;
-            } else if matches!(&window_key.key, KeyCode::Char('\r')) {
-                state.suppress_progress = false;
-            }
             if state.has_unread_bell {
                 state.has_unread_bell = false;
                 drop(state);
