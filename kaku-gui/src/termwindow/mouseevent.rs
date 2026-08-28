@@ -35,6 +35,61 @@ enum MouseDispatchTarget {
     Terminal,
 }
 
+fn should_show_terminal_context_menu(
+    event_kind: &WMEK,
+    modifiers: window::Modifiers,
+    bypass_modifiers: window::Modifiers,
+    mouse_grabbed: bool,
+    is_already_captured: bool,
+    has_mouse_assignment: bool,
+) -> bool {
+    matches!(event_kind, WMEK::Press(MousePress::Right))
+        && !is_already_captured
+        && !has_mouse_assignment
+        && (!mouse_grabbed || modifiers.contains(bypass_modifiers))
+}
+
+fn terminal_context_menu_actions() -> Vec<(&'static str, KeyAssignment)> {
+    let split = |direction| {
+        KeyAssignment::SplitPane(config::keyassignment::SplitPane {
+            direction,
+            size: Default::default(),
+            command: Default::default(),
+            top_level: false,
+        })
+    };
+
+    vec![
+        (
+            "Paste",
+            KeyAssignment::PasteFrom(ClipboardPasteSource::Clipboard),
+        ),
+        ("Search", KeyAssignment::Search(Pattern::default())),
+        (
+            "AI Chat",
+            KeyAssignment::EmitEvent("kaku-ai-chat".to_string()),
+        ),
+        ("Command Palette", KeyAssignment::ActivateCommandPalette),
+        (
+            "Split Left",
+            split(config::keyassignment::PaneDirection::Left),
+        ),
+        (
+            "Split Right",
+            split(config::keyassignment::PaneDirection::Right),
+        ),
+        ("Split Up", split(config::keyassignment::PaneDirection::Up)),
+        (
+            "Split Down",
+            split(config::keyassignment::PaneDirection::Down),
+        ),
+        (
+            "Close Pane",
+            KeyAssignment::CloseCurrentPane { confirm: true },
+        ),
+    ]
+}
+
 /// Per-window state describing in-flight window-level drag interactions
 /// (manual title-bar drag, OS edge resize suppression, click-to-focus
 /// suppression). Bundled to keep the drag invariants in one place.
@@ -1493,88 +1548,6 @@ impl super::TermWindow {
             }
         }
 
-        #[cfg(target_os = "macos")]
-        if event.kind == WMEK::Press(MousePress::Right)
-            && (event.modifiers.contains(::window::Modifiers::SHIFT) || !pane.is_mouse_grabbed())
-            && !is_already_captured
-        {
-            let menu = Menu::new_with_title("");
-            let selector = sel!(kakuPerformKeyAssignment:);
-            let split = |direction| {
-                KeyAssignment::SplitPane(config::keyassignment::SplitPane {
-                    direction,
-                    size: Default::default(),
-                    command: Default::default(),
-                    top_level: false,
-                })
-            };
-            for (title, action, shortcut, mask) in [
-                (
-                    "Paste",
-                    KeyAssignment::PasteFrom(ClipboardPasteSource::Clipboard),
-                    "v",
-                    NSEventModifierFlags::NSCommandKeyMask,
-                ),
-                (
-                    "Search",
-                    KeyAssignment::Search(Pattern::default()),
-                    "f",
-                    NSEventModifierFlags::NSCommandKeyMask,
-                ),
-                (
-                    "AI Chat",
-                    KeyAssignment::EmitEvent("kaku-ai-chat".to_string()),
-                    "l",
-                    NSEventModifierFlags::NSCommandKeyMask,
-                ),
-                (
-                    "Command Palette",
-                    KeyAssignment::ActivateCommandPalette,
-                    "p",
-                    NSEventModifierFlags::NSCommandKeyMask | NSEventModifierFlags::NSShiftKeyMask,
-                ),
-                (
-                    "Split Left  ←",
-                    split(config::keyassignment::PaneDirection::Left),
-                    "",
-                    NSEventModifierFlags::empty(),
-                ),
-                (
-                    "Split Right  →",
-                    split(config::keyassignment::PaneDirection::Right),
-                    "d",
-                    NSEventModifierFlags::NSCommandKeyMask,
-                ),
-                (
-                    "Split Up  ↑",
-                    split(config::keyassignment::PaneDirection::Up),
-                    "",
-                    NSEventModifierFlags::empty(),
-                ),
-                (
-                    "Split Down  ↓",
-                    split(config::keyassignment::PaneDirection::Down),
-                    "d",
-                    NSEventModifierFlags::NSCommandKeyMask | NSEventModifierFlags::NSShiftKeyMask,
-                ),
-                (
-                    "Close Pane",
-                    KeyAssignment::CloseCurrentPane { confirm: false },
-                    "w",
-                    NSEventModifierFlags::NSCommandKeyMask,
-                ),
-            ] {
-                let item = MenuItem::new_with(title, Some(selector), shortcut);
-                if !shortcut.is_empty() {
-                    item.set_key_equiv_modifier_mask(mask);
-                }
-                item.set_represented_item(RepresentedItem::KeyAssignment(action));
-                menu.add_item(&item);
-            }
-            context.show_context_menu(menu, event.screen_coords);
-            return;
-        }
-
         // Detect when the mouse is in the OS resize handle zone.
         // Only used to prevent mouse capture and to seed edge_drag_in_progress;
         // event suppression is driven by edge_drag_in_progress state, not position.
@@ -2061,11 +2034,43 @@ impl super::TermWindow {
                     },
                 };
 
-                if let Some(action) = self
+                let mouse_assignment = self
                     .keyboard
                     .input_map
-                    .lookup_mouse(event_trigger_type, mouse_mods)
-                {
+                    .lookup_mouse(event_trigger_type, mouse_mods);
+
+                #[cfg(target_os = "macos")]
+                if should_show_terminal_context_menu(
+                    &event.kind,
+                    event.modifiers,
+                    self.config.bypass_mouse_reporting_modifiers,
+                    pane.is_mouse_grabbed(),
+                    is_already_captured,
+                    mouse_assignment.is_some(),
+                ) {
+                    let target_pane_id = Mux::get()
+                        .get_active_tab_for_window(self.mux_window_id)
+                        .and_then(|tab| tab.get_active_pane())
+                        .map(|pane| pane.pane_id().as_usize());
+                    if let Some(pane_id) = target_pane_id {
+                        let menu = Menu::new_with_title("");
+                        let selector = sel!(kakuPerformKeyAssignment:);
+                        for (title, action) in terminal_context_menu_actions() {
+                            // Context-menu items deliberately have no AppKit keyEquivalent.
+                            // Kaku's configurable InputMap remains the shortcut source of truth.
+                            let item = MenuItem::new_with(title, Some(selector), "");
+                            item.set_represented_item(RepresentedItem::KeyAssignmentForPane {
+                                action,
+                                pane_id,
+                            });
+                            menu.add_item(&item);
+                        }
+                        context.show_context_menu(menu, event.screen_coords);
+                        return;
+                    }
+                }
+
+                if let Some(action) = mouse_assignment {
                     if matches!(
                         action,
                         KeyAssignment::SelectTextAtMouseCursor(_)
@@ -2187,13 +2192,15 @@ mod tests {
     use super::{
         manual_drag_window_top_left, mouse_dispatch_target, option_click_cursor_bytes,
         should_bypass_wheel_assignment_in_alt, should_preserve_tmux_bypass_reporting,
-        should_use_manual_window_drag, should_use_native_maximized_window_drag,
-        should_zoom_title_area, tab_bar_item_starts_window_drag,
+        should_show_terminal_context_menu, should_use_manual_window_drag,
+        should_use_native_maximized_window_drag, should_zoom_title_area,
+        tab_bar_item_starts_window_drag, terminal_context_menu_actions,
         title_area_double_click_zoom_action, wheel_during_terminal_selection_action,
         MouseDispatchTarget, OptionClickRowInfo, SelectionDragWheelAction, TitleAreaZoomAction,
     };
     use crate::tabbar::TabBarItem;
     use crate::termwindow::MouseCapture;
+    use config::keyassignment::KeyAssignment;
     use config::SelectionWheelScrollBehavior;
     use mux::pane::PaneId;
     use window::{
@@ -2591,5 +2598,69 @@ mod tests {
             SelectionWheelScrollBehavior::default(),
             SelectionWheelScrollBehavior::Extend
         );
+    }
+
+    #[test]
+    fn context_menu_respects_mouse_reporting_bypass_configuration() {
+        assert!(should_show_terminal_context_menu(
+            &MouseEventKind::Press(MousePress::Right),
+            Modifiers::ALT,
+            Modifiers::ALT,
+            true,
+            false,
+            false,
+        ));
+        assert!(!should_show_terminal_context_menu(
+            &MouseEventKind::Press(MousePress::Right),
+            Modifiers::SHIFT,
+            Modifiers::ALT,
+            true,
+            false,
+            false,
+        ));
+    }
+
+    #[test]
+    fn context_menu_never_overrides_capture_or_custom_mouse_assignment() {
+        let right_press = MouseEventKind::Press(MousePress::Right);
+        assert!(!should_show_terminal_context_menu(
+            &right_press,
+            Modifiers::NONE,
+            Modifiers::SHIFT,
+            false,
+            true,
+            false,
+        ));
+        assert!(!should_show_terminal_context_menu(
+            &right_press,
+            Modifiers::NONE,
+            Modifiers::SHIFT,
+            false,
+            false,
+            true,
+        ));
+    }
+
+    #[test]
+    fn context_menu_close_uses_confirmation_policy() {
+        let close = terminal_context_menu_actions()
+            .into_iter()
+            .find(|(title, _)| *title == "Close Pane")
+            .map(|(_, action)| action);
+
+        assert_eq!(
+            close,
+            Some(KeyAssignment::CloseCurrentPane { confirm: true })
+        );
+    }
+
+    #[test]
+    fn context_menu_dispatch_retains_stable_pane_id() {
+        let mouse_source = include_str!("mouseevent.rs");
+        let window_source = include_str!("mod.rs");
+
+        assert!(mouse_source.contains("RepresentedItem::KeyAssignmentForPane"));
+        assert!(window_source.contains("WindowEvent::PerformKeyAssignmentForPane"));
+        assert!(window_source.contains("focus_pane_and_containing_tab(pane_id)"));
     }
 }

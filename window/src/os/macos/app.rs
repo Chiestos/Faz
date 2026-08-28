@@ -1145,7 +1145,7 @@ extern "C" fn kaku_perform_key_assignment(_self: &mut Object, _sel: Sel, menu_it
                 conn.dispatch_app_event(ApplicationEvent::PerformKeyAssignment(action));
             }
         }
-        None => {}
+        Some(RepresentedItem::KeyAssignmentForPane { .. }) | None => {}
     }
 }
 

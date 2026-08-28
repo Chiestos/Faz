@@ -259,6 +259,13 @@ pub enum WindowEvent {
     /// Called by menubar dispatching stuff on some systems
     PerformKeyAssignment(config::keyassignment::KeyAssignment),
 
+    /// Called by a pane context menu. The stable pane id prevents an action
+    /// from falling through to a different active pane while the menu is open.
+    PerformKeyAssignmentForPane {
+        action: config::keyassignment::KeyAssignment,
+        pane_id: usize,
+    },
+
     AdviseModifiersLedStatus(Modifiers, KeyboardLedStatus),
 }
 

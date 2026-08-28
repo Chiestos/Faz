@@ -188,6 +188,10 @@ pub struct MenuItem {
 #[derive(Clone, Debug, PartialEq)]
 pub enum RepresentedItem {
     KeyAssignment(KeyAssignment),
+    KeyAssignmentForPane {
+        action: KeyAssignment,
+        pane_id: usize,
+    },
 }
 
 impl RepresentedItem {

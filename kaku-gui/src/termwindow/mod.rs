@@ -2058,6 +2058,33 @@ impl TermWindow {
                 }
                 Ok(true)
             }
+            WindowEvent::PerformKeyAssignmentForPane { action, pane_id } => {
+                let pane_id = PaneId::new(pane_id);
+                let mux = Mux::get();
+                let belongs_to_window = mux
+                    .resolve_pane_id(pane_id)
+                    .is_some_and(|(_, window_id, _)| window_id == self.mux_window_id);
+                if !belongs_to_window {
+                    return Ok(true);
+                }
+
+                // Actions such as SplitPane and CloseCurrentPane consult mux active
+                // state internally. Restore the clicked pane as active, then resolve
+                // its current overlay. If it exited while the menu was open, no-op.
+                if mux.focus_pane_and_containing_tab(pane_id).is_err() {
+                    return Ok(true);
+                }
+                let overlay = self
+                    .pane_state(pane_id)
+                    .overlay
+                    .as_ref()
+                    .map(|overlay| Arc::clone(&overlay.pane));
+                if let Some(pane) = overlay.or_else(|| mux.get_pane(pane_id)) {
+                    self.perform_key_assignment(&pane, &action)?;
+                    window.invalidate();
+                }
+                Ok(true)
+            }
             WindowEvent::FocusChanged(focused) => {
                 self.focus_changed(focused, window);
                 Ok(true)

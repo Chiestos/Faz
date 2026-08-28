@@ -4824,7 +4824,7 @@ impl WindowView {
         menu_item: *mut Object,
     ) {
         let menu_item = MenuItem::with_menu_item(menu_item);
-        // Safe because kakuPerformKeyAssignment: is only used with KeyAssignment
+        // Safe because kakuPerformKeyAssignment: is only used with RepresentedItem
         let action = menu_item.get_represented_item();
         log::debug!("kaku_perform_key_assignment {action:?}",);
         match action {
@@ -4836,6 +4836,20 @@ impl WindowView {
                         let events = inner.events.clone();
                         drop(inner);
                         events.dispatch(WindowEvent::PerformKeyAssignment(action));
+                    }
+                }
+            }
+            Some(RepresentedItem::KeyAssignmentForPane { action, pane_id }) => {
+                if let Some(this) = Self::get_this(this) {
+                    // As above, release the RefCell borrow before dispatch so the
+                    // native menu action remains safe under AppKit re-entry.
+                    if let Ok(inner) = this.inner.try_borrow() {
+                        let events = inner.events.clone();
+                        drop(inner);
+                        events.dispatch(WindowEvent::PerformKeyAssignmentForPane {
+                            action,
+                            pane_id,
+                        });
                     }
                 }
             }
