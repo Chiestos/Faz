@@ -1525,6 +1525,24 @@ pub fn window_level_to_nswindow_level(level: WindowLevel) -> NSWindowLevel {
 
 #[async_trait(?Send)]
 impl WindowOps for Window {
+    fn show_context_menu(&self, menu: crate::os::macos::menu::Menu, point: ScreenPoint) {
+        if self.ns_window().is_some() {
+            unsafe {
+                // ScreenPoint uses Kaku's global top-left coordinate space,
+                // which is normalized against the primary display in
+                // cartesian_to_screen_point. Invert that same transform;
+                // using the secondary display frame here introduces an
+                // offset on external monitors.
+                let primary = NSScreen::screens(nil).objectAtIndex(0);
+                let primary_frame: cocoa::foundation::NSRect = msg_send![primary, frame];
+                let backing = NSScreen::convertRectToBacking_(primary, primary_frame);
+                let scale = backing.size.height / primary_frame.size.height;
+                let cocoa_y = primary_frame.size.height - point.y as f64 / scale;
+                menu.pop_up_at_screen_point((point.x as f64 / scale) as isize, cocoa_y as isize);
+            }
+        }
+    }
+
     async fn enable_opengl(&self) -> anyhow::Result<Rc<glium::backend::Context>> {
         let window_id = self.id;
         promise::spawn::spawn(async move {

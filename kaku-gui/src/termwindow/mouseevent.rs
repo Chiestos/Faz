@@ -7,7 +7,9 @@ use ::window::{
     MouseButtons as WMB, MouseCursor, MouseEvent, MouseEventKind as WMEK, MousePress, WindowOps,
     WindowState,
 };
-use config::keyassignment::{KeyAssignment, MouseEventTrigger, SpawnTabDomain};
+use config::keyassignment::{
+    ClipboardPasteSource, KeyAssignment, MouseEventTrigger, Pattern, SpawnTabDomain,
+};
 use config::{MouseEventAltScreen, SelectionWheelScrollBehavior};
 use mux::pane::{CachePolicy, Pane, WithPaneLines};
 use mux::tab::SplitDirection;
@@ -23,6 +25,8 @@ use termwiz::surface::Line;
 use wezterm_dynamic::ToDynamic;
 use wezterm_term::input::{MouseButton, MouseEventKind as TMEK};
 use wezterm_term::{ClickPosition, KeyCode, KeyModifiers, LastMouseClick, StableRowIndex};
+#[cfg(target_os = "macos")]
+use window::os::macos::menu::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MouseDispatchTarget {
@@ -1487,6 +1491,88 @@ impl super::TermWindow {
 
                 break;
             }
+        }
+
+        #[cfg(target_os = "macos")]
+        if event.kind == WMEK::Press(MousePress::Right)
+            && (event.modifiers.contains(::window::Modifiers::SHIFT) || !pane.is_mouse_grabbed())
+            && !is_already_captured
+        {
+            let menu = Menu::new_with_title("");
+            let selector = sel!(kakuPerformKeyAssignment:);
+            let split = |direction| {
+                KeyAssignment::SplitPane(config::keyassignment::SplitPane {
+                    direction,
+                    size: Default::default(),
+                    command: Default::default(),
+                    top_level: false,
+                })
+            };
+            for (title, action, shortcut, mask) in [
+                (
+                    "Paste",
+                    KeyAssignment::PasteFrom(ClipboardPasteSource::Clipboard),
+                    "v",
+                    NSEventModifierFlags::NSCommandKeyMask,
+                ),
+                (
+                    "Search",
+                    KeyAssignment::Search(Pattern::default()),
+                    "f",
+                    NSEventModifierFlags::NSCommandKeyMask,
+                ),
+                (
+                    "AI Chat",
+                    KeyAssignment::EmitEvent("kaku-ai-chat".to_string()),
+                    "l",
+                    NSEventModifierFlags::NSCommandKeyMask,
+                ),
+                (
+                    "Command Palette",
+                    KeyAssignment::ActivateCommandPalette,
+                    "p",
+                    NSEventModifierFlags::NSCommandKeyMask | NSEventModifierFlags::NSShiftKeyMask,
+                ),
+                (
+                    "Split Left  ←",
+                    split(config::keyassignment::PaneDirection::Left),
+                    "",
+                    NSEventModifierFlags::empty(),
+                ),
+                (
+                    "Split Right  →",
+                    split(config::keyassignment::PaneDirection::Right),
+                    "d",
+                    NSEventModifierFlags::NSCommandKeyMask,
+                ),
+                (
+                    "Split Up  ↑",
+                    split(config::keyassignment::PaneDirection::Up),
+                    "",
+                    NSEventModifierFlags::empty(),
+                ),
+                (
+                    "Split Down  ↓",
+                    split(config::keyassignment::PaneDirection::Down),
+                    "d",
+                    NSEventModifierFlags::NSCommandKeyMask | NSEventModifierFlags::NSShiftKeyMask,
+                ),
+                (
+                    "Close Pane",
+                    KeyAssignment::CloseCurrentPane { confirm: false },
+                    "w",
+                    NSEventModifierFlags::NSCommandKeyMask,
+                ),
+            ] {
+                let item = MenuItem::new_with(title, Some(selector), shortcut);
+                if !shortcut.is_empty() {
+                    item.set_key_equiv_modifier_mask(mask);
+                }
+                item.set_represented_item(RepresentedItem::KeyAssignment(action));
+                menu.add_item(&item);
+            }
+            context.show_context_menu(menu, event.screen_coords);
+            return;
         }
 
         // Detect when the mouse is in the OS resize handle zone.

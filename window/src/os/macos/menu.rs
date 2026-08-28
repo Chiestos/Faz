@@ -29,6 +29,15 @@ impl Menu {
         self.menu.autorelease()
     }
 
+    /// Display this menu at a point in global screen coordinates.
+    pub fn pop_up_at_screen_point(&self, x: isize, y: isize) {
+        unsafe {
+            let point = cocoa::foundation::NSPoint::new(x as f64, y as f64);
+            let _: () =
+                msg_send![*self.menu, popUpMenuPositioningItem: nil atLocation: point inView: nil];
+        }
+    }
+
     pub fn item_at_index(&self, index: usize) -> Option<MenuItem> {
         let index = index as i64;
         let item = unsafe { self.menu.itemAtIndex_(index) };
