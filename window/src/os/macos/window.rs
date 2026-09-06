@@ -692,24 +692,6 @@ fn last_closed_window_position() -> Option<ScreenPoint> {
     LAST_CLOSED_WINDOW_POSITION.with(|last_pos| *last_pos.borrow())
 }
 
-fn should_perform_native_window_drag(
-    in_fullscreen: bool,
-    is_zoomed: bool,
-    fills_visible_frame: bool,
-) -> bool {
-    !in_fullscreen && !is_zoomed && !fills_visible_frame
-}
-
-fn should_perform_requested_window_drag(
-    in_fullscreen: bool,
-    is_zoomed: bool,
-    fills_visible_frame: bool,
-    from_maximized: bool,
-) -> bool {
-    should_perform_native_window_drag(in_fullscreen, is_zoomed, fills_visible_frame)
-        || (!in_fullscreen && from_maximized && is_zoomed)
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RequestedDragAction {
     /// Do not start a native window drag for this press.
@@ -736,15 +718,14 @@ fn requested_window_drag_action(
     fills_visible_frame: bool,
     from_maximized: bool,
 ) -> RequestedDragAction {
-    if !should_perform_requested_window_drag(
-        in_fullscreen,
-        is_zoomed,
-        fills_visible_frame,
-        from_maximized,
-    ) {
+    if in_fullscreen {
         return RequestedDragAction::None;
     }
-    if from_maximized {
+    // GUI state may lag AppKit while crossing screens, and a window can fill
+    // the desktop without being zoomed. Neither state should disable dragging.
+    // Treat either signal as maximized for click protection, then let AppKit
+    // handle the actual drag once the pointer moves.
+    if from_maximized || is_zoomed || fills_visible_frame {
         RequestedDragAction::DeferUntilDrag
     } else {
         RequestedDragAction::PerformNow
@@ -4075,24 +4056,32 @@ mod tests {
     }
 
     #[test]
-    fn native_drag_is_disabled_for_fullscreen_and_maximized_frames() {
-        assert!(should_perform_native_window_drag(false, false, false));
-        assert!(!should_perform_native_window_drag(true, false, false));
-        assert!(!should_perform_native_window_drag(false, true, false));
-        assert!(!should_perform_native_window_drag(false, false, true));
-    }
-
-    #[test]
-    fn requested_maximized_drag_allows_zoomed_native_drag() {
-        assert!(should_perform_requested_window_drag(
-            false, true, true, true
-        ));
-        assert!(!should_perform_requested_window_drag(
-            true, true, true, true
-        ));
-        assert!(!should_perform_requested_window_drag(
-            false, false, true, true
-        ));
+    fn requested_drag_survives_cached_and_native_state_disagreement() {
+        for cached_maximized in [false, true] {
+            for is_zoomed in [false, true] {
+                for fills_visible_frame in [false, true] {
+                    assert_ne!(
+                        requested_window_drag_action(
+                            false,
+                            is_zoomed,
+                            fills_visible_frame,
+                            cached_maximized
+                        ),
+                        RequestedDragAction::None,
+                        "a non-fullscreen title drag must have a working path"
+                    );
+                    assert_eq!(
+                        requested_window_drag_action(
+                            true,
+                            is_zoomed,
+                            fills_visible_frame,
+                            cached_maximized
+                        ),
+                        RequestedDragAction::None
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -4117,16 +4106,15 @@ mod tests {
     }
 
     #[test]
-    fn no_native_drag_in_fullscreen_or_when_not_requested() {
+    fn fullscreen_drag_is_disabled_but_filled_window_drag_is_deferred() {
         assert_eq!(
             requested_window_drag_action(true, true, true, true),
             RequestedDragAction::None
         );
-        // from_maximized set but the window is not actually zoomed and fills the
-        // frame: nothing to drag, so no native drag is started.
+        // Window managers can fill the visible frame without AppKit zooming it.
         assert_eq!(
             requested_window_drag_action(false, false, true, true),
-            RequestedDragAction::None
+            RequestedDragAction::DeferUntilDrag
         );
     }
 
@@ -4846,10 +4834,8 @@ impl WindowView {
                     if let Ok(inner) = this.inner.try_borrow() {
                         let events = inner.events.clone();
                         drop(inner);
-                        events.dispatch(WindowEvent::PerformKeyAssignmentForPane {
-                            action,
-                            pane_id,
-                        });
+                        events
+                            .dispatch(WindowEvent::PerformKeyAssignmentForPane { action, pane_id });
                     }
                 }
             }
