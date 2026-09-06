@@ -1,6 +1,38 @@
 use super::*;
 use k9::assert_equal as assert_eq;
 
+#[test]
+fn streamed_wrapped_url_keeps_complete_destination_on_every_row() {
+    use wezterm_surface::hyperlink::{Rule, GENERIC_HYPERLINK_PATTERN};
+
+    let url = "https://developer.apple.com/icon-composer/";
+    let rules = vec![
+        Rule::with_highlight(r"\((\w+://[\x21-\x7e]+)\)", "$1", 1).unwrap(),
+        Rule::new(GENERIC_HYPERLINK_PATTERN, "$0").unwrap(),
+    ];
+    for width in [20, 27, 28, 40] {
+        let mut term = TestTerm::new(6, width, 0);
+        // Hover while an AI/TUI streams the URL, including before the physical
+        // row gains its wrap flag. A cached partial match must be invalidated.
+        for byte in format!("({url}) .").bytes() {
+            term.print([byte]);
+            term.screen_mut()
+                .for_each_logical_line_in_stable_range_mut(0..6, |_, lines| {
+                    Line::apply_hyperlink_rules(&rules, lines);
+                    true
+                });
+        }
+        let visible = term.screen().visible_lines();
+        for (offset, _) in url.bytes().enumerate() {
+            let absolute = offset + 1; // opening parenthesis
+            let cell = visible[absolute / width]
+                .get_cell(absolute % width)
+                .unwrap();
+            assert_eq!(cell.attrs().hyperlink().unwrap().uri(), url);
+        }
+    }
+}
+
 // ─── Cursor movement ─────────────────────────────────────────────────────────
 
 #[test]
