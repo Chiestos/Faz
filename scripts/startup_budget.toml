@@ -1,19 +1,18 @@
 # Kaku startup time budget (milliseconds). Local-only tool. Not wired into CI
-# in V0.12.0 because no real baseline has been captured yet, and `0` placeholder
+# because no release-build baseline has been captured yet, and `0` placeholder
 # values would make the gate vacuous. To enable a real budget:
 #
-#   1. Run `./scripts/measure_startup_kaku.sh` locally ~10 times on the
-#      target machine (typically an M-series Mac you actually use).
-#   2. Take the mean of cold_start_ms and warm_start_ms across runs (the
-#      script reports hyperfine `mean`, not P95 - revisit if you need P95).
+#   1. Run `RUNS=10 ./scripts/measure_startup_kaku.sh` against a release build
+#      on the target machine. Keep power mode, display and background load fixed.
+#   2. Use schema 2 cold_start_ms and warm_start_ms: launch until both the
+#      fixture shell's precmd and first render have completed. Window-only,
+#      median and P95 values are reported separately. OS/font caches are retained.
 #   3. Multiply each by 1.5 to leave headroom for noise.
 #   4. Replace the zeros below.
-#   5. Re-add a `startup-bench` job to `.github/workflows/ci.yml`, point it
-#      at `./scripts/check_startup_budget.sh`, and decide whether to start
-#      it as a soft gate (continue-on-error) or hard gate.
+#   5. Keep this local until a dedicated, stable macOS runner is available.
+#      Shared CI runners are not a comparable latency baseline.
 #
-# Zero means "no enforcement" (check_startup_budget.sh prints a warning and
-# exits 0 in that case), so the script is safe to run ad hoc.
+# Zero disables only that measurement's budget. Schema validation still runs.
 
 cold_start_budget_ms = 0
 warm_start_budget_ms = 0

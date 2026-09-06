@@ -33,23 +33,22 @@ if [[ ! -f "$budget_file" ]]; then
   exit 2
 fi
 
-cold=$(jq -r '.cold_start_ms // empty' "$json_file")
-warm=$(jq -r '.warm_start_ms // empty' "$json_file")
-
-if [[ -z "$cold" || -z "$warm" ]]; then
-  echo "ERROR: $json_file missing cold_start_ms / warm_start_ms" >&2
+if ! jq -e '.schema_version == 2 and .measurement == "launch_to_prompt_and_first_paint" and ([.cold_start_ms, .warm_start_ms] | all(type == "number" and . > 0 and . < 1e12))' "$json_file" >/dev/null 2>&1; then
+  echo "ERROR: expected a schema 2 report with positive numeric startup times" >&2
   exit 2
 fi
+cold=$(jq -r '.cold_start_ms' "$json_file")
+warm=$(jq -r '.warm_start_ms' "$json_file")
 
 cold_max=$(awk -F= '/^cold_start_budget_ms[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2}' "$budget_file")
 warm_max=$(awk -F= '/^warm_start_budget_ms[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2}' "$budget_file")
 
-if [[ -z "$cold_max" || -z "$warm_max" ]]; then
-  echo "ERROR: $budget_file missing cold_start_budget_ms / warm_start_budget_ms" >&2
+if [[ ! "$cold_max" =~ ^[0-9]+$ || ! "$warm_max" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: budgets must be nonnegative integers, with each key defined once" >&2
   exit 2
 fi
 
-if [[ "$cold_max" -eq 0 || "$warm_max" -eq 0 ]]; then
+if [[ "$cold_max" =~ ^0+$ && "$warm_max" =~ ^0+$ ]]; then
   echo "WARN: budget is 0 (placeholder). Run scripts/measure_startup_kaku.sh"
   echo "      locally over ~10 runs, take the reported mean, multiply by 1.5,"
   echo "      and write the result into $budget_file before turning this gate hard."
@@ -57,11 +56,11 @@ if [[ "$cold_max" -eq 0 || "$warm_max" -eq 0 ]]; then
 fi
 
 status=0
-if (( cold > cold_max )); then
+if awk -v value="$cold" -v budget="$cold_max" 'BEGIN { exit !(budget > 0 && value > budget) }'; then
   echo "FAIL: cold_start ${cold}ms exceeds budget ${cold_max}ms"
   status=1
 fi
-if (( warm > warm_max )); then
+if awk -v value="$warm" -v budget="$warm_max" 'BEGIN { exit !(budget > 0 && value > budget) }'; then
   echo "FAIL: warm_start ${warm}ms exceeds budget ${warm_max}ms"
   status=1
 fi

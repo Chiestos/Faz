@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Cold-start benchmark: "open app" -> "first window exists"
+# Process-start benchmark: launch -> first window exists. OS caches are retained.
 # Results are printed directly in terminal (no file output).
 
 RUNS="${RUNS:-10}"
@@ -20,21 +20,25 @@ declare -a TERMINALS=(
 	"Alacritty:Alacritty:alacritty"
 )
 
-quit_app() {
-	local proc="$1"
-	pkill -9 -x "$proc" >/dev/null 2>&1 || true
-	for _ in {1..200}; do
-		if ! pgrep -x "$proc" >/dev/null 2>&1; then
-			return 0
-		fi
-		sleep 0.05
-	done
-	return 0
+BENCH_DIR=$(mktemp -d "${TMPDIR:-/tmp}/kaku-compare.XXXXXX")
+cleanup_run() {
+	local pid
+	if [[ -f "$BENCH_DIR/pid" ]]; then
+		pid=$(cat "$BENCH_DIR/pid")
+		kill -TERM "$pid" 2>/dev/null || true
+		for _ in {1..200}; do
+			kill -0 "$pid" 2>/dev/null || break
+			sleep 0.01
+		done
+		kill -KILL "$pid" 2>/dev/null || true
+		rm -f "$BENCH_DIR/pid"
+	fi
 }
+trap 'cleanup_run; rm -rf "$BENCH_DIR"' EXIT
 
 
 wait_first_window() {
-	local ui_name="$1"
+	local pid="$1"
 	local timeout_sec="$2"
 
 	# Avoid infinite wait: keep polling until timeout
@@ -43,15 +47,15 @@ set timeoutSeconds to ${timeout_sec}
 set startAt to (current date)
 tell application "System Events"
   repeat
-    if exists process "${ui_name}" then
-      tell process "${ui_name}"
+    if exists (first process whose unix id is ${pid}) then
+      tell (first process whose unix id is ${pid})
         if (count of windows) > 0 then
           return
         end if
       end tell
     end if
     if ((current date) - startAt) > timeoutSeconds then
-      error "timeout waiting first window for ${ui_name}" number 124
+      error "timeout waiting first window" number 124
     end if
     delay 0.01
   end repeat
@@ -59,27 +63,21 @@ end tell
 OSA
 }
 
-cold_start_once() {
-	local app_name="$1"
+start_once() {
+	local executable="$1"
 	local proc_name="$2"
-
-	quit_app "$proc_name"
-	sleep 1.0
-	sync
-
-	open -na "$app_name"
-	wait_first_window "$app_name" "$WAIT_TIMEOUT_SEC"
-	quit_app "$proc_name"
+	if pgrep -x "$proc_name" >/dev/null; then
+		printf 'Refusing to benchmark while %s is running.\n' "$proc_name" >&2
+		return 1
+	fi
+	"$executable" >"$BENCH_DIR/app.log" 2>&1 &
+	local pid=$!
+	printf '%s\n' "$pid" > "$BENCH_DIR/pid"
+	wait_first_window "$pid" "$WAIT_TIMEOUT_SEC"
 }
 
-export WAIT_TIMEOUT_SEC
-export -f quit_app wait_first_window cold_start_once
-
-printf 'Cleaning running terminals...\n'
-pkill -9 kaku-gui 2>/dev/null || true
-pkill -9 ghostty 2>/dev/null || true
-pkill -9 alacritty 2>/dev/null || true
-sleep 1
+export WAIT_TIMEOUT_SEC BENCH_DIR
+export -f cleanup_run wait_first_window start_once
 
 declare -a INSTALLED=()
 declare -a HYPERFINE_ARGS=()
@@ -89,9 +87,17 @@ for term in "${TERMINALS[@]}"; do
 	IFS=':' read -r display_name app_name proc_name <<<"$term"
 
 	if [[ -d "/Applications/${app_name}.app" || -d "$HOME/Applications/${app_name}.app" ]]; then
+		if pgrep -x "$proc_name" >/dev/null; then
+			printf 'Error: close %s yourself before benchmarking; existing sessions are preserved.\n' "$display_name" >&2
+			exit 1
+		fi
+		app_path="/Applications/${app_name}.app"
+		[[ -d "$app_path" ]] || app_path="$HOME/Applications/${app_name}.app"
+		binary=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_path/Contents/Info.plist")
+		printf -v quoted_binary '%q' "$app_path/Contents/MacOS/$binary"
 		printf '  [+] %s\n' "$display_name"
 		INSTALLED+=("$term")
-		HYPERFINE_ARGS+=(--command-name "$display_name" "bash -c 'cold_start_once \"$app_name\" \"$proc_name\"'")
+		HYPERFINE_ARGS+=(--command-name "$display_name" "start_once $quoted_binary $proc_name")
 	else
 		printf '  [-] %s (not found)\n' "$display_name"
 	fi
@@ -105,6 +111,9 @@ fi
 printf '\nBenchmark config: runs=%s warmup=%s timeout=%ss\n\n' "$RUNS" "$WARMUP" "$WAIT_TIMEOUT_SEC"
 
 hyperfine \
+	--shell bash \
+	--prepare cleanup_run \
+	--cleanup cleanup_run \
 	--warmup "$WARMUP" \
 	--runs "$RUNS" \
 	--style full \

@@ -133,6 +133,13 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Startup measurement harness tests
+        run: |
+          if ! command -v hyperfine >/dev/null 2>&1; then
+            brew install hyperfine
+          fi
+          bash scripts/test_startup.sh
+
       - name: Shell script lint (shellcheck)
         run: |
           set -euo pipefail
@@ -153,6 +160,9 @@ jobs:
             fi
           done
           exit "$status"
+
+      - name: Startup script lint
+        run: shellcheck scripts/measure_startup_kaku.sh scripts/bench_startup.sh scripts/check_startup_budget.sh scripts/test_startup.sh
 
   check:
     name: Cargo Check
