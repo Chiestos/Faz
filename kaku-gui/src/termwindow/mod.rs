@@ -1207,6 +1207,11 @@ pub struct TermWindow {
         HashMap<PaneId, std::sync::mpsc::Sender<crate::overlay::ai_chat::ChatPalette>>,
 }
 
+/// Set once WebGpu has failed to initialize in this process. Every later
+/// window then goes straight to OpenGL instead of paying the failed attempt
+/// again (#524).
+static WEBGPU_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
 impl TermWindow {
     /// Accessor for the OpenGL backend, if active.
     pub(crate) fn opengl(&self) -> Option<&Rc<glium::backend::Context>> {
@@ -1936,13 +1941,22 @@ impl TermWindow {
         crate::startup_trace::mark("  window.show() done");
 
         crate::startup_trace::mark("  GPU init start");
-        let (gl, webgpu) = match config.front_end {
-            FrontEndSelection::WebGpu => match WebGpuState::new(&window, dimensions, &config).await
-            {
+        let want_webgpu = matches!(config.front_end, FrontEndSelection::WebGpu)
+            && !WEBGPU_UNAVAILABLE.load(Ordering::Relaxed);
+        let (gl, webgpu) = if want_webgpu {
+            match WebGpuState::new(&window, dimensions, &config).await {
                 Ok(state) => (None, Some(Rc::new(state))),
                 Err(err) => {
+                    // Whatever stops WebGpu from initializing is a property of
+                    // this machine's GPU stack, not of this window, so retrying
+                    // per window only repeats the cost. On an older Intel Mac
+                    // the failing attempt loses the device and takes upwards of
+                    // twenty seconds, which showed up as New Window and
+                    // Settings hanging on a spinner (#524).
+                    WEBGPU_UNAVAILABLE.store(true, Ordering::Relaxed);
                     log::error!(
-                        "WebGpu initialization failed; falling back to OpenGL. Error: {:#}",
+                        "WebGpu initialization failed; using OpenGL for this and \
+                         any later window. Error: {:#}",
                         err
                     );
                     let gl = window.enable_opengl().await.with_context(|| {
@@ -1950,8 +1964,9 @@ impl TermWindow {
                     })?;
                     (Some(gl), None)
                 }
-            },
-            _ => (Some(window.enable_opengl().await?), None),
+            }
+        } else {
+            (Some(window.enable_opengl().await?), None)
         };
         crate::startup_trace::mark("  GPU init done");
 
