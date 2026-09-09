@@ -1,4 +1,4 @@
-use config::{configuration, ConfigHandle};
+use config::{configuration, Config, ConfigHandle};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use wezterm_term::color::{ColorPalette, SrgbaTuple};
@@ -184,14 +184,27 @@ fn appearance_sensitive_theme(palette: ThemePalette, is_dark: bool) -> CachedThe
     }
 }
 
-fn builtin_kaku_theme(config: &ConfigHandle) -> Option<CachedTheme> {
+fn builtin_kaku_theme(config: &Config) -> Option<CachedTheme> {
     let dark = dark_palette();
     let light = light_palette();
     let dark_terminal_text = rgb("#D5D4D6");
     let light_terminal_text = rgb("#100F0F");
     let light_cursor = rgb("#343331");
 
-    match config.color_scheme.as_deref() {
+    // `config.colors` is overlaid on top of the resolved scheme (see
+    // Config::compute_extra_defaults), so when the user file declares one it,
+    // not `color_scheme`, decides what the window actually shows. Trusting the
+    // scheme name here made Settings repaint itself light while the window
+    // stayed dark, which reads as "the setting did not apply" (#545). Fall
+    // through to the palette comparison below so this screen reports the same
+    // colors the terminal is really using.
+    let scheme_name_is_authoritative = config.colors.is_none();
+
+    match config
+        .color_scheme
+        .as_deref()
+        .filter(|_| scheme_name_is_authoritative)
+    {
         Some("Kaku Dark") | Some("Kaku Theme") => {
             // The color_scheme field might hold "Kaku Dark" either because:
             //   (a) the user explicitly chose Kaku Dark, OR
@@ -277,7 +290,7 @@ fn color_scheme_selection_from_content(content: &str) -> Option<ColorSchemeSelec
 ///   1. User config explicitly assigns an appearance-based expression (get_appearance).
 ///   2. User config has no color_scheme assignment at all, meaning the bundled
 ///      default (Auto) is in effect.
-fn config_file_has_auto_color_scheme(_config: &ConfigHandle) -> bool {
+fn config_file_has_auto_color_scheme(_config: &Config) -> bool {
     let path = config::effective_config_file_path();
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
@@ -427,11 +440,35 @@ pub fn current_theme_palette() -> ThemePalette {
 #[cfg(test)]
 mod tests {
     use super::{
-        appearance_sensitive_theme, cached_theme, color_distance,
+        appearance_sensitive_theme, builtin_kaku_theme, cached_theme, color_distance,
         color_scheme_selection_from_content, dark_palette, has_enough_separation,
         is_current_theme_cache_hit, luminance, parse_color_scheme_selection_line, pick_visible,
         rgb, ColorSchemeSelection,
     };
+
+    /// A user palette wins over `color_scheme` in the terminal, so Settings must
+    /// not paint itself from the scheme name alone; doing so showed a light
+    /// Settings screen in front of a window that stayed dark (#545).
+    #[test]
+    fn user_colors_override_the_scheme_name() {
+        let mut config = config::Config::default_config();
+        config.color_scheme = Some("Kaku Light".to_string());
+        assert_eq!(
+            builtin_kaku_theme(&config).map(|theme| theme.palette.is_light),
+            Some(true),
+            "a plain Kaku Light config still resolves by name"
+        );
+
+        config.colors = Some(config::Palette {
+            background: Some((0x15, 0x14, 0x1b).into()),
+            ..Default::default()
+        });
+        assert_ne!(
+            builtin_kaku_theme(&config).map(|theme| theme.palette.is_light),
+            Some(true),
+            "config.colors must stop the scheme name from deciding the theme"
+        );
+    }
 
     #[test]
     fn ignores_non_assignment_lines() {

@@ -253,7 +253,20 @@ fn render_fields(frame: &mut ratatui::Frame, area: Rect, app: &App) {
             ""
         };
 
-        let line = Line::from(vec![
+        // Saying nothing here is what made #545 unresolvable: the row accepted
+        // a new scheme, the window kept its old colors, and the user had no way
+        // to see that their own config was winning.
+        let override_note =
+            if field.lua_key == "color_scheme" && !app.theme_overridden_by.is_empty() {
+                Some(format!(
+                    "  overridden by config.{}",
+                    app.theme_overridden_by.join(" and config.")
+                ))
+            } else {
+                None
+            };
+
+        let mut line = Line::from(vec![
             Span::styled("  ", Style::default()),
             Span::styled(
                 marker,
@@ -271,6 +284,10 @@ fn render_fields(frame: &mut ratatui::Frame, area: Rect, app: &App) {
             ),
             Span::styled(format!("{}{}", display_value, suffix), value_style),
         ]);
+
+        if let Some(note) = override_note {
+            line.push_span(Span::styled(note, Style::default().fg(muted())));
+        }
 
         items.push(ListItem::new(line));
         flat += 1;

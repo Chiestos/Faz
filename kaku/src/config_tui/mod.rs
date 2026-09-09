@@ -242,6 +242,11 @@ enum Mode {
     Selecting,
 }
 
+/// Config keys whose presence in the user's file makes the Theme row's
+/// `color_scheme` cosmetic: `colors` is overlaid on the resolved scheme, and
+/// `window_frame` opts out of the bundled config's frame theming.
+const THEME_OVERRIDE_KEYS: [&str; 2] = ["colors", "window_frame"];
+
 #[derive(Clone)]
 struct ConfigField {
     section: &'static str,
@@ -274,6 +279,9 @@ struct App {
     dirty: bool,
     /// Preserve whether the current window_decorations state keeps resize edges.
     window_decorations_resize: bool,
+    /// Config keys in the user's file that overlay the chosen `color_scheme`,
+    /// so the Theme row can say why picking a scheme changes nothing (#545).
+    theme_overridden_by: Vec<&'static str>,
 }
 
 impl App {
@@ -482,6 +490,7 @@ impl App {
             select_index: 0,
             dirty: false,
             window_decorations_resize: true,
+            theme_overridden_by: Vec::new(),
         }
     }
 
@@ -515,6 +524,16 @@ impl App {
                 }
             }
         }
+
+        // `config.colors` is overlaid on top of the resolved scheme and
+        // `config.window_frame` suppresses the bundled config's frame theming,
+        // so either one keeps the window on its own colors no matter what
+        // Theme is set to here.
+        self.theme_overridden_by = THEME_OVERRIDE_KEYS
+            .iter()
+            .copied()
+            .filter(|key| Self::has_config_line(&content, key))
+            .collect();
 
         // Load window_decorations into the Traffic Lights / Shadow pseudo-fields.
         self.load_window_decorations(&content);
@@ -1601,6 +1620,37 @@ return config
         assert!(updated.contains("config.colors"));
         assert!(updated.contains("background = '#111111'"));
         assert!(updated.contains("config.color_scheme = 'Kaku Light'"));
+    }
+
+    /// #545: a user file carrying its own palette makes the Theme row cosmetic,
+    /// and saying nothing about that is what left the reporter changing the
+    /// setting over and over with no effect.
+    #[test]
+    fn load_config_flags_a_theme_overridden_by_user_colors() {
+        let dir = tempdir().expect("tempdir");
+        let config_path = dir.path().join("kaku.lua");
+        std::fs::write(
+            &config_path,
+            "config.color_scheme = 'Kaku Light'\nconfig.colors = { background = '#15141b' }\n",
+        )
+        .expect("write config");
+
+        let mut app = App::new(config_path);
+        app.load_config();
+
+        assert_eq!(app.theme_overridden_by, vec!["colors"]);
+    }
+
+    #[test]
+    fn load_config_leaves_theme_unflagged_without_palette_overrides() {
+        let dir = tempdir().expect("tempdir");
+        let config_path = dir.path().join("kaku.lua");
+        std::fs::write(&config_path, "config.color_scheme = 'Kaku Light'\n").expect("write config");
+
+        let mut app = App::new(config_path);
+        app.load_config();
+
+        assert!(app.theme_overridden_by.is_empty());
     }
 
     #[test]
