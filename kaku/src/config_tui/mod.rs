@@ -362,6 +362,15 @@ impl App {
             },
             ConfigField {
                 section: "Window",
+                key: "New Tab Button",
+                lua_key: "show_new_tab_button_in_tab_bar",
+                value: String::new(),
+                default: "Off".into(),
+                options: vec!["On", "Off"],
+                skip_write: false,
+            },
+            ConfigField {
+                section: "Window",
                 key: "Scrollbar",
                 lua_key: "enable_scroll_bar",
                 value: String::new(),
@@ -848,6 +857,7 @@ impl App {
             }
             "copy_on_select"
             | "enable_scroll_bar"
+            | "show_new_tab_button_in_tab_bar"
             | "bell_tab_indicator"
             | "bell_dock_badge"
             | "remember_last_cwd"
@@ -1345,6 +1355,7 @@ impl App {
             | "macos_window_background_blur" => field.value.clone(),
             "copy_on_select"
             | "enable_scroll_bar"
+            | "show_new_tab_button_in_tab_bar"
             | "bell_tab_indicator"
             | "bell_dock_badge"
             | "remember_last_cwd"
