@@ -27,16 +27,7 @@ pub enum TabBarItem {
     None,
     LeftStatus,
     RightStatus,
-    Tab {
-        tab_idx: usize,
-        active: bool,
-    },
-    /// Close control drawn on the hovered tab. Kaku's tab bar is deliberately
-    /// quiet, so this appears under the pointer rather than sitting on every
-    /// tab, which is how a user who does not know Cmd+W finds the action (#548).
-    CloseTabButton {
-        tab_idx: usize,
-    },
+    Tab { tab_idx: usize, active: bool },
     NewTabButton,
     WindowButton(IntegratedTitleButton),
 }
@@ -969,11 +960,6 @@ impl TabBarState {
             },
         );
 
-        // Matches the ASCII field the window buttons already use (" + ", " X ")
-        // so the tab bar keeps one visual language across its controls.
-        const CLOSE_TAB_GLYPH: &str = " X ";
-        let close_tab_width = CLOSE_TAB_GLYPH.chars().count();
-
         let use_integrated_title_buttons = config
             .window_decorations
             .contains(window::WindowDecorations::INTEGRATED_BUTTONS);
@@ -1155,24 +1141,6 @@ impl TabBarState {
                 }
                 width = tab_line.len();
             }
-            // Draw the close control over the tab's trailing cells rather than
-            // after them: appending would widen the tab under the pointer and
-            // shove every later tab sideways as the mouse moves.
-            let close_button = if hover
-                && !config.use_fancy_tab_bar
-                && config.show_close_tab_button_in_tabs
-                && width > close_tab_width
-            {
-                // Take the hovered tab's own colors: styling it as an active tab
-                // makes the control read as the start of the neighbouring tab.
-                let close_tab = parse_status_text(CLOSE_TAB_GLYPH, cell_attrs.clone());
-                tab_line.resize(width - close_tab_width, SEQ_ZERO);
-                tab_line.append_line(close_tab.clone(), SEQ_ZERO);
-                Some((tab_start_idx + width - close_tab_width, close_tab))
-            } else {
-                None
-            };
-
             let title = tab_line.clone();
 
             items.push(TabEntry {
@@ -1182,18 +1150,6 @@ impl TabBarState {
                 x: tab_start_idx,
                 width,
             });
-
-            // Pushed after the tab so it wins the hit test, which walks the
-            // items in reverse and takes the last match.
-            if let Some((close_x, close_tab)) = close_button {
-                items.push(TabEntry {
-                    item: TabBarItem::CloseTabButton { tab_idx },
-                    title: close_tab,
-                    progress: Progress::None,
-                    x: close_x,
-                    width: close_tab_width,
-                });
-            }
 
             line.append_line(tab_line, SEQ_ZERO);
             x += width;
@@ -1451,82 +1407,6 @@ mod test {
             window_id: 0,
             tab_title: title.to_string(),
         }
-    }
-
-    /// #548: a pointer user needs a way to close a tab. The control appears on
-    /// the tab under the pointer, at its trailing edge, and takes the tab's own
-    /// width so neighbouring tabs do not shift as the mouse moves.
-    #[test]
-    fn hovering_a_tab_exposes_a_close_button_without_resizing_the_tab() {
-        let mut cfg = config::Config::default_config();
-        cfg.use_fancy_tab_bar = false;
-        cfg.show_close_tab_button_in_tabs = true;
-        cfg.show_new_tab_button_in_tab_bar = false;
-        config::use_this_configuration(cfg);
-        // TabBarState::new consults the format-tab-title callback, which needs
-        // the per-thread Lua handle that only the main thread normally sets up.
-        config::designate_this_as_the_main_thread();
-        let config = config::configuration();
-
-        let tabs = vec![make_tab(0, 0, true, "alpha"), make_tab(1, 1, false, "beta")];
-
-        let resting = TabBarState::new(80, None, &tabs, &[], false, None, &config, "", "");
-        assert!(
-            !resting
-                .items()
-                .iter()
-                .any(|entry| matches!(entry.item, TabBarItem::CloseTabButton { .. })),
-            "no pointer, no control"
-        );
-        let resting_tab = resting
-            .items()
-            .iter()
-            .find(|entry| matches!(entry.item, TabBarItem::Tab { tab_idx: 0, .. }))
-            .expect("first tab")
-            .clone();
-
-        let hovered = TabBarState::new(
-            80,
-            Some(resting_tab.x + 1),
-            &tabs,
-            &[],
-            false,
-            None,
-            &config,
-            "",
-            "",
-        );
-        let close = hovered
-            .items()
-            .iter()
-            .find(|entry| matches!(entry.item, TabBarItem::CloseTabButton { tab_idx: 0 }))
-            .expect("hovered tab exposes its close control");
-        let hovered_tab = hovered
-            .items()
-            .iter()
-            .find(|entry| matches!(entry.item, TabBarItem::Tab { tab_idx: 0, .. }))
-            .expect("first tab");
-
-        assert_eq!(
-            hovered_tab.width, resting_tab.width,
-            "the tab keeps its width so later tabs stay put"
-        );
-        assert_eq!(
-            close.x + close.width,
-            hovered_tab.x + hovered_tab.width,
-            "the control sits at the tab's trailing edge"
-        );
-        assert!(
-            hovered
-                .items()
-                .iter()
-                .position(|entry| matches!(entry.item, TabBarItem::CloseTabButton { .. }))
-                > hovered
-                    .items()
-                    .iter()
-                    .position(|entry| matches!(entry.item, TabBarItem::Tab { tab_idx: 0, .. })),
-            "the control must come after its tab; hit testing takes the last match"
-        );
     }
 
     #[test]
