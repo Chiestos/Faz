@@ -144,6 +144,33 @@ fn apply_hyperlink_rules_wrapped_lines() {
     }
 }
 
+/// The reporter's case in #547: a TUI wrapped the URL itself, so neither row
+/// carries the wrap attribute, yet both rows must resolve to the whole
+/// destination or cmd+click opens the fragment under the pointer.
+#[test]
+fn apply_hyperlink_rules_joins_rows_a_tui_wrapped_without_the_attribute() {
+    let url = "https://developer.apple.com/icon-composer/";
+    let rules = vec![Rule::new(r"\b\w+://\S+[_/a-zA-Z0-9-]", "$0").unwrap()];
+
+    let mut line1: Line = "(https://developer.apple.co".into();
+    let mut line2: Line = "m/icon-composer/) x".into();
+
+    let mut lines: [&mut Line; 2] = [&mut line1, &mut line2];
+    Line::apply_hyperlink_rules(&rules, &mut lines);
+
+    let expected = Arc::new(Hyperlink::new_implicit(url));
+    assert_eq!(
+        line1.get_cell(1).unwrap().attrs().hyperlink().cloned(),
+        Some(expected.clone()),
+        "the row where the URL starts carries the whole destination"
+    );
+    assert_eq!(
+        line2.get_cell(0).unwrap().attrs().hyperlink().cloned(),
+        Some(expected),
+        "the continuation row carries it too, not just its own fragment"
+    );
+}
+
 #[test]
 fn apply_hyperlink_rules_does_not_join_hard_newline_rows() {
     // Adjacent rows without a wrap attribute may belong to different commands.

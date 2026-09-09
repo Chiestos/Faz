@@ -568,6 +568,22 @@ impl Line {
     ///
     /// This function will call Line::clear_appdata on lines where
     /// hyperlinks are adjusted.
+    /// True when `line`'s text reaches its own right edge and `next` resumes at
+    /// column zero, the shape a renderer leaves when it wraps one run of text
+    /// across two rows without setting the wrap attribute.
+    fn rows_are_contiguous(line: &Line, next: &Line) -> bool {
+        let ends_at_edge = line
+            .visible_cells()
+            .filter(|cell| cell.str() != " ")
+            .last()
+            .is_some_and(|cell| cell.cell_index() + cell.width() >= line.len());
+        let next_starts_at_edge = next
+            .visible_cells()
+            .next()
+            .is_some_and(|cell| cell.str() != " ");
+        ends_at_edge && next_starts_at_edge
+    }
+
     pub fn apply_hyperlink_rules(rules: &[Rule], logical_line: &mut [&mut Line]) {
         if rules.is_empty() || logical_line.is_empty() {
             return;
@@ -584,14 +600,16 @@ impl Line {
             return;
         }
 
-        // Only a wrap attribute proves that adjacent physical rows belong to
-        // one token stream. If a caller groups hard-newline rows, scan each
-        // independently so hyperlinks cannot be fabricated across commands.
-        if logical_line.len() > 1
-            && logical_line[..logical_line.len() - 1]
-                .iter()
-                .any(|line| !line.last_cell_was_wrapped())
-        {
+        // A caller may hand us rows that only look adjacent. Scanning those as
+        // one string manufactures destinations the terminal never emitted, so
+        // check every internal boundary before joining. A wrap attribute
+        // settles it; otherwise the text has to run edge to edge with no blank
+        // on either side, which is what a TUI wrapping its own output leaves
+        // behind and what a fresh line of unrelated output does not (#547).
+        let joinable = logical_line.windows(2).all(|pair| {
+            pair[0].last_cell_was_wrapped() || Self::rows_are_contiguous(&pair[0], &pair[1])
+        });
+        if !joinable {
             for line in logical_line.iter_mut() {
                 let mut one = [&mut **line];
                 Self::apply_hyperlink_rules(rules, &mut one);
