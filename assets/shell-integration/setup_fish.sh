@@ -930,9 +930,13 @@ bind \n __kaku_ai_query_execute
 abbr -a ll 'ls -lhF'
 abbr -a la 'ls -lAhF'
 abbr -a l 'ls -CF'
-abbr -a grep 'grep --color=auto'
-abbr -a egrep 'grep -E --color=auto'
-abbr -a fgrep 'grep -F --color=auto'
+
+# Grep colors are functions, not abbreviations: an abbr whose expansion
+# starts with its own name re-expands each time a space is typed right
+# after `grep`, duplicating `--color=auto` while editing the command.
+function grep --wraps grep; command grep --color=auto $argv; end
+function egrep --wraps grep; command grep -E --color=auto $argv; end
+function fgrep --wraps grep; command grep -F --color=auto $argv; end
 
 # Git abbreviations
 abbr -a g git
