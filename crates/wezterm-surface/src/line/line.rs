@@ -607,7 +607,7 @@ impl Line {
         // on either side, which is what a TUI wrapping its own output leaves
         // behind and what a fresh line of unrelated output does not (#547).
         let joinable = logical_line.windows(2).all(|pair| {
-            pair[0].last_cell_was_wrapped() || Self::rows_are_contiguous(&pair[0], &pair[1])
+            pair[0].last_cell_was_wrapped() || Self::rows_are_contiguous(pair[0], pair[1])
         });
         if !joinable {
             for line in logical_line.iter_mut() {
