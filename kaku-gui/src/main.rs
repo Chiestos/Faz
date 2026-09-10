@@ -136,10 +136,7 @@ pub use selection::SelectionMode;
 pub use termwindow::{set_window_class, set_window_position, TermWindow, ICON_DATA};
 
 #[derive(Debug, Parser)]
-#[command(
-    about = "Kaku Terminal Emulator\nhttp://github.com/tw93/Kaku",
-    version = config::wezterm_version()
-)]
+#[command(about = "Kaku Terminal Emulator\nhttp://github.com/tw93/Kaku", version)]
 struct Opt {
     /// Skip loading kaku.lua
     #[arg(long, short = 'n')]
@@ -1081,6 +1078,15 @@ fn run() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{should_spawn_in_current_window, should_try_existing_gui};
+
+    #[test]
+    fn version_flag_uses_package_version_without_bootstrap() {
+        use clap::CommandFactory;
+        assert_eq!(
+            super::Opt::command().render_version(),
+            format!("kaku-gui {}\n", env!("CARGO_PKG_VERSION"))
+        );
+    }
 
     #[test]
     fn existing_gui_handoff_requires_matching_default_domain() {
