@@ -740,8 +740,23 @@ cat <<'EOF' >"$KAKU_INIT_FILE"
 # === PATH ===
 fish_add_path "$HOME/.config/kaku/fish/bin"
 
+# === Kaku session ===
+# tmux rewrites TERM_PROGRAM, so a tmux session started from Kaku needs the
+# exported marker to still count as Kaku. Other terminals set their own
+# TERM_PROGRAM, so a leaked marker is dropped there (#503).
+if test "$TERM_PROGRAM" = "Kaku"
+    set -gx KAKU_SESSION 1
+else if not set -q TMUX
+    set -e KAKU_SESSION
+end
+set -l _kaku_in_kaku 0
+if test "$TERM_PROGRAM" = "Kaku"; or begin; set -q TMUX; and set -q KAKU_SESSION; end
+    set _kaku_in_kaku 1
+end
+
 # === Starship prompt ===
-if set -q TERM_PROGRAM; and test "$TERM_PROGRAM" = "Kaku"; and command -q starship
+# Kaku-only by default; KAKU_PROMPT_EVERYWHERE=1 opts it into every terminal.
+if begin; test $_kaku_in_kaku = 1; or set -q KAKU_PROMPT_EVERYWHERE; end; and command -q starship
     starship init fish | source
 end
 

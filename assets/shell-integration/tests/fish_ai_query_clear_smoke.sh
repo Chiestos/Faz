@@ -40,7 +40,7 @@ fi
 
 kaku_fish="$HOME/.config/kaku/fish/kaku.fish"
 [[ -f "$kaku_fish" ]] || fail "managed init file not created at $kaku_fish"
-grep -Fq 'if set -q TERM_PROGRAM; and test "$TERM_PROGRAM" = "Kaku"; and command -q starship' \
+grep -Fq 'if begin; test $_kaku_in_kaku = 1; or set -q KAKU_PROMPT_EVERYWHERE; end; and command -q starship' \
   "$kaku_fish" \
   || fail "generated kaku.fish did not preserve the runtime Kaku session guard"
 grep -Fq 'set -l capability_file "$HOME/.config/kaku/ai_inline_capability"' \

@@ -58,7 +58,7 @@ fi
 if grep -Fq "fg=244" "$tmp_home/.config/kaku/zsh/kaku.zsh"; then
   fail "generated kaku.zsh still contains old comment color fg=244"
 fi
-grep -Fq 'if [[ "${TERM_PROGRAM:-}" == "Kaku" ]] && command -v starship' \
+grep -Fq 'if { (( _kaku_in_kaku )) || [[ -n "${KAKU_PROMPT_EVERYWHERE:-}" ]]; } && command -v starship' \
   "$tmp_home/.config/kaku/zsh/kaku.zsh" \
   || fail "generated kaku.zsh did not preserve the runtime Kaku session guard"
 grep -Fq 'local capability_file="$HOME/.config/kaku/ai_inline_capability"' \

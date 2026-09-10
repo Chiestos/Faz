@@ -137,6 +137,18 @@ This is a known interaction between trackpad scroll and Claude Code's streaming 
 
 The yazi remote-files feature (`Cmd+Shift+R`) is designed for SSH sessions and mounts the remote filesystem via sshfs. `Cmd+Shift+Y` is for local yazi. Use `Cmd+Shift+R` when you are inside an SSH pane.
 
+## Kaku's prompt shows up in other terminals, or is missing from them.
+
+Kaku's shell integration is loaded by every zsh and fish, but the Starship prompt and Smart Tab only start inside Kaku, including tmux sessions started from Kaku. Other terminals keep whatever prompt you already had.
+
+If you use Kaku's Starship as your one prompt everywhere, add this before the Kaku line in your `.zshrc` (`set -gx KAKU_PROMPT_EVERYWHERE 1` in `config.fish`):
+
+```sh
+export KAKU_PROMPT_EVERYWHERE=1
+```
+
+Smart Tab stays Kaku-only; `KAKU_SMART_TAB_DISABLE=1` turns it off.
+
 ## The `y` shell wrapper doesn't sync my directory on exit.
 
 Make sure the Kaku fish/zsh shell integration is sourced. Check with `kaku doctor`. The `y` wrapper requires the shell init to be loaded. A bare `yazi` call will not sync the directory.
