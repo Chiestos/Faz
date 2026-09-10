@@ -142,18 +142,45 @@ if [[ -n "$ASC_API_KEY_PATH" && -f "$ASC_API_KEY_PATH" ]] && command -v rcodesig
 	echo "  Key: $ASC_API_KEY_PATH"
 	echo "  File: $SUBMISSION_PATH"
 	echo ""
-	if rcodesign notary-submit \
-		--api-key-path "$ASC_API_KEY_PATH" \
-		--staple \
-		--wait \
-		"$SUBMISSION_PATH"; then
+	# Wait for Apple's verdict but let xcrun stapler do the stapling below.
+	# rcodesign's own --staple refuses a DMG without an embedded signature,
+	# which is what build.sh produces, so with --staple an accepted submission
+	# still returned failure here and fell through to the notarytool path.
+	#
+	# The S3 upload stalls intermittently on proxied networks (the AWS SDK
+	# ignores *_proxy and gives up at 0 B/s). That is the same failure the
+	# notarytool path already retries, so give rcodesign the same bounded
+	# retry; anything else fails straight through to the fallback.
+	RCODESIGN_UPLOAD_ERROR_PATTERN="ThroughputBelowMinimum|connect timeout|dispatch failure|timed out"
+	rcodesign_ok=0
+	attempt=1
+	while (( attempt <= NOTARY_SUBMIT_MAX_ATTEMPTS )); do
+		echo "rcodesign attempt ${attempt}/${NOTARY_SUBMIT_MAX_ATTEMPTS}..."
+		if RCODESIGN_OUTPUT=$(rcodesign notary-submit \
+			--api-key-path "$ASC_API_KEY_PATH" \
+			--wait \
+			"$SUBMISSION_PATH" 2>&1); then
+			echo "$RCODESIGN_OUTPUT"
+			rcodesign_ok=1
+			break
+		fi
+		echo "$RCODESIGN_OUTPUT"
+		if ! grep -Eq "$RCODESIGN_UPLOAD_ERROR_PATTERN" <<<"$RCODESIGN_OUTPUT"; then
+			break
+		fi
+		if (( attempt < NOTARY_SUBMIT_MAX_ATTEMPTS )); then
+			echo "rcodesign upload stalled. Retrying in ${NOTARY_SUBMIT_RETRY_DELAY}s..."
+			sleep "$NOTARY_SUBMIT_RETRY_DELAY"
+		fi
+		attempt=$((attempt + 1))
+	done
+	if (( rcodesign_ok )); then
 		echo ""
 		echo "✅ Notarization accepted! Stapling ticket..."
 		staple_and_verify
 		exit 0
-	else
-		echo "❌ rcodesign notarization failed. Falling back to notarytool if Apple ID credentials are available."
 	fi
+	echo "❌ rcodesign notarization failed. Falling back to notarytool if Apple ID credentials are available."
 fi
 
 # Fallback: notarytool with Keychain profile
