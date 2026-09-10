@@ -109,6 +109,11 @@ detect_signing_identity() {
 	return 1
 }
 
+# Apple's timestamp service fails in two wordings: "timestamp service is not
+# available" and "A timestamp was expected but was not found." Both mean the
+# TSA round trip failed, not that the certificate is wrong, so both retry.
+CODESIGN_TIMESTAMP_ERROR_PATTERN="timestamp service is not available|A timestamp was expected but was not found"
+
 codesign_with_retry() {
 	local max_attempts=3
 	local delay_seconds=15
@@ -116,17 +121,21 @@ codesign_with_retry() {
 	local output rc
 
 	while (( attempt <= max_attempts )); do
-		if output=$(codesign "$@" 2>&1); then
+		# Capture the status on the command itself. Reading $? after a failed
+		# `if` yields 0, which made this helper return success after a failed
+		# signing and let the build package an unsigned app.
+		rc=0
+		output=$(codesign "$@" 2>&1) || rc=$?
+		if (( rc == 0 )); then
 			if [[ -n "$output" ]]; then
 				printf '%s\n' "$output"
 			fi
 			return 0
 		fi
 
-		rc=$?
 		printf '%s\n' "$output" >&2
 
-		if [[ "$output" != *"timestamp service is not available"* ]]; then
+		if ! grep -Eq "$CODESIGN_TIMESTAMP_ERROR_PATTERN" <<<"$output"; then
 			return "$rc"
 		fi
 
