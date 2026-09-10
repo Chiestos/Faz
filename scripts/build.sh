@@ -348,7 +348,11 @@ while IFS= read -r -d '' dylib; do
 	codesign_with_retry "${BASE_SIGN_ARGS[@]}" "$dylib"
 done < <(find "$APP_BUNDLE_OUT/Contents/Frameworks" -type f -name '*.dylib' -print0 | sort -z)
 
-for bin in "$APP_BUNDLE_OUT/Contents/MacOS/kaku" "$APP_BUNDLE_OUT/Contents/MacOS/kaku-gui" "$APP_BUNDLE_OUT/Contents/MacOS/k"; do
+# kaku-gui is CFBundleExecutable. When codesign signs the main executable it
+# validates the other executables in Contents/MacOS as nested code and refuses
+# while any of them is still unsigned ("code object is not signed at all,
+# In subcomponent: .../k"), so the helpers must be signed before it.
+for bin in "$APP_BUNDLE_OUT/Contents/MacOS/kaku" "$APP_BUNDLE_OUT/Contents/MacOS/k" "$APP_BUNDLE_OUT/Contents/MacOS/kaku-gui"; do
 	codesign_with_retry "${RUNTIME_SIGN_ARGS[@]}" "$bin"
 done
 
