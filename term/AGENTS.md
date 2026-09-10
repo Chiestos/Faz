@@ -20,6 +20,7 @@
 - Preserve screen buffer invariants and add focused tests for behavior changes.
 - Keep normal-screen and alternate-screen behavior distinct; wheel scrolling and inline AI status must not corrupt terminal state.
 - Preserve selection and cursor invariants that GUI overlays and inline assistant status depend on.
+- Only the terminal wrap attribute proves that physical rows form one logical line. Full-width output followed by text in column zero can still be independent commands. Keep both indented and unindented hard-newline regressions, alongside soft-wrap coverage, when changing hyperlink grouping (#547).
 - For TUI re-render corruption, reduce the report to an ANSI transcript and cover cursor motion plus erasure in terminal-core tests before changing GUI code. Full-line erase of a physical row must also leave wrap state consistent, especially for styled prompts that previously wrapped.
 
 ## Verification

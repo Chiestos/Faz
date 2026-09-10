@@ -144,80 +144,59 @@ fn apply_hyperlink_rules_wrapped_lines() {
     }
 }
 
-/// The reporter's case in #547: a TUI wrapped the URL itself, so neither row
-/// carries the wrap attribute, yet both rows must resolve to the whole
-/// destination or cmd+click opens the fragment under the pointer.
-#[test]
-fn apply_hyperlink_rules_joins_rows_a_tui_wrapped_without_the_attribute() {
-    let url = "https://developer.apple.com/icon-composer/";
-    let rules = vec![Rule::new(r"\b\w+://\S+[_/a-zA-Z0-9-]", "$0").unwrap()];
-
-    let mut line1: Line = "(https://developer.apple.co".into();
-    let mut line2: Line = "m/icon-composer/) x".into();
-
-    let mut lines: [&mut Line; 2] = [&mut line1, &mut line2];
-    Line::apply_hyperlink_rules(&rules, &mut lines);
-
-    let expected = Arc::new(Hyperlink::new_implicit(url));
-    assert_eq!(
-        line1.get_cell(1).unwrap().attrs().hyperlink().cloned(),
-        Some(expected.clone()),
-        "the row where the URL starts carries the whole destination"
-    );
-    assert_eq!(
-        line2.get_cell(0).unwrap().attrs().hyperlink().cloned(),
-        Some(expected),
-        "the continuation row carries it too, not just its own fragment"
-    );
-}
-
 #[test]
 fn apply_hyperlink_rules_does_not_join_hard_newline_rows() {
     // Adjacent rows without a wrap attribute may belong to different commands.
     // Scanning them as one string can manufacture a destination the terminal
     // never emitted.
-    let url_part1 = "https://accounts.example.com/o";
-    let url_part2 = "/oauth2?code=abc123&state=xyz";
-    let indent = "  ";
+    for indent in ["", "  "] {
+        let url_part1 = "https://accounts.example.com/o";
+        let url_part2 = "/oauth2?code=abc123&state=xyz";
 
-    let rules = vec![Rule::new(r"\b\w+://\S+[_/a-zA-Z0-9-]", "$0").unwrap()];
+        let rules = vec![Rule::new(r"\b\w+://\S+[_/a-zA-Z0-9-]", "$0").unwrap()];
 
-    let mut line1: Line = url_part1.into();
-    let mut line2: Line = format!("{indent}{url_part2}").as_str().into();
+        let mut line1: Line = url_part1.into();
+        let mut line2: Line = format!("{indent}{url_part2}").as_str().into();
 
-    let mut lines: [&mut Line; 2] = [&mut line1, &mut line2];
-    Line::apply_hyperlink_rules(&rules, &mut lines);
+        let mut lines: [&mut Line; 2] = [&mut line1, &mut line2];
+        Line::apply_hyperlink_rules(&rules, &mut lines);
 
-    let fabricated = Arc::new(Hyperlink::new_implicit(&format!(
-        "{}{}",
-        url_part1, url_part2
-    )));
+        let fabricated = Arc::new(Hyperlink::new_implicit(&format!(
+            "{}{}",
+            url_part1, url_part2
+        )));
 
-    assert_ne!(
-        line1.get_cell(0).unwrap().attrs().hyperlink().cloned(),
-        Some(fabricated.clone()),
-        "first row must not point at a cross-row URL"
-    );
-    assert_eq!(
-        line2.get_cell(0).unwrap().attrs().hyperlink().cloned(),
-        None,
-        "indent cell stays unlinked"
-    );
-    assert_ne!(
-        line2
-            .get_cell(indent.len())
-            .unwrap()
-            .attrs()
-            .hyperlink()
-            .cloned(),
-        Some(fabricated),
-        "continuation must not point at a cross-row URL"
-    );
-    assert_eq!(
-        line2.len(),
-        indent.len() + url_part2.len(),
-        "hard-newline scan preserves the original row"
-    );
+        assert_eq!(
+            line1.get_cell(0).unwrap().attrs().hyperlink().cloned(),
+            Some(Arc::new(Hyperlink::new_implicit(url_part1))),
+            "the original URL is still recognized"
+        );
+        assert_ne!(
+            line1.get_cell(0).unwrap().attrs().hyperlink().cloned(),
+            Some(fabricated.clone()),
+            "first row must not point at a cross-row URL"
+        );
+        assert_eq!(
+            line2.get_cell(0).unwrap().attrs().hyperlink().cloned(),
+            None,
+            "unrelated row stays unlinked"
+        );
+        assert_ne!(
+            line2
+                .get_cell(indent.len())
+                .unwrap()
+                .attrs()
+                .hyperlink()
+                .cloned(),
+            Some(fabricated),
+            "continuation must not point at a cross-row URL"
+        );
+        assert_eq!(
+            line2.len(),
+            indent.len() + url_part2.len(),
+            "hard-newline scan preserves the original row"
+        );
+    }
 }
 
 #[test]

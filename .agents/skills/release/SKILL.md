@@ -88,6 +88,7 @@ These are the areas that produce the most post-release bug reports and that CI c
 3. **Shell setup** (#420, #432, #441, #450): from a clean `HOME`, run `kaku init` and confirm z / syntax-highlight / autosuggestions are active in a fresh shell; run `kaku init --update-only` and confirm it exits clean; open a new shell and confirm `~/.config/kaku/zsh/kaku.zsh` sources with no error.
 4. **AI chat** (#418, #431): run `kaku chat`, quit, then run it again in the same window and confirm it reopens.
 5. **Render timing / stale drawable** (#452, #458): on the bundled WebGpu backend, sleep the Mac then wake it and confirm the window repaints instead of freezing on the old frame while keystrokes still reach the shell; connect or disconnect an external display and confirm no frozen frame or geometry jump; open a new window straight into fullscreen and resize it, confirming it fills without a stale first frame.
+6. **Hyperlinks** (#547): Cmd-hover a URL that the terminal soft-wraps and confirm both rows target the full URL. Then print a URL exactly as wide as the terminal, followed by `\r\n` and unindented unrelated text; the target must exclude that text. Terminal and surface tests cover the grouping; check the built app hover target too.
 
 When a release fixes a bug outside this list, add the reproduction here so the next release re-checks it.
 

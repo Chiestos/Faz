@@ -1053,33 +1053,11 @@ impl Screen {
         }
     }
 
-    /// True when `line` continues into `next` for logical-line purposes.
-    ///
-    /// The wrap attribute is the only proof, but TUI renderers (ratatui, ink)
-    /// wrap text themselves and emit a real newline, and `\x1b[2K` clears the
-    /// attribute outright, so a repainting app never sets it. Those rows still
-    /// have to be joined or a URL the app wrapped is scanned in fragments and
-    /// opens truncated (#547).
-    ///
-    /// Width alone is not enough to tell them apart: output from two unrelated
-    /// commands can also fill the row. The continuation row is what separates
-    /// them. A TUI that ran out of room resumes at column zero, while a fresh
-    /// line of output carries its own leading layout. So join only when the
-    /// text runs edge to edge with no blank on either side of the boundary.
-    fn line_flows_into_next(line: &Line, next: &Line, physical_cols: usize) -> bool {
-        if line.last_cell_was_wrapped() {
-            return true;
-        }
-        let fills_width = line
-            .visible_cells()
-            .filter(|cell| cell.str() != " ")
-            .last()
-            .is_some_and(|cell| cell.cell_index() + cell.width() >= physical_cols);
-        let next_resumes_at_column_zero = next
-            .visible_cells()
-            .next()
-            .is_some_and(|cell| cell.str() != " ");
-        fills_width && next_resumes_at_column_zero
+    /// Only the terminal wrap attribute establishes logical-line ownership.
+    /// A full hard-newline row may be unrelated output; treating width alone
+    /// as continuation can fabricate URLs and other tokens across commands.
+    fn line_flows_into_next(line: &Line) -> bool {
+        line.last_cell_was_wrapped()
     }
 
     pub fn for_each_logical_line_in_stable_range_mut<F>(
@@ -1099,11 +1077,9 @@ impl Screen {
 
         // Look backwards to find the start of the first logical line
         let mut back_len = 0;
-        let physical_cols = self.physical_cols;
         while phys_range.start > 0 {
-            let prior = &self.lines[phys_range.start - 1];
-            let next = &self.lines[phys_range.start];
-            if !Self::line_flows_into_next(prior, next, physical_cols) {
+            let prior = &mut self.lines[phys_range.start - 1];
+            if !Self::line_flows_into_next(prior) {
                 break;
             }
             if prior.len() + back_len > MAX_LOGICAL_LINE_LEN {
@@ -1127,13 +1103,8 @@ impl Screen {
                     }
                     end_inclusive = idx;
                     total_len += line.len();
-                    match self.lines.get(idx + 1) {
-                        Some(next) => {
-                            if !Self::line_flows_into_next(line, next, physical_cols) {
-                                break;
-                            }
-                        }
-                        None => break,
+                    if !Self::line_flows_into_next(line) {
+                        break;
                     }
                 } else if idx == phys_row {
                     // No more rows exist

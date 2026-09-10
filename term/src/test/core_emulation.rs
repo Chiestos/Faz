@@ -238,47 +238,26 @@ fn multiple_tabs_hit_successive_stops() {
 
 // ─── Logical line joining ─────────────────────────────────────────────────────
 
-/// A TUI that wraps its own output emits a real newline and never sets the
-/// wrap attribute, so the rows have to be joined on shape alone or a URL it
-/// split is scanned in fragments and opens truncated (#547).
-#[test]
-fn logical_line_walker_joins_rows_a_tui_wrapped_without_the_attribute() {
-    let mut term = TestTerm::new(4, 27, 0);
-    term.print("(https://developer.apple.co\r\nm/icon-composer/) x\r\n");
-
-    let mut groups: Vec<usize> = vec![];
-    term.term
-        .screen_mut()
-        .for_each_logical_line_in_stable_range_mut(0..2, |_range, lines| {
-            groups.push(lines.len());
-            true
-        });
-
-    assert_eq!(
-        groups,
-        vec![2],
-        "a row filled edge to edge continues into one that resumes at column zero"
-    );
-}
-
 #[test]
 fn logical_line_walker_does_not_join_full_width_hard_newline_rows() {
-    let mut term = TestTerm::new(4, 10, 0);
-    // Width alone cannot prove that adjacent rows share logical ownership.
-    // Explicit newlines keep them separate even when a row fills the terminal.
-    term.print("ABCDEFGHIJ\r\n  KLMNO\r\nxyz\r\n");
+    for indent in ["", "  "] {
+        let mut term = TestTerm::new(4, 10, 0);
+        // Width alone cannot prove that adjacent rows share logical ownership.
+        // Explicit newlines keep them separate even when a row fills the terminal.
+        term.print(&format!("ABCDEFGHIJ\r\n{indent}KLMNO\r\nxyz\r\n"));
 
-    let mut groups: Vec<usize> = vec![];
-    term.term
-        .screen_mut()
-        .for_each_logical_line_in_stable_range_mut(0..3, |_range, lines| {
-            groups.push(lines.len());
-            true
-        });
+        let mut groups: Vec<usize> = vec![];
+        term.term
+            .screen_mut()
+            .for_each_logical_line_in_stable_range_mut(0..3, |_range, lines| {
+                groups.push(lines.len());
+                true
+            });
 
-    assert_eq!(
-        groups,
-        vec![1, 1, 1],
-        "hard-newline rows stay independent regardless of width"
-    );
+        assert_eq!(
+            groups,
+            vec![1, 1, 1],
+            "hard-newline rows stay independent regardless of width"
+        );
+    }
 }
