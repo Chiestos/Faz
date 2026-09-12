@@ -1046,6 +1046,7 @@ pub enum RenderBackend {
 
 pub struct TermWindow {
     pub window: Option<Window>,
+    window_destroyed: bool,
     pub config: ConfigHandle,
     pub config_overrides: wezterm_dynamic::Value,
     os_parameters: Option<parameters::Parameters>,
@@ -1745,6 +1746,7 @@ impl TermWindow {
             os_parameters: None,
             render_backend: None,
             window: None,
+            window_destroyed: false,
             window_background,
             config: config.clone(),
             config_overrides: wezterm_dynamic::Value::default(),
@@ -2021,9 +2023,16 @@ impl TermWindow {
         event: WindowEvent,
         window: &Window,
     ) -> anyhow::Result<bool> {
+        // AppKit can deliver a queued repaint or notification after Destroyed.
+        // `window.is_none()` also holds during native creation, so track teardown
+        // explicitly instead of dropping the initialization events as well.
+        if self.window_destroyed {
+            return Ok(false);
+        }
         log::trace!("{event:?}");
         match event {
             WindowEvent::Destroyed => {
+                self.window_destroyed = true;
                 self.window.take();
                 self.event_states.clear();
                 // Ensure that we cancel any overlays we had running, so
@@ -6836,6 +6845,22 @@ mod tests {
     use mux::tab::TabId;
     use std::path::PathBuf;
     use wezterm_term::{Progress, StableRowIndex};
+
+    #[test]
+    fn destroyed_window_events_stop_before_rendering_or_notifications() {
+        let source = include_str!("mod.rs").split("#[cfg(test)]").next().unwrap();
+        assert!(source.contains("window_destroyed: false,"));
+        let dispatch = source.split("fn dispatch_window_event(").nth(1).unwrap();
+        let (before_dispatch, arms) = dispatch.split_once("match event {").unwrap();
+        assert!(
+            before_dispatch.contains("if self.window_destroyed {\n            return Ok(false);")
+        );
+        assert!(!before_dispatch.contains("if self.window.is_none()"));
+        let destroyed = arms.split("WindowEvent::CloseRequested =>").next().unwrap();
+        let mark = destroyed.find("self.window_destroyed = true;").unwrap();
+        let release = destroyed.find("self.window.take();").unwrap();
+        assert!(mark < release);
+    }
 
     #[test]
     fn tab_progress_prioritizes_attention_across_panes() {
