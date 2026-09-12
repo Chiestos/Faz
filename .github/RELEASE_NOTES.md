@@ -13,7 +13,7 @@
 3. **AI Model Selection**: Switching providers no longer reuses the previous provider's model list, all returned models are shown, and manually configured models remain available.
 4. **AI Chat**: Chats include local project type information without probing local projects during remote sessions, and cancellation interrupts retry waits promptly.
 5. **Context Menu**: Right-click to paste, search, open AI chat, or manage panes, with an option in Settings to show the new-tab button.
-6. **Theme Settings**: Standalone configurations can use the built-in light and dark themes, Settings saves to the custom configuration used at launch, and manual color overrides are shown explicitly.
+6. **Theme Settings**: Standalone configurations can use the built-in light and dark themes, Settings saves to the custom configuration used at launch, manual color overrides are shown explicitly, and Fancy tabs use the selected theme.
 7. **Link Detection**: Unrelated text after a hard newline stays out of link targets while automatically wrapped URLs keep their complete addresses.
 8. **Version Reporting**: The GUI executable reports its package version without initializing a window.
 
@@ -24,7 +24,7 @@
 3. **AI 模型选择**：切换服务后不再沿用旧服务的模型列表，完整展示服务返回的模型，并保留手动配置的模型。
 4. **AI 对话**：补充当前项目类型信息，远程会话不读取本机项目，取消请求时不再等待重试倒计时结束。
 5. **右键菜单**：支持粘贴、搜索、AI 对话和分屏操作，也可以在设置中开启新建标签页按钮。
-6. **主题设置**：独立配置也能使用内置深浅主题，通过自定义配置启动时设置会保存到对应文件，手动配色覆盖主题时会显示说明。
+6. **主题设置**：独立配置也能使用内置深浅主题，通过自定义配置启动时设置会保存到对应文件，手动配色覆盖主题时会显示说明，Fancy 标签栏也会跟随主题配色。
 7. **链接识别**：避免把换行后的无关输出拼进链接，保留自动折行网址的完整地址。
 8. **版本查询**：图形程序的版本查询无需初始化窗口即可正确返回。
 

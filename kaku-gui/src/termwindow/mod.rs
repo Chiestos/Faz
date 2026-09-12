@@ -6847,6 +6847,39 @@ mod tests {
     use wezterm_term::{Progress, StableRowIndex};
 
     #[test]
+    fn fancy_tab_bar_reads_resolved_theme_colors() {
+        let source = include_str!("render/fancy_tab_bar.rs");
+        let body = source.split("pub fn build_fancy_tab_bar(").nth(1).unwrap();
+        let body = body.split("let mut left_status").next().unwrap();
+        assert!(body.contains(".resolved_palette\n            .tab_bar\n            .clone()"));
+    }
+
+    #[test]
+    fn tab_rename_fallback_reads_resolved_theme_colors() {
+        let source = include_str!("tab_rename.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        let body = source
+            .split("let tab_bar_colors = term_window")
+            .nth(1)
+            .unwrap();
+        let body = body.split("if self.is_active_in_window").next().unwrap();
+        assert!(body.contains(".resolved_palette\n            .tab_bar\n            .clone()"));
+    }
+
+    #[test]
+    fn tab_rename_editor_reads_resolved_theme_colors() {
+        let source = include_str!("tab_rename.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        let body = source.split("fn colors(").nth(1).unwrap();
+        let body = body.split("let active =").next().unwrap();
+        assert!(body.contains(".resolved_palette\n            .tab_bar\n            .clone()"));
+    }
+
+    #[test]
     fn destroyed_window_events_stop_before_rendering_or_notifications() {
         let source = include_str!("mod.rs").split("#[cfg(test)]").next().unwrap();
         assert!(source.contains("window_destroyed: false,"));
