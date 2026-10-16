@@ -141,7 +141,7 @@ impl termwiz::render::RenderTty for FormatTarget {
 pub fn format_as_escapes(items: Vec<FormatItem>) -> anyhow::Result<String> {
     let mut changes: Vec<Change> = items.into_iter().map(Into::into).collect();
     changes.push(Change::AllAttributes(CellAttributes::default()).into());
-    let mut renderer = new_kaku_terminfo_renderer();
+    let mut renderer = new_faz_terminfo_renderer();
     let mut target = FormatTarget { target: vec![] };
     renderer.render_to(&changes, &mut target)?;
     Ok(String::from_utf8(target.target)?)
@@ -258,14 +258,14 @@ lazy_static::lazy_static! {
                 .color_level(Some(ColorLevel::TrueColor))
                 .colorterm(None)
                 .colorterm_bce(None)
-                .term_program(Some("Kaku".into()))
+                .term_program(Some("Faz".into()))
                 .term_program_version(Some(config::wezterm_version().into())),
         )
         .expect("cannot fail to make internal Capabilities")
     };
 }
 
-pub fn new_kaku_terminfo_renderer() -> TerminfoRenderer {
+pub fn new_faz_terminfo_renderer() -> TerminfoRenderer {
     TerminfoRenderer::new(CAPS.clone())
 }
 
@@ -280,7 +280,7 @@ pub fn lines_to_escapes(lines: Vec<Line>) -> anyhow::Result<String> {
         }
     }
     changes.push(Change::AllAttributes(CellAttributes::blank()));
-    let mut renderer = new_kaku_terminfo_renderer();
+    let mut renderer = new_faz_terminfo_renderer();
 
     struct Target {
         target: Vec<u8>,

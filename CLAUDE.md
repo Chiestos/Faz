@@ -1,6 +1,6 @@
-# Kaku
+# Faz
 
-Kaku is a macOS-native terminal emulator derived from WezTerm and tuned for AI-assisted terminal work.
+Faz is a macOS-native terminal emulator derived from WezTerm and tuned for AI-assisted terminal work.
 
 ## Agent Entry Points
 
@@ -27,10 +27,10 @@ make app
 
 ## Project-Specific Rules
 
-- AI chat and shell flows are core product surfaces. Before changing `kaku-gui/src/ai_*`, `ai_chat_engine/`, `cli_chat/`, or `overlay/ai_chat/`, read `kaku-gui/AGENTS.md`.
+- AI chat and shell flows are core product surfaces. Before changing `faz-gui/src/ai_*`, `ai_chat_engine/`, `cli_chat/`, or `overlay/ai_chat/`, read `faz-gui/AGENTS.md`.
 - `config_version` bumps every release (source of truth: `assets/shell-integration/config_version.txt`; enforced by `scripts/check_release_config.sh`). Schema changes must update bundled defaults, docs, release checks, and migration behavior together. Per-version history and migration rules live in `docs/config-versions.md`; do not hardcode the current number in instruction files.
 - Startup performance depends on shell user-var caching, Lua bytecode, early appearance queries, GLSL version detection, and bundled font caching. Measure before invalidating those paths.
-- Notification actions that call back into Kaku must resolve bundled executables relative to the running app.
+- Notification actions that call back into Faz must resolve bundled executables relative to the running app.
 - macOS menu and window changes need runtime validation in the app bundle, not only a successful compile.
 - Review scorecards and diagnostic snapshots should be distilled into stable rules or verification gates before commit; do not keep dated reports as source-of-truth docs.
 - Maintainability cleanups must not silently add default-on UI, config, or workflow behavior. Split those changes or get explicit maintainer approval.

@@ -39,7 +39,7 @@ use crate::terminalstate::kitty::*;
 
 lazy_static::lazy_static! {
     static ref DB: Database = {
-        let data = include_bytes!("../../../termwiz/data/kaku");
+        let data = include_bytes!("../../../termwiz/data/faz");
         Database::from_buffer(&data[..]).unwrap()
     };
 }

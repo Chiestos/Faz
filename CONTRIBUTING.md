@@ -1,11 +1,11 @@
-# Contributing to Kaku
+# Contributing to Faz
 
 ## Setup
 
 ```bash
 # Clone the repository
 git clone https://github.com/tw93/Kaku.git
-cd Kaku
+cd Faz
 
 # Install Rust if it isn't already available (Homebrew keeps rustup keg-only)
 brew install rustup
@@ -28,9 +28,9 @@ make install-hooks
 | `make fmt-check` | Check formatting without modifying files |
 | `make check` | Compile check, catch type/syntax errors |
 | `make test` | Run unit tests |
-| `make dev` | Fast local debug: build `kaku-gui` and run from `target/debug` |
+| `make dev` | Fast local debug: build `faz-gui` and run from `target/debug` |
 | `make build` | Compile binaries (no app bundle) |
-| `make app` | Build debug app bundle → `dist/Kaku.app` |
+| `make app` | Build debug app bundle → `dist/Faz.app` |
 
 **Recommended workflow:**
 
@@ -52,7 +52,7 @@ RUST_LOG=debug make dev
 ```bash
 # Build application and DMG (release, universal binary)
 ./scripts/build.sh
-# Outputs: dist/Kaku.app and dist/Kaku.dmg
+# Outputs: dist/Faz.app and dist/Kaku.dmg
 
 # Build for current architecture only (faster, for local testing)
 ./scripts/build.sh --native-arch

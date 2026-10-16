@@ -22,10 +22,10 @@ get_cargo_version() {
     grep '^version =' "$root/kaku/Cargo.toml" | head -n1 | cut -d'"' -f2
 }
 
-# Read package.version from kaku-gui/Cargo.toml.
+# Read package.version from faz-gui/Cargo.toml.
 get_kaku_gui_version() {
     local root="${1:-${REPO_ROOT:-.}}"
-    grep '^version =' "$root/kaku-gui/Cargo.toml" | head -n1 | cut -d'"' -f2
+    grep '^version =' "$root/faz-gui/Cargo.toml" | head -n1 | cut -d'"' -f2
 }
 
 # Verify git tree is clean, on main, in sync with origin/main.

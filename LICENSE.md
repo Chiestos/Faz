@@ -25,7 +25,7 @@ SOFTWARE.
 
 **Attribution & Bundled Assets**
 
-Kaku is a customized fork of [WezTerm](https://github.com/wez/wezterm), created by Wez Furlong.
+Faz is a customized fork of [WezTerm](https://github.com/wez/wezterm), created by Wez Furlong.
 Deep gratitude to Wez for building such a powerful terminal engine.
 
 WezTerm bundles `JetBrains Mono`, `Noto Color Emoji` and `Roboto` fonts.

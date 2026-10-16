@@ -1,6 +1,6 @@
 [advisories]
 # quick-xml >=0.41 fixes these XML DoS advisories, but the current dependency
-# chain is pinned by starship-battery -> plist ~1.7.0. Kaku's plist parsing
+# chain is pinned by starship-battery -> plist ~1.7.0. Faz's plist parsing
 # surface is local/system plist data rather than remote unauthenticated XML.
 # Remove these ignores once starship-battery can resolve to plist using
 # quick-xml >=0.41.

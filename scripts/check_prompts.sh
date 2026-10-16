@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verify every shipped prompt file under assets/prompts/ carries the metadata
-# header expected by Kaku's prompt loader. Format mirrors Piebald's
+# header expected by Faz's prompt loader. Format mirrors Piebald's
 # claude-code-system-prompts so each file is independently auditable.
 #
 # Required header (first non-blank lines of the file):
@@ -21,7 +21,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROMPTS_DIR="$REPO_ROOT/assets/prompts"
 
-# `kakuVersion` records the Kaku version a prompt was authored / last revised
+# `kakuVersion` records the Faz version a prompt was authored / last revised
 # for. It only needs to be a well-formed version, not the current release:
 # requiring an exact match would force every prompt file to be re-touched on
 # every version bump for no auditing benefit.

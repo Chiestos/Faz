@@ -2,19 +2,19 @@
 
 ## Config File
 
-Kaku auto-creates `~/.config/kaku/kaku.lua` with a commented template on first launch. Open it with `kaku config` or `Cmd + ,`.
+Faz auto-creates `~/.config/faz/faz.lua` with a commented template on first launch. Open it with `kaku config` or `Cmd + ,`.
 
-The file loads the bundled Kaku defaults first, then applies your overrides on top:
+The file loads the bundled Faz defaults first, then applies your overrides on top:
 
 ```lua
 local wezterm = require 'wezterm'
 
 local function resolve_bundled_config()
   local resource_dir = wezterm.executable_dir:gsub('MacOS/?$', 'Resources')
-  local bundled = resource_dir .. '/kaku.lua'
+  local bundled = resource_dir .. '/faz.lua'
   local f = io.open(bundled, 'r')
   if f then f:close(); return bundled end
-  return '/Applications/Kaku.app/Contents/Resources/kaku.lua'
+  return '/Applications/Faz.app/Contents/Resources/faz.lua'
 end
 
 local config = {}
@@ -44,13 +44,13 @@ config.font_size = 16
 config.window_background_opacity = 0.95
 
 -- Choose one only if you do not want to follow macOS appearance:
--- config.color_scheme = "Kaku Dark"
--- config.color_scheme = "Kaku Light"
+-- config.color_scheme = "Faz Dark"
+-- config.color_scheme = "Faz Light"
 ```
 
-Keep terminal behavior, appearance, key bindings, launch behavior, and other WezTerm-compatible settings in `kaku.lua`.
+Keep terminal behavior, appearance, key bindings, launch behavior, and other WezTerm-compatible settings in `faz.lua`.
 
-Manage Kaku Assistant settings with `kaku ai`. That command writes `~/.config/kaku/assistant.toml` for model, base URL, auth, API keys, and tool settings. The Lua/TOML split is intentional: `kaku.lua` stays compatible with WezTerm-style terminal configuration, while `assistant.toml` is managed by the AI setup flow.
+Manage Faz Assistant settings with `kaku ai`. That command writes `~/.config/faz/assistant.toml` for model, base URL, auth, API keys, and tool settings. The Lua/TOML split is intentional: `faz.lua` stays compatible with WezTerm-style terminal configuration, while `assistant.toml` is managed by the AI setup flow.
 
 ---
 
@@ -58,14 +58,14 @@ Manage Kaku Assistant settings with `kaku ai`. That command writes `~/.config/ka
 
 **Theme**
 
-Kaku follows macOS appearance by default and switches between Kaku Dark and
-Kaku Light automatically. To return to this behavior, choose **Auto** in
+Faz follows macOS appearance by default and switches between Faz Dark and
+Faz Light automatically. To return to this behavior, choose **Auto** in
 `kaku config` or remove an explicit `config.color_scheme` override. To force
 one theme:
 
 ```lua
-config.color_scheme = "Kaku Dark"   -- always dark
-config.color_scheme = "Kaku Light"  -- always light
+config.color_scheme = "Faz Dark"   -- always dark
+config.color_scheme = "Faz Light"  -- always light
 ```
 
 **Color overrides**
@@ -84,13 +84,13 @@ config.foreground_color_overrides = {
 
 **Font**
 
-Kaku defaults to JetBrains Mono with PingFang SC as CJK fallback. Change font:
+Faz defaults to JetBrains Mono with PingFang SC as CJK fallback. Change font:
 
 ```lua
 config.font = wezterm.font("Fira Code")
 ```
 
-Kaku disables ligatures by default. Re-enable:
+Faz disables ligatures by default. Re-enable:
 
 ```lua
 config.harfbuzz_features = {}
@@ -98,7 +98,7 @@ config.harfbuzz_features = {}
 
 **Font size**
 
-Kaku auto-selects 15px (low-res) or 17px (high-res) based on your display. Override:
+Faz auto-selects 15px (low-res) or 17px (high-res) based on your display. Override:
 
 ```lua
 config.font_size = 16
@@ -121,7 +121,7 @@ config.macos_window_background_blur = 20  -- optional blur (0–100)
 
 **Traffic lights (macOS)**
 
-By default, Kaku embeds the macOS traffic light buttons into the tab bar area using `INTEGRATED_BUTTONS|RESIZE`. To hide the traffic lights while keeping resize edges and tab-bar dragging:
+By default, Faz embeds the macOS traffic light buttons into the tab bar area using `INTEGRATED_BUTTONS|RESIZE`. To hide the traffic lights while keeping resize edges and tab-bar dragging:
 
 ```lua
 config.window_decorations = "RESIZE"
@@ -160,7 +160,7 @@ config.scrollback_lines = 10000  -- default
 
 **File link editor**
 
-Set an editor command for local file links printed in the terminal. Kaku appends
+Set an editor command for local file links printed in the terminal. Faz appends
 the resolved `path`, or `path:line:column` when the link includes a location.
 Shell-style quoting is supported for command arguments:
 
@@ -169,8 +169,8 @@ config.file_link_editor = "zed"
 -- config.file_link_editor = "cursor --goto"
 ```
 
-This setting takes priority over Kaku's automatic VS Code detection. When it is
-unset, Kaku keeps the existing VS Code and `$VISUAL` / `$EDITOR` fallback behavior.
+This setting takes priority over Faz's automatic VS Code detection. When it is
+unset, Faz keeps the existing VS Code and `$VISUAL` / `$EDITOR` fallback behavior.
 
 **Copy on select**
 
@@ -236,7 +236,7 @@ config.enable_scroll_bar = true
 ```
 
 If you want the mouse wheel to scroll inside alternate-screen apps such as
-nano and vim, instead of peeking into Kaku's primary scrollback, enable:
+nano and vim, instead of peeking into Faz's primary scrollback, enable:
 
 ```lua
 config.alternate_screen_wheel_scrolls_terminal = true
@@ -245,7 +245,7 @@ config.alternate_screen_wheel_scrolls_terminal = true
 **Selection drag + mouse wheel**
 
 Controls what the mouse wheel does while you are dragging out a selection
-with the left mouse button held down. Defaults to `"Extend"` (Kaku v0.11+),
+with the left mouse button held down. Defaults to `"Extend"` (Faz v0.11+),
 which matches macOS `NSTextView` apps such as Safari, TextEdit, VS Code,
 iTerm2 and `Terminal.app`: the wheel scrolls the scrollback and the
 selection grows to follow the cursor across screens.
@@ -258,13 +258,13 @@ config.selection_wheel_scroll_behavior = "Extend"
 -- Scroll the scrollback but leave the selection range untouched.
 config.selection_wheel_scroll_behavior = "ScrollOnly"
 
--- Drop the wheel event entirely. This is the legacy Kaku v0.10 behavior;
+-- Drop the wheel event entirely. This is the legacy Faz v0.10 behavior;
 -- selecting text that does not fit on one screen requires releasing the
 -- mouse, scrolling, and re-selecting.
 config.selection_wheel_scroll_behavior = "Ignore"
 ```
 
-> **Default change in v0.11**: earlier Kaku versions behaved as if
+> **Default change in v0.11**: earlier Faz versions behaved as if
 > `"Ignore"` were set. Set `selection_wheel_scroll_behavior = "Ignore"` to
 > restore the old behavior.
 
@@ -281,7 +281,7 @@ config.send_composed_key_when_right_alt_is_pressed = true  -- default: right = C
 
 ## Updates
 
-Kaku checks GitHub for new releases in the background (enabled by default) and
+Faz checks GitHub for new releases in the background (enabled by default) and
 quietly downloads a newer version when it finds one. It never installs on its
 own: it shows a notification, and clicking it asks you to confirm first, since
 applying an update closes every window and stops running tasks.
@@ -305,7 +305,7 @@ regardless of these settings.
 
 ## Custom Keybindings
 
-Always **insert** into `config.keys`, never replace it. Replacing erases all Kaku defaults.
+Always **insert** into `config.keys`, never replace it. Replacing erases all Faz defaults.
 
 ```lua
 -- Navigate pane right
@@ -331,10 +331,10 @@ Full list of available actions: [WezTerm KeyAssignment reference](https://wezfur
 
 **Enterprise proxy headers**
 
-Add custom HTTP headers to Kaku Assistant API requests (for corporate proxies or API gateways):
+Add custom HTTP headers to Faz Assistant API requests (for corporate proxies or API gateways):
 
 ```toml
-# ~/.config/kaku/assistant.toml
+# ~/.config/faz/assistant.toml
 custom_headers = ["X-Customer-ID: your-id", "X-Org: your-org"]
 ```
 
@@ -342,7 +342,7 @@ Note: `Authorization` and `Content-Type` are reserved and cannot be overridden.
 
 **Extend Command Palette**
 
-Add a custom command to Command Palette (`Cmd + Shift + P`) via `kaku.lua`:
+Add a custom command to Command Palette (`Cmd + Shift + P`) via `faz.lua`:
 
 ```lua
 wezterm.on('augment-command-palette', function(window, pane)
@@ -375,7 +375,7 @@ end)
 
 **Full WezTerm Lua API**
 
-Kaku uses WezTerm's configuration system. Any WezTerm config option works in `kaku.lua`. For the complete reference, see:
+Faz uses WezTerm's configuration system. Any WezTerm config option works in `faz.lua`. For the complete reference, see:
 
 - [WezTerm config options](https://wezfurlong.org/wezterm/config/)
 - [WezTerm Lua API](https://wezfurlong.org/wezterm/config/lua/)

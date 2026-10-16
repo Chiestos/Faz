@@ -125,7 +125,7 @@ impl SoftwareVersion {
 const NO_ERR: i32 = 0;
 /// `kLSRolesAll` from LaunchServices - matches all handler roles.
 const KLS_ROLES_ALL: u32 = !0;
-const KAKU_BUNDLE_IDENTIFIER: &str = "fun.tw93.kaku";
+const FAZ_BUNDLE_IDENTIFIER: &str = "fun.serendo.faz";
 
 fn set_default_role_handler_for_content_type(
     content_type: &str,
@@ -274,9 +274,9 @@ impl ConnectionOps for Connection {
     }
 
     fn set_default_terminal(&self) -> anyhow::Result<()> {
-        let bundle_id = CFString::new(KAKU_BUNDLE_IDENTIFIER);
+        let bundle_id = CFString::new(FAZ_BUNDLE_IDENTIFIER);
 
-        // Match the shell-related document types Kaku declares in Info.plist.
+        // Match the shell-related document types Faz declares in Info.plist.
         let shell_content_types = [
             "public.unix-executable",
             "public.script",
@@ -358,7 +358,7 @@ fn kaku_is_default_terminal() -> bool {
         return false;
     }
     let handler_str = unsafe { CFString::wrap_under_create_rule(handler) };
-    handler_str.to_string() == KAKU_BUNDLE_IDENTIFIER
+    handler_str.to_string() == FAZ_BUNDLE_IDENTIFIER
 }
 
 pub fn nsscreen_to_screen_info(screen: *mut Object) -> ScreenInfo {

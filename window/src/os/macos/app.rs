@@ -575,13 +575,13 @@ pub(crate) fn sync_global_hotkey_registration() {
 }
 
 fn reap_kaku_autofill_helpers() {
-    // Best-effort cleanup for macOS helper leaks where AutoFill (Kaku)
+    // Best-effort cleanup for macOS helper leaks where AutoFill (Faz)
     // can accumulate across app restarts.
     const SCRIPT: &str = r#"
 for pid in $(pgrep -f 'SafariPlatformSupport.Helper|CredentialProviderExtensionHelper' 2>/dev/null); do
   name=$(lsappinfo info -only name -pid "$pid" 2>/dev/null | sed -n 's/.*"LSDisplayName"="\([^"]*\)".*/\1/p')
   case "$name" in
-    *"(Kaku)"*) kill "$pid" 2>/dev/null || true ;;
+    *"(Faz)"*) kill "$pid" 2>/dev/null || true ;;
   esac
 done
 "#;
@@ -626,8 +626,8 @@ extern "C" fn application_should_terminate(
             WindowCloseConfirmation::AlwaysPrompt => {
                 let alert: id = msg_send![class!(NSAlert), alloc];
                 let alert: id = msg_send![alert, init];
-                let message_text = nsstring("Terminate Kaku?");
-                let info_text = nsstring("Detach and close all panes and terminate Kaku?");
+                let message_text = nsstring("Terminate Faz?");
+                let info_text = nsstring("Detach and close all panes and terminate Faz?");
                 let cancel = nsstring("Cancel");
                 let ok = nsstring("Ok");
 
@@ -664,7 +664,7 @@ extern "C" fn application_should_terminate_after_last_window_closed(
     NO
 }
 
-/// Find the frontmost Kaku window and dispatch QuitApplication to it so the
+/// Find the frontmost Faz window and dispatch QuitApplication to it so the
 /// GUI layer can run its mux-aware SmartPrompt logic (and show the confirm
 /// overlay if a stateful pane is still running). Returns `true` when a
 /// window accepted the dispatch; `false` when there is no window to route

@@ -25,19 +25,19 @@ check_status 2
 printf 'not json\n' > "$fixture/report.json"
 check_status 2
 mkdir -p "$fixture/Fake.app/Contents/MacOS"
-cat > "$fixture/Fake.app/Contents/MacOS/kaku-gui" <<'APP'
+cat > "$fixture/Fake.app/Contents/MacOS/faz-gui" <<'APP'
 #!/usr/bin/env bash
 if [[ "${1:-}" == --version ]]; then echo fixture; exit; fi
 if [[ "${FAIL_STARTUP:-0}" == 1 ]]; then exit 1; fi
 printf '[startup] 0 window.show() done\n'
-printf 'ready\n' > "$KAKU_BENCH_PROMPT"
+printf 'ready\n' > "$FAZ_BENCH_PROMPT"
 printf '[startup] 1 first paint_impl done\n'
 while :; do sleep 1; done
 APP
-chmod +x "$fixture/Fake.app/Contents/MacOS/kaku-gui"
-APP_PATH="$fixture/Fake.app" RUNS=2 WARMUP=0 scripts/measure_startup_kaku.sh > "$fixture/report.json" 2>"$fixture/measure.log"
+chmod +x "$fixture/Fake.app/Contents/MacOS/faz-gui"
+APP_PATH="$fixture/Fake.app" RUNS=2 WARMUP=0 scripts/measure_startup_faz.sh > "$fixture/report.json" 2>"$fixture/measure.log"
 jq -e '.schema_version == 2 and .runs == 2 and .version == "fixture" and .cold_ready.p95_ms > 0 and .warm_window.mean_ms > 0' "$fixture/report.json" >/dev/null
-if FAIL_STARTUP=1 APP_PATH="$fixture/Fake.app" RUNS=2 WARMUP=0 scripts/measure_startup_kaku.sh > /dev/null 2>"$fixture/failed.log"; then
+if FAIL_STARTUP=1 APP_PATH="$fixture/Fake.app" RUNS=2 WARMUP=0 scripts/measure_startup_faz.sh > /dev/null 2>"$fixture/failed.log"; then
   echo "A failed startup must not produce a successful report" >&2
   exit 1
 fi

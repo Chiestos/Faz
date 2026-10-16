@@ -11,7 +11,7 @@
 - `term/src/screen.rs` - screen buffer behavior
 - `term/src/test/` - terminal-core regression tests (`selection.rs`, `csi.rs`, `c0.rs`, `c1.rs`, `core_emulation.rs`)
 - `crates/wezterm-escape-parser/` - escape sequence parsing (CSI/OSC/ESC/APC); `term` consumes it, it does not live under `term/src/`
-- `kaku-gui/src/selection.rs` and `kaku-gui/src/termwindow/selection.rs` - selection and copy behavior (GUI side, not `term`)
+- `faz-gui/src/selection.rs` and `faz-gui/src/termwindow/selection.rs` - selection and copy behavior (GUI side, not `term`)
 
 ## Practical Rules
 
@@ -27,10 +27,10 @@
 
 - Compile checks: run `make check`.
 - Terminal logic changes: run `make test` or the narrow cargo nextest filter for the affected behavior.
-- Cross-crate behavior: also inspect `mux/AGENTS.md` and `kaku-gui/AGENTS.md`.
+- Cross-crate behavior: also inspect `mux/AGENTS.md` and `faz-gui/AGENTS.md`.
 
 ## Cross-References
 
 - `../mux/AGENTS.md` - owns panes and terminal instances.
-- `../kaku-gui/AGENTS.md` - renders terminal surfaces.
+- `../faz-gui/AGENTS.md` - renders terminal surfaces.
 - `../termwiz/AGENTS.md` - terminal UI primitives.

@@ -41,10 +41,10 @@ setup_out="$(
   PATH="$setup_path" \
   HOME="$HOME" \
   ZDOTDIR="$ZDOTDIR" \
-  KAKU_INIT_INTERNAL=1 \
-  KAKU_SKIP_TOOL_BOOTSTRAP=1 \
-  KAKU_SKIP_TERMINFO_BOOTSTRAP=1 \
-  KAKU_VENDOR_DIR="$vendor_dir" \
+  FAZ_INIT_INTERNAL=1 \
+  FAZ_SKIP_TOOL_BOOTSTRAP=1 \
+  FAZ_SKIP_TERMINFO_BOOTSTRAP=1 \
+  FAZ_VENDOR_DIR="$vendor_dir" \
   bash "$REPO_ROOT/assets/shell-integration/setup_zsh.sh" --update-only 2>&1
 )" || setup_status=$?
 if [[ "$setup_status" -ne 0 ]]; then
@@ -52,13 +52,13 @@ if [[ "$setup_status" -ne 0 ]]; then
   fail "setup_zsh.sh failed with exit $setup_status"
 fi
 
-kaku_zsh="$HOME/.config/kaku/zsh/kaku.zsh"
+kaku_zsh="$HOME/.config/faz/zsh/faz.zsh"
 [[ -f "$kaku_zsh" ]] || fail "managed init file not created at $kaku_zsh"
 
 grep -Fq 'typeset -g _kaku_autosuggest_cli_provider="kiro-cli"' "$kaku_zsh" \
   || fail "managed init did not record kiro-cli compatibility mode"
 
-if grep -Fq 'source "$KAKU_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"' "$kaku_zsh"; then
+if grep -Fq 'source "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"' "$kaku_zsh"; then
   fail "managed init still sources bundled zsh-autosuggestions in kiro compatibility mode"
 fi
 
@@ -72,13 +72,13 @@ if ! runtime_out="$(
   HOME="$HOME" \
   ZDOTDIR="$ZDOTDIR" \
   zsh -f -c '
-source "$HOME/.config/kaku/zsh/kaku.zsh"
+source "$HOME/.config/faz/zsh/faz.zsh"
 print -r -- "__KAKU_AUTOSUGGEST_PROVIDER__:${_kaku_autosuggest_cli_provider:-}"
 print -r -- "__KAKU_EXTERNAL_AUTOSUGGEST__:${_kaku_external_autosuggest_provider:-0}"
 ' 2>&1
 )"; then
   echo "$runtime_out" >&2
-  fail "sourcing generated kaku.zsh failed"
+  fail "sourcing generated faz.zsh failed"
 fi
 
 case "$runtime_out" in

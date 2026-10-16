@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea or improvement for Kaku
+about: Suggest an idea or improvement for Faz
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''
@@ -12,7 +12,7 @@ What problem are you trying to solve?
 
 ## Proposed behavior
 
-What should Kaku do?
+What should Faz do?
 
 ## Use case
 

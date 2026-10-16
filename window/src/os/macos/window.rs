@@ -81,7 +81,7 @@ const FULLSCREEN_DISPLAY_CHANGE_OPENGL_PRESENT_DEFER_MS: u64 = 300;
 const WINDOWED_DISPLAY_CHANGE_OPENGL_PRESENT_DEFER_MS: u64 = 150;
 const MOVE_PERSIST_DELAY_SECS: f64 = 0.35;
 // cocoa 0.25 does not expose these newer AppKit collection-behavior bits.
-// Keep the raw values local so Kaku can opt into native macOS window tiling
+// Keep the raw values local so Faz can opt into native macOS window tiling
 // without broadening the dependency surface.
 const NS_WINDOW_COLLECTION_BEHAVIOR_FULLSCREEN_ALLOWS_TILING_BITS: NSUInteger = 1 << 11;
 const NS_WINDOW_COLLECTION_BEHAVIOR_FULLSCREEN_DISALLOWS_TILING_BITS: NSUInteger = 1 << 12;
@@ -619,7 +619,7 @@ struct PersistedWindowPosition {
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct PersistedState {
     // Never serialize an absent version as `null`. A missing version marks an
-    // incomplete initialization that bundled kaku.lua will retry while
+    // incomplete initialization that bundled faz.lua will retry while
     // preserving the window fields written here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     config_version: Option<u64>,
@@ -643,7 +643,7 @@ fn config_dir_file(name: &str) -> PathBuf {
     config::CONFIG_DIRS
         .first()
         .cloned()
-        .unwrap_or_else(|| config::HOME_DIR.join(".config").join("kaku"))
+        .unwrap_or_else(|| config::HOME_DIR.join(".config").join("faz"))
         .join(name)
 }
 
@@ -1312,7 +1312,7 @@ impl Window {
             window.setReleasedWhenClosed_(NO);
             // Opt out of AppKit's Windows menu: on macOS 26 a closed window can
             // leave a dangling NSWindowRepresentingMenuItem, and a later
-            // setTitle: PAC-faults in _rebuildWindowsMenu. Kaku has its own
+            // setTitle: PAC-faults in _rebuildWindowsMenu. Faz has its own
             // tab/window switching, so we don't need the system menu.
             let _: () = msg_send![*window, setExcludedFromWindowsMenu: YES];
             window.setBackgroundColor_(cocoa::appkit::NSColor::clearColor(nil));
@@ -1509,7 +1509,7 @@ impl WindowOps for Window {
     fn show_context_menu(&self, menu: crate::os::macos::menu::Menu, point: ScreenPoint) {
         if self.ns_window().is_some() {
             unsafe {
-                // ScreenPoint uses Kaku's global top-left coordinate space,
+                // ScreenPoint uses Faz's global top-left coordinate space,
                 // which is normalized against the primary display in
                 // cartesian_to_screen_point. Invert that same transform;
                 // using the secondary display frame here introduces an
@@ -2604,7 +2604,7 @@ impl WindowInner {
         // NSWindow::isZoomed can falsely return YES after screen changes,
         // which would cause the zoom call to be skipped even though the
         // window is not actually maximized.
-        // <https://github.com/tw93/Kaku/issues/131>
+        // <https://github.com/tw93/Faz/issues/131>
         self.arm_transition_content_hide(ZOOM_HIDE_CONTENT_MS, "zoom_maximize", false);
         unsafe {
             NSWindow::zoom_(*self.window, nil);
@@ -3538,7 +3538,7 @@ fn should_intercept_special_shortcut(chars: &str, modifiers: Modifiers, virtual_
         // Preserve macOS built-in Cmd+` and Cmd+Shift+` window cycling.
         && virtual_key != kVK_ANSI_Grave;
     // Intercept Cmd+Shift+Space so the system "select previous input source"
-    // shortcut cannot consume it before Kaku's own kaku-ai-chat binding fires.
+    // shortcut cannot consume it before Faz's own kaku-ai-chat binding fires.
     let command_shift_space =
         modifiers == (Modifiers::SUPER | Modifiers::SHIFT) && virtual_key == kVK_Space;
 
@@ -4269,8 +4269,8 @@ fn get_window_class() -> &'static Class {
         /// yabai, etc.) from entering a feedback loop where the WM requests an
         /// exact size, AppKit adjusts it (resize increments or screen clamping),
         /// the WM detects the mismatch and re-requests, causing flicker.
-        /// <https://github.com/tw93/Kaku/issues/131>
-        /// <https://github.com/tw93/Kaku/issues/183>
+        /// <https://github.com/tw93/Faz/issues/131>
+        /// <https://github.com/tw93/Faz/issues/183>
         extern "C" fn constrain_frame_rect(
             _this: &mut Object,
             _sel: Sel,
@@ -5943,7 +5943,7 @@ impl WindowView {
             // the prior bug where a truly maximized window lost its state
             // permanently after moving to another screen.
             // <https://github.com/wezterm/wezterm/issues/3503>
-            // <https://github.com/tw93/Kaku/issues/131>
+            // <https://github.com/tw93/Faz/issues/131>
             let is_zoomed = if screen_changed {
                 inner
                     .last_reported_window_state
@@ -6118,7 +6118,7 @@ impl WindowView {
     /// We return the screen's visible frame to ensure the window fills the entire
     /// available space, ignoring resize increments that would otherwise cause
     /// the window to not fill the screen completely.
-    /// <https://github.com/tw93/Kaku/issues/131>
+    /// <https://github.com/tw93/Faz/issues/131>
     extern "C" fn window_will_use_standard_frame(
         _this: &mut Object,
         _sel: Sel,

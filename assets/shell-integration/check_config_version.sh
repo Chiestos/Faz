@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kaku config version check
+# Faz config version check
 
 set -euo pipefail
 
@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/kaku"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/faz"
 STATE_FILE="$CONFIG_DIR/state.json"
 LEGACY_VERSION_FILE="$CONFIG_DIR/.kaku_config_version"
 LEGACY_GEOMETRY_FILE="$CONFIG_DIR/.kaku_window_geometry"
@@ -26,7 +26,7 @@ CURRENT_CONFIG_VERSION="$(read_bundled_config_version "$SCRIPT_DIR")"
 
 detect_kaku_setup_script() {
 	local shell_candidate
-	shell_candidate="${KAKU_TARGET_SHELL:-}"
+	shell_candidate="${FAZ_TARGET_SHELL:-}"
 	if [[ -z "$shell_candidate" ]]; then
 		shell_candidate="$(read_managed_shell || true)"
 	fi
@@ -79,7 +79,7 @@ if [[ $user_version -eq 0 || $user_version -ge $CURRENT_CONFIG_VERSION ]]; then
 	exit 0
 fi
 
-echo -e "${BOLD}Kaku shell integration update${NC}  ${YELLOW}v$user_version${NC} → ${GREEN}v$CURRENT_CONFIG_VERSION${NC}"
+echo -e "${BOLD}Faz shell integration update${NC}  ${YELLOW}v$user_version${NC} → ${GREEN}v$CURRENT_CONFIG_VERSION${NC}"
 echo ""
 
 echo -e "${BOLD}What's new:${NC}"
@@ -103,9 +103,9 @@ fi
 
 # Apply updates
 if [[ -f "$SETUP_SCRIPT" ]]; then
-	if ! KAKU_SKIP_TOOL_BOOTSTRAP=1 bash "$SETUP_SCRIPT" --update-only; then
+	if ! FAZ_SKIP_TOOL_BOOTSTRAP=1 bash "$SETUP_SCRIPT" --update-only; then
 		echo ""
-		echo -e "${YELLOW}Update failed. Run 'kaku init' manually to retry.${NC}"
+		echo -e "${YELLOW}Update failed. Run 'faz init' manually to retry.${NC}"
 		echo ""
 		echo "Press any key to continue..."
 		read -n 1 -s
@@ -117,7 +117,7 @@ else
 fi
 
 if [[ -f "$TOOLS_SCRIPT" ]]; then
-	if ! KAKU_AUTO_INSTALL_TOOLS=1 bash "$TOOLS_SCRIPT"; then
+	if ! FAZ_AUTO_INSTALL_TOOLS=1 bash "$TOOLS_SCRIPT"; then
 		echo ""
 		echo -e "${YELLOW}Optional tool installation failed.${NC}"
 	fi
@@ -126,7 +126,7 @@ fi
 persist_config_version
 
 echo ""
-echo -e "\033[1;32m🎃 Kaku environment is ready! Enjoy coding.\033[0m"
+echo -e "\033[1;32m🎃 Faz environment is ready! Enjoy coding.\033[0m"
 echo ""
 echo "Press any key to continue..."
 read -n 1 -s

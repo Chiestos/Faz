@@ -1,4 +1,4 @@
-# Kaku macOS Platform Rules
+# Faz macOS Platform Rules
 
 > macOS 26 上 AppKit 自动注入是 PAC-fault / 崩溃的高频来源。改 menubar / window handling 前必读本文。
 
@@ -13,7 +13,7 @@
 
 ## 默认渲染后端是 WebGpu，CGL-only 的 wake 修复护不住它
 
-bundled `kaku.lua` 设了 `front_end = 'WebGpu'`（Metal via wgpu）。`window/src/os/macos` 里的睡眠/唤醒防护（`SYSTEM_SLEEPING` flush 闸门、`BackendImpl::update`、display-change present defer）全部只作用于 CGL 路径，对默认用户是 no-op。给 sleep/wake/display-reconfig 加修复时必须同时考虑 WebGpu 路径（#458）。
+bundled `faz.lua` 设了 `front_end = 'WebGpu'`（Metal via wgpu）。`window/src/os/macos` 里的睡眠/唤醒防护（`SYSTEM_SLEEPING` flush 闸门、`BackendImpl::update`、display-change present defer）全部只作用于 CGL 路径，对默认用户是 no-op。给 sleep/wake/display-reconfig 加修复时必须同时考虑 WebGpu 路径（#458）。
 
 WebGpu surface 失效的恢复入口在 `TermWindow::do_paint_webgpu`：休眠唤醒会让 Metal drawable 失效但窗口尺寸不变，`WebGpuState::resize` 对相同尺寸是故意 no-op（热路径），所以恢复必须走 `reconfigure_surface()` 强制 `surface.configure`，不能用 `resize(dims)` 代替。wgpu Metal 后端把 nil `nextDrawable` 映射成 `SurfaceError::Timeout`，所以 Timeout 连续出现同样要触发重配，不能永远静默跳帧。症状签名：键盘输入照常进 PTY、画面停在旧帧，说明是渲染管线死了而不是主线程卡死。
 
@@ -27,8 +27,8 @@ NSApplication 默认会向 Window menu 和 Help menu 注入自己的项（Tile /
 
 ## 必须执行的兜底
 
-- 不要调 `setWindowsMenu:` 让 AppKit 接管 Windows menu。Kaku 有自己的 tab/window 切换器。
-- 不要调 `setHelpMenu:` 让 AppKit 注入 Help Search。Kaku 没有 help book。
+- 不要调 `setWindowsMenu:` 让 AppKit 接管 Windows menu。Faz 有自己的 tab/window 切换器。
+- 不要调 `setHelpMenu:` 让 AppKit 注入 Help Search。Faz 没有 help book。
 - 窗口创建时调 `setExcludedFromWindowsMenu:` 让 AppKit 看不见我们的 NSWindow，避免它把窗口加到 Windows menu。
 
 参考历史 commit：
@@ -43,24 +43,24 @@ Menubar **必须同步初始化**。延后到 async block 会丢早期按键事�
 
 ## Key Equivalent
 
-新增 KeyAssignment 前确认走 Kaku 自己的按键分发路径，不要走 AppKit menu 的 `performKeyEquivalent`。后者会经过被 PAC-fault 的注入项。
+新增 KeyAssignment 前确认走 Faz 自己的按键分发路径，不要走 AppKit menu 的 `performKeyEquivalent`。后者会经过被 PAC-fault 的注入项。
 
 ### menu keyEquivalent 会拦 keyDown，吞掉 raw-mode TUI 的 Ctrl+letter
 
 macOS 26 上 NSMenu 的 keyEquivalent modifier 匹配并不严格相等。给 menu item 装 `Ctrl+letter` 形式的快捷键，即使带额外 modifier（如 `NSFunctionKeyMask` 想做 `Fn+Ctrl+letter`），仍会拦截 plain `Ctrl+letter` 的 keyDown。后果：
 
 - AppKit 把 keyDown 路由给 menu item action，NSWindow 收不到。
-- keyUp 不走 `performKeyEquivalent:`，所以 keyUp 照常进 Kaku。
+- keyUp 不走 `performKeyEquivalent:`，所以 keyUp 照常进 Faz。
 - `termwiz/src/input.rs` 的 `encode` 对 `is_down=false` 直接返回空字符串，PTY 上一个字节都不会到。
 - 普通 shell `cat -v` 测试看到 `^C` 不代表 raw-mode 也工作；启动时机和 cooked vs raw 都会让 menu 拦截表现不一致。**必须**在 raw-mode TUI (claude / codex / vim / htop) 里实测。
 
-兜底：任何"模仿系统快捷键"的 menu 项宁可 `keys: vec![]` 不设快捷键，让用户从菜单点。`kaku-gui/src/commands.rs` 里的 keyEquivalent 装配逻辑必须统一从按键候选本身取 modifiers，不要为个别 menu 项走强制 modifier 的特例化路径（历史上的特例化路径已删，不要加回）。
+兜底：任何"模仿系统快捷键"的 menu 项宁可 `keys: vec![]` 不设快捷键，让用户从菜单点。`faz-gui/src/commands.rs` 里的 keyEquivalent 装配逻辑必须统一从按键候选本身取 modifiers，不要为个别 menu 项走强制 modifier 的特例化路径（历史上的特例化路径已删，不要加回）。
 
 参考历史：`8aba4475` feat(window): add CenterWindow menu without macOS shortcut（Window > Center 刻意不装 keyEquivalent，因为 macOS 26 会把 `Fn+Ctrl+C` 当 plain Ctrl+C 拦了，导致 raw-mode 下 Ctrl+C 不退 claude/codex）。
 
 ### 排查 keyDown 丢失
 
-`config.debug_key_events = true` 重启 Kaku，复现按键，看 `~/.local/share/kaku/kaku-gui-log-<pid>.txt`：
+`config.debug_key_events = true` 重启 Faz，复现按键，看 `~/.local/share/faz/faz-gui-log-<pid>.txt`：
 
 - grep `key_event.*CTRL`。
 - 如果只有 `key_is_down: false`、没有 `key_is_down: true`，就是 menu keyEquivalent 拦了 keyDown。
@@ -68,6 +68,6 @@ macOS 26 上 NSMenu 的 keyEquivalent modifier 匹配并不严格相等。给 me
 
 ## 调试方式
 
-- 怀疑 menu 注入相关崩溃时：读 `~/Library/Logs/DiagnosticReports/Kaku-*.ips` 里最近的 crash report。
+- 怀疑 menu 注入相关崩溃时：读 `~/Library/Logs/DiagnosticReports/Faz-*.ips` 里最近的 crash report。
 - 看 `NSMenu _performKeyEquivalentWithDelegate:` 栈帧是 AppKit 注入项的标志。
 - 主要复现环境是一台 macOS 26 实机。

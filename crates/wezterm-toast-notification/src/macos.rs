@@ -247,18 +247,18 @@ fn spawn_kaku_update() {
     std::thread::spawn(|| {
         let kaku_gui = std::env::current_exe()
             .ok()
-            .and_then(|exe| exe.parent().map(|p| p.join("kaku-gui")))
+            .and_then(|exe| exe.parent().map(|p| p.join("faz-gui")))
             .filter(|p| p.exists())
             .unwrap_or_else(|| {
-                std::path::PathBuf::from("/Applications/Kaku.app/Contents/MacOS/kaku-gui")
+                std::path::PathBuf::from("/Applications/Faz.app/Contents/MacOS/faz-gui")
             });
 
         let kaku_cli = kaku_gui
             .parent()
-            .map(|p| p.join("kaku"))
+            .map(|p| p.join("faz"))
             .filter(|p| p.exists())
             .unwrap_or_else(|| {
-                std::path::PathBuf::from("/Applications/Kaku.app/Contents/MacOS/kaku")
+                std::path::PathBuf::from("/Applications/Faz.app/Contents/MacOS/faz")
             });
 
         let result = std::process::Command::new(&kaku_gui)

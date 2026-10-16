@@ -27,10 +27,10 @@ setup_out=""
 setup_status=0
 setup_out="$(
   HOME="$HOME" \
-  KAKU_INIT_INTERNAL=1 \
-  KAKU_SKIP_TOOL_BOOTSTRAP=1 \
-  KAKU_SKIP_TERMINFO_BOOTSTRAP=1 \
-  KAKU_VENDOR_DIR="$vendor_dir" \
+  FAZ_INIT_INTERNAL=1 \
+  FAZ_SKIP_TOOL_BOOTSTRAP=1 \
+  FAZ_SKIP_TERMINFO_BOOTSTRAP=1 \
+  FAZ_VENDOR_DIR="$vendor_dir" \
   bash "$REPO_ROOT/assets/shell-integration/setup_fish.sh" --update-only 2>&1
 )" || setup_status=$?
 if [[ "$setup_status" -ne 0 ]]; then
@@ -38,28 +38,28 @@ if [[ "$setup_status" -ne 0 ]]; then
   fail "setup_fish.sh failed with exit $setup_status"
 fi
 
-kaku_fish="$HOME/.config/kaku/fish/kaku.fish"
+kaku_fish="$HOME/.config/faz/fish/faz.fish"
 [[ -f "$kaku_fish" ]] || fail "managed init file not created at $kaku_fish"
-grep -Fq 'if begin; test $_kaku_in_kaku = 1; or set -q KAKU_PROMPT_EVERYWHERE; end; and command -q starship' \
+grep -Fq 'if begin; test $_kaku_in_kaku = 1; or set -q FAZ_PROMPT_EVERYWHERE; end; and command -q starship' \
   "$kaku_fish" \
-  || fail "generated kaku.fish did not preserve the runtime Kaku session guard"
-grep -Fq 'set -l capability_file "$HOME/.config/kaku/ai_inline_capability"' \
+  || fail "generated faz.fish did not preserve the runtime Faz session guard"
+grep -Fq 'set -l capability_file "$HOME/.config/faz/ai_inline_capability"' \
   "$kaku_fish" \
-  || fail "generated kaku.fish did not read the inline AI capability"
+  || fail "generated faz.fish did not read the inline AI capability"
 
 if command -v fish >/dev/null 2>&1; then
   fish_bin="$(command -v fish)"
-  mouse_reset="$(env HOME="$HOME" TERM_PROGRAM=Kaku "$fish_bin" --no-config -c '
-    source "$HOME/.config/kaku/fish/kaku.fish" >/dev/null
+  mouse_reset="$(env HOME="$HOME" TERM_PROGRAM=Faz "$fish_bin" --no-config -c '
+    source "$HOME/.config/faz/fish/faz.fish" >/dev/null
     __kaku_semantic_precmd
   ')"
   [[ "$mouse_reset" == $'\e[?1000;1002;1003;1004;1005;1006;1007;1016l\e]133;A\a' ]] \
     || fail "prompt did not reset stale mouse/focus reporting before its marker"
 
   outside_reset="$(env HOME="$HOME" TERM_PROGRAM=Apple_Terminal "$fish_bin" --no-config -c '
-    source "$HOME/.config/kaku/fish/kaku.fish" >/dev/null
+    source "$HOME/.config/faz/fish/faz.fish" >/dev/null
     set -gx TMUX ""
-    set -gx KAKU_SESSION 1
+    set -gx FAZ_SESSION 1
     __kaku_semantic_precmd
   ')"
   [[ "$outside_reset" == $'\e]133;A\a' ]] \
@@ -72,7 +72,7 @@ if command -v fish >/dev/null 2>&1; then
   cat >"$starship_stub_dir/starship" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "init" ]]; then
-  printf 'echo initialized >> "$KAKU_STARSHIP_TEST_MARKER"\n'
+  printf 'echo initialized >> "$FAZ_STARSHIP_TEST_MARKER"\n'
 fi
 EOF
   chmod +x "$starship_stub_dir/starship"
@@ -80,20 +80,20 @@ EOF
   env \
     HOME="$HOME" \
     TERM_PROGRAM="Apple_Terminal" \
-    KAKU_STARSHIP_TEST_MARKER="$starship_marker" \
+    FAZ_STARSHIP_TEST_MARKER="$starship_marker" \
     PATH="$starship_stub_dir:/usr/bin:/bin" \
     "$fish_bin" --no-config "$kaku_fish"
   [[ ! -s "$starship_marker" ]] \
-    || fail "generated kaku.fish initialized Starship outside Kaku"
+    || fail "generated faz.fish initialized Starship outside Faz"
 
   env \
     HOME="$HOME" \
-    TERM_PROGRAM="Kaku" \
-    KAKU_STARSHIP_TEST_MARKER="$starship_marker" \
+    TERM_PROGRAM="Faz" \
+    FAZ_STARSHIP_TEST_MARKER="$starship_marker" \
     PATH="$starship_stub_dir:/usr/bin:/bin" \
     "$fish_bin" --no-config "$kaku_fish"
   [[ "$(cat "$starship_marker")" == "initialized" ]] \
-    || fail "generated kaku.fish did not initialize Starship inside Kaku"
+    || fail "generated faz.fish did not initialize Starship inside Faz"
 else
   echo "warning: fish not found; skipping runtime Starship guard check" >&2
 fi

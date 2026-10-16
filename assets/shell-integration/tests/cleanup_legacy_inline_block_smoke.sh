@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Smoke tests for the cleanup_legacy_inline_block logic in setup_zsh.sh.
 # The parser only removes legacy blocks when every non-empty line matches a
-# known Kaku-managed line. Unknown user lines keep the block intact.
+# known Faz-managed line. Unknown user lines keep the block intact.
 
 set -euo pipefail
 
@@ -28,8 +28,8 @@ is_known_legacy_line() {
   [[ -z "${line//[[:space:]]/}" ]] && return 0
 
   grep -Fqx -- "$line" <<'EOF'
-export KAKU_ZSH_DIR="$HOME/.config/kaku/zsh"
-source "$KAKU_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+export FAZ_ZSH_DIR="$HOME/.config/faz/zsh"
+source "$FAZ_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 fi
 EOF
 }
@@ -47,7 +47,7 @@ run_cleanup() {
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$in_block" == "0" ]]; then
-      if [[ "$line" == "# Kaku Shell Integration" ]]; then
+      if [[ "$line" == "# Faz Shell Integration" ]]; then
         in_block=1
         saw_kaku_var=0
         saw_syntax=0
@@ -60,7 +60,7 @@ run_cleanup() {
     fi
 
     block_lines+=("$line")
-    [[ "$line" == *KAKU_ZSH_DIR* ]] && saw_kaku_var=1
+    [[ "$line" == *FAZ_ZSH_DIR* ]] && saw_kaku_var=1
     [[ "$line" == *zsh-syntax-highlighting/zsh-syntax-highlighting.zsh* ]] && saw_syntax=1
 
     if [[ "$saw_kaku_var" == "1" && "$saw_syntax" == "1" && "$line" =~ ^[[:space:]]*fi[[:space:]]*$ ]]; then
@@ -74,7 +74,7 @@ run_cleanup() {
       done
 
       if [[ "$managed" == "0" ]]; then
-        printf '%s\n' "# Kaku Shell Integration" >>"$output_file"
+        printf '%s\n' "# Faz Shell Integration" >>"$output_file"
         for block_line in "${block_lines[@]}"; do
           printf '%s\n' "$block_line" >>"$output_file"
         done
@@ -117,9 +117,9 @@ run_test() {
   rm -rf "$tmp_dir"
 }
 
-LEGACY_BLOCK='# Kaku Shell Integration
-export KAKU_ZSH_DIR="$HOME/.config/kaku/zsh"
-source "$KAKU_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+LEGACY_BLOCK='# Faz Shell Integration
+export FAZ_ZSH_DIR="$HOME/.config/faz/zsh"
+source "$FAZ_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 fi'
 
 # Test 1: managed legacy block is stripped, surrounding lines preserved.
@@ -138,16 +138,16 @@ run_test \
 
 # Test 3: unterminated block (missing closing fi) returns exit code 42.
 run_test \
-  $'# Kaku Shell Integration\nexport KAKU_ZSH_DIR="$HOME/.config/kaku/zsh"\n' \
+  $'# Faz Shell Integration\nexport FAZ_ZSH_DIR="$HOME/.config/faz/zsh"\n' \
   42 \
   "" \
   "unterminated block exits 42 and produces no output"
 
 # Test 4: unknown user lines inside the block preserve the entire block.
 run_test \
-  $'export PATH="$HOME/bin:$PATH"\n# Kaku Shell Integration\nexport KAKU_ZSH_DIR="$HOME/.config/kaku/zsh"\nexport PATH="$HOME/.claude/bin:$PATH"\nsource "$HOME/.claude/shell/zshrc"\nsource "$KAKU_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"\nfi\nexport FOO=bar\n' \
+  $'export PATH="$HOME/bin:$PATH"\n# Faz Shell Integration\nexport FAZ_ZSH_DIR="$HOME/.config/faz/zsh"\nexport PATH="$HOME/.claude/bin:$PATH"\nsource "$HOME/.claude/shell/zshrc"\nsource "$FAZ_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"\nfi\nexport FOO=bar\n' \
   0 \
-  $'export PATH="$HOME/bin:$PATH"\n# Kaku Shell Integration\nexport KAKU_ZSH_DIR="$HOME/.config/kaku/zsh"\nexport PATH="$HOME/.claude/bin:$PATH"\nsource "$HOME/.claude/shell/zshrc"\nsource "$KAKU_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"\nfi\nexport FOO=bar\n' \
+  $'export PATH="$HOME/bin:$PATH"\n# Faz Shell Integration\nexport FAZ_ZSH_DIR="$HOME/.config/faz/zsh"\nexport PATH="$HOME/.claude/bin:$PATH"\nsource "$HOME/.claude/shell/zshrc"\nsource "$FAZ_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"\nfi\nexport FOO=bar\n' \
   "custom lines inside legacy block keep the block unchanged"
 
 echo "cleanup_legacy_inline_block smoke tests passed"

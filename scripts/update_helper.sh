@@ -19,18 +19,18 @@ NEW_APP_NORM=$(strip_trailing_slashes "$NEW_APP")
 TARGET_APP="$TARGET_APP_NORM"
 NEW_APP="$NEW_APP_NORM"
 BACKUP_APP="${TARGET_APP}.backup.$(date +%s)"
-TARGET_GUI="$TARGET_APP/Contents/MacOS/kaku-gui"
-TARGET_CLI="$TARGET_APP/Contents/MacOS/kaku"
+TARGET_GUI="$TARGET_APP/Contents/MacOS/faz-gui"
+TARGET_CLI="$TARGET_APP/Contents/MacOS/faz"
 
-# Validate that paths end with Kaku.app for safety (allow trailing slashes).
-# Final component match mirrors Rust Path::ends_with("Kaku.app") semantics.
-# After stripping trailing slashes, the final component must be Kaku.app
-if [[ ! "$TARGET_APP_NORM" == */Kaku.app && ! "$TARGET_APP_NORM" == Kaku.app ]]; then
-    echo "Error: TARGET_APP must end with Kaku.app" >&2
+# Validate that paths end with Faz.app for safety (allow trailing slashes).
+# Final component match mirrors Rust Path::ends_with("Faz.app") semantics.
+# After stripping trailing slashes, the final component must be Faz.app
+if [[ ! "$TARGET_APP_NORM" == */Faz.app && ! "$TARGET_APP_NORM" == Faz.app ]]; then
+    echo "Error: TARGET_APP must end with Faz.app" >&2
     exit 1
 fi
-if [[ ! "$NEW_APP_NORM" == */Kaku.app && ! "$NEW_APP_NORM" == Kaku.app ]]; then
-    echo "Error: NEW_APP must end with Kaku.app" >&2
+if [[ ! "$NEW_APP_NORM" == */Faz.app && ! "$NEW_APP_NORM" == Faz.app ]]; then
+    echo "Error: NEW_APP must end with Faz.app" >&2
     exit 1
 fi
 
@@ -72,7 +72,7 @@ install_kaku_wrapper_fallback() {
     return 1
   fi
 
-  shell_candidate="${KAKU_TARGET_SHELL:-}"
+  shell_candidate="${FAZ_TARGET_SHELL:-}"
   if [[ -z "$shell_candidate" ]]; then
     shell_candidate="$(read_persisted_managed_shell || true)"
   fi
@@ -88,7 +88,7 @@ install_kaku_wrapper_fallback() {
       ;;
   esac
 
-  wrapper_path="$home_dir/.config/kaku/$wrapper_shell/bin/kaku"
+  wrapper_path="$home_dir/.config/faz/$wrapper_shell/bin/kaku"
   wrapper_dir="${wrapper_path%/*}"
   /bin/mkdir -p "$wrapper_dir"
 
@@ -96,20 +96,20 @@ install_kaku_wrapper_fallback() {
 #!/bin/bash
 set -euo pipefail
 
-if [[ -n "\${KAKU_BIN:-}" && -x "\${KAKU_BIN}" ]]; then
-  exec "\${KAKU_BIN}" "\$@"
+if [[ -n "\${FAZ_BIN:-}" && -x "\${FAZ_BIN}" ]]; then
+  exec "\${FAZ_BIN}" "\$@"
 fi
 
 for candidate in \
   "$TARGET_CLI" \
-  "/Applications/Kaku.app/Contents/MacOS/kaku" \
-  "\${HOME:-}/Applications/Kaku.app/Contents/MacOS/kaku"; do
+  "/Applications/Faz.app/Contents/MacOS/faz" \
+  "\${HOME:-}/Applications/Faz.app/Contents/MacOS/faz"; do
   if [[ -n "\$candidate" && -x "\$candidate" ]]; then
     exec "\$candidate" "\$@"
   fi
 done
 
-  echo "kaku: Kaku.app not found. Expected /Applications/Kaku.app." >&2
+  echo "kaku: Faz.app not found. Expected /Applications/Faz.app." >&2
   exit 127
 EOF
 
@@ -132,13 +132,13 @@ collect_kaku_pids() {
   done | sort -u
 }
 
-KAKU_PIDS=""
+FAZ_PIDS=""
 for _ in $(seq 1 20); do
-  KAKU_PIDS=$(collect_kaku_pids | tr '\n' ' ')
-  if [[ -z "$KAKU_PIDS" ]]; then
+  FAZ_PIDS=$(collect_kaku_pids | tr '\n' ' ')
+  if [[ -z "$FAZ_PIDS" ]]; then
     break
   fi
-  for pid in $KAKU_PIDS; do
+  for pid in $FAZ_PIDS; do
     if ! kill -TERM "$pid" 2>/dev/null; then
       log "failed to send TERM to pid $pid"
     fi
@@ -146,9 +146,9 @@ for _ in $(seq 1 20); do
   sleep 1
 done
 # Final force-kill if any remain
-KAKU_PIDS=$(collect_kaku_pids | tr '\n' ' ')
-if [[ -n "$KAKU_PIDS" ]]; then
-  for pid in $KAKU_PIDS; do
+FAZ_PIDS=$(collect_kaku_pids | tr '\n' ' ')
+if [[ -n "$FAZ_PIDS" ]]; then
+  for pid in $FAZ_PIDS; do
     if ! kill -KILL "$pid" 2>/dev/null; then
       log "failed to send KILL to pid $pid"
     fi
@@ -176,9 +176,9 @@ log "refresh shell integration"
 if "$TARGET_CLI" init --update-only >>"$LOG_FILE" 2>&1; then
   log "shell integration refreshed"
 else
-  log "warning: failed to refresh shell integration via kaku init"
+  log "warning: failed to refresh shell integration via faz init"
   if fallback_wrapper_path="$(install_kaku_wrapper_fallback)"; then
-    log "installed fallback kaku wrapper at ${fallback_wrapper_path:-~/.config/kaku/<unknown>/bin/kaku}"
+    log "installed fallback kaku wrapper at ${fallback_wrapper_path:-~/.config/faz/<unknown>/bin/kaku}"
   else
     log "warning: failed to install fallback kaku wrapper"
   fi
@@ -212,13 +212,13 @@ else
   log "open path failed (exit code: $?), trying open -a"
   sleep 1
   # Method 2: open by app name
-  if /usr/bin/open -a Kaku 2>>"$LOG_FILE"; then
+  if /usr/bin/open -a Faz 2>>"$LOG_FILE"; then
     log "relaunch via open -a succeeded"
   else
     log "open -a failed (exit code: $?), trying osascript"
     sleep 1
     # Method 3: AppleScript as last resort
-    /usr/bin/osascript -e 'tell application "Kaku" to activate' 2>>"$LOG_FILE" || log "osascript also failed"
+    /usr/bin/osascript -e 'tell application "Faz" to activate' 2>>"$LOG_FILE" || log "osascript also failed"
   fi
 fi
 

@@ -1,18 +1,18 @@
-# Kaku Agent Guide
+# Faz Agent Guide
 
-Kaku is a macOS-native terminal emulator derived from WezTerm and shaped around AI-assisted terminal workflows. This guide is the shared operating context for agents working in this repository.
+Faz is a macOS-native terminal emulator derived from WezTerm and shaped around AI-assisted terminal workflows. This guide is the shared operating context for agents working in this repository.
 
 ## Repository Map
 
 - `kaku/` - CLI entry points, command flows, and user-facing configuration commands.
-- `kaku-gui/` - GUI, rendering, window lifecycle, input, mouse handling, AI chat, and the `k` helper binary.
+- `faz-gui/` - GUI, rendering, window lifecycle, input, mouse handling, AI chat, and the `k` helper binary.
 - `mux/` - tabs, panes, domains, and client/server state.
 - `term/` - terminal emulation and screen buffer behavior.
 - `termwiz/` - terminal UI primitives.
 - `config/` - Lua config loading, schema behavior, proxy settings, and versioned defaults.
 - `window/` - platform windowing layer.
 - `lua-api-crates/` - Rust-to-Lua API bindings.
-- `crates/` - shared utility crates, including Kaku-specific AI helpers.
+- `crates/` - shared utility crates, including Faz-specific AI helpers.
 - `assets/` - app resources, bundled config, shell integration, and vendor assets.
 - `scripts/` - build, release, and validation helpers.
 - `docs/` - user and developer documentation.
@@ -57,7 +57,7 @@ make app
 - For current issue and PR sweeps, read live GitHub state first with `gh issue list` and `gh pr list`; refresh once more before final conclusions or public actions.
 - Before commenting on or closing an item, confirm its title, state, and author with `gh issue view` or `gh pr view`.
 - Do not close issues or PRs on local green alone. For fixes pushed to `main`, wait for the new GitHub Actions run on `main` to pass before posting fixed/closed replies.
-- The rolling `nightly` release is not rebuilt by push. Before sending users to Nightly, run or verify `./scripts/nightly.sh` and confirm `gh release view nightly --json tagName,targetCommitish,publishedAt,assets,url` points at the fix commit and includes `Kaku-nightly.dmg`.
+- The rolling `nightly` release is not rebuilt by push. Before sending users to Nightly, run or verify `./scripts/nightly.sh` and confirm `gh release view nightly --json tagName,targetCommitish,publishedAt,assets,url` points at the fix commit and includes `Faz-nightly.dmg`.
 - Default issue-closure pipeline once a fix is verified: commit the fix, refresh the `nightly` release assets per the rule above, reply in the reporter's language with the Nightly download or in-app update path, then propose closure and wait for maintainer confirmation. Do not promise a specific packaged-release date in replies.
 - Before pushing `main`, run `git fetch origin main` and verify `origin/main` has not moved unexpectedly. If it moved, stop and review `origin/main..HEAD` before pushing.
 - If an accepted PR's equivalent fix lands on `main` outside the contributor branch, state the landed commit and co-author status in the PR before closing it.
@@ -67,7 +67,7 @@ make app
 When scope is incomplete, inspect in this order:
 
 1. User-provided repro, failing command, or failing test.
-2. Entry point for the behavior, usually `kaku/src/main.rs`, `kaku/src/cli/`, or `kaku-gui/src/main.rs`.
+2. Entry point for the behavior, usually `kaku/src/main.rs`, `kaku/src/cli/`, or `faz-gui/src/main.rs`.
 3. Owning subsystem document and target crate.
 4. Immediate cross-crate boundary used by the call path.
 5. Narrow tests, fixtures, snapshots, or scripts that reproduce the behavior.
@@ -75,15 +75,15 @@ When scope is incomplete, inspect in this order:
 For AI-facing behavior, inspect in this order:
 
 1. CLI and assistant configuration under `kaku/src/ai_config/`, `kaku/src/assistant_config.rs`, and `config/src/proxy.rs`.
-2. GUI AI state and transport under `kaku-gui/src/ai_*`, `kaku-gui/src/ai_chat_engine/`, and `kaku-gui/src/cli_chat/`.
-3. Overlay UI under `kaku-gui/src/overlay/ai_chat/`.
-4. Shared helpers in `crates/kaku-ai-utils/`.
+2. GUI AI state and transport under `faz-gui/src/ai_*`, `faz-gui/src/ai_chat_engine/`, and `faz-gui/src/cli_chat/`.
+3. Overlay UI under `faz-gui/src/overlay/ai_chat/`.
+4. Shared helpers in `crates/faz-ai-utils/`.
 
 For AI transport bugs around custom `base_url`, keep both proxy paths true: external API hosts should use detected system proxy settings, while loopback, private LAN, link-local, CGNAT/Tailscale-style, `.local`, `NO_PROXY`, and macOS ExceptionsList model endpoints should connect directly. Verify with the macOS system proxy enabled and a loopback or internal OpenAI-compatible smoke before saying it is fixed. Do not claim general SOCKS support unless that transport is actually implemented and verified.
 
 For `Ctrl+letter` not working in a raw-mode TUI (the most common shape: `Ctrl+C` / `Ctrl+R` works in plain shell but not inside a TUI overlay), inspect in this order:
 
-1. AppKit menu `keyEquivalent` intercepting `keyDown` before the terminal sees it. Enable `config.debug_key_events = true`, restart the app, then `grep 'key_event.*CTRL' ~/.local/share/kaku/kaku-gui-log-<pid>.txt`. If the log shows only `key_is_down: false` and no matching `key_is_down: true`, the AppKit menu absorbed the event; do not chase termwiz or PTY.
+1. AppKit menu `keyEquivalent` intercepting `keyDown` before the terminal sees it. Enable `config.debug_key_events = true`, restart the app, then `grep 'key_event.*CTRL' ~/.local/share/faz/faz-gui-log-<pid>.txt`. If the log shows only `key_is_down: false` and no matching `key_is_down: true`, the AppKit menu absorbed the event; do not chase termwiz or PTY.
 2. Cooked-mode tests (`cat -v` showing `^C`) do **not** rule out menu interception. Reproduce inside a raw-mode TUI before forming a hypothesis.
 3. Only after step 1 rules out menu interception, inspect termwiz encoding (`termwiz/src/input.rs`), then PTY / termios state.
 
@@ -93,7 +93,7 @@ For TUI display corruption after interactive CLIs re-render prompts or selection
 
 | Subsystem | Guide | Scope |
 |---|---|---|
-| GUI | `kaku-gui/AGENTS.md` | Rendering, window lifecycle, input, mouse |
+| GUI | `faz-gui/AGENTS.md` | Rendering, window lifecycle, input, mouse |
 | Mux | `mux/AGENTS.md` | Tabs, panes, domains, client/server |
 | Terminal | `term/AGENTS.md` | VT emulation, screen buffer |
 | Config | `config/AGENTS.md` | Lua loading, schema, config reload |
@@ -113,30 +113,30 @@ For TUI display corruption after interactive CLIs re-render prompts or selection
 | Config release change | `./scripts/check_config_release_readiness.sh` and `./scripts/check_release_config.sh` |
 | Release note change | `./scripts/check_release_notes.sh` |
 | Release-adjacent change | `make fmt && make check && make test`, then `make app` |
-| `crates/kaku-relay` change | `cargo check --locked --manifest-path crates/kaku-relay/Cargo.toml` (it is in `workspace.exclude`, so `make check` and `make test` never see it; CI's `relay-check` job is the only gate) |
+| `crates/faz-relay` change | `cargo check --locked --manifest-path crates/faz-relay/Cargo.toml` (it is in `workspace.exclude`, so `make check` and `make test` never see it; CI's `relay-check` job is the only gate) |
 
-For GUI or rendering issues, read `kaku-gui/AGENTS.md` first and verify with `make app`, not only `make dev`.
+For GUI or rendering issues, read `faz-gui/AGENTS.md` first and verify with `make app`, not only `make dev`.
 
 ## Current Risk Areas
 
-- In-app update replace/restart must confirm on every entry path (menu Check for Updates, menu Restart to Update, toast, CLI direct ZIP, brew cask). Do not set `KAKU_UPDATE_AUTO_CONFIRM` for exploratory menu check; only the overlay-confirmed path may auto-confirm. Sibling entry points tend to regress independently; after changing one path, sweep the matrix and keep the guards in `kaku-gui` (`user_facing_update_events_route_through_confirm`) and `kaku` (`brew_and_direct_paths_confirm_before_replace`) green. Details: `kaku-gui/AGENTS.md` and `.agents/skills/bugs/SKILL.md`.
+- In-app update replace/restart must confirm on every entry path (menu Check for Updates, menu Restart to Update, toast, CLI direct ZIP, brew cask). Do not set `FAZ_UPDATE_AUTO_CONFIRM` for exploratory menu check; only the overlay-confirmed path may auto-confirm. Sibling entry points tend to regress independently; after changing one path, sweep the matrix and keep the guards in `faz-gui` (`user_facing_update_events_route_through_confirm`) and `kaku` (`brew_and_direct_paths_confirm_before_replace`) green. Details: `faz-gui/AGENTS.md` and `.agents/skills/bugs/SKILL.md`.
 - AI chat and shell flows are active product surfaces. Preserve `fast_model`, proxy config, inline `#` query status, syntax highlighting, approval flow, and conversation state behavior.
 - `config_version` bumps every release; the source of truth is `assets/shell-integration/config_version.txt` and the gate is `scripts/check_release_config.sh`. Config schema changes must update bundled defaults, docs, release checks, and migration behavior together. Per-version history and the migration rule (only keys that existed in the previous released version need migration code) live in `docs/config-versions.md`. Do not hardcode the current version number in agent guides; it goes stale between releases.
 - GUI regressions can come from overlay resize, pane split/removal, macOS worker thread lifetime, WebGPU surface reconfigure, tab bar spacing, and alternate-screen wheel scroll behavior.
 - Startup performance depends on caching shell user vars, Lua bytecode, early appearance queries, GLSL version, and built-in fonts. Do not invalidate those caches without measurement.
-- Notification actions that call back into Kaku should resolve bundled executables relative to the running app, not an assumed system path.
-- Known high-regression zones: theme/config TUI initialization (`kaku/src/ai_config/tui/`), macOS window geometry (`window/src/os/macos/window.rs`, `kaku-gui/src/termwindow/resize.rs`), and menubar initialization timing (`window/src/os/macos/menu.rs`). Changes touching these must ship with a regression test or assertion.
-- `assets/shell-integration` scripts run in the user's shell, not just at build time. Bash heredocs that generate zsh (e.g. `setup_zsh.sh` writing `kaku.zsh`) expand backticks and `$(...)` at generation time, so escape any that must reach the output literally (#450), and never put `local` outside a function (#432/#441). CI gates this: shellcheck (`--severity=error`, catches SC2168) over the bash scripts plus a `zsh -n` parse check of the generated `kaku.zsh` in the setup smoke.
+- Notification actions that call back into Faz should resolve bundled executables relative to the running app, not an assumed system path.
+- Known high-regression zones: theme/config TUI initialization (`kaku/src/ai_config/tui/`), macOS window geometry (`window/src/os/macos/window.rs`, `faz-gui/src/termwindow/resize.rs`), and menubar initialization timing (`window/src/os/macos/menu.rs`). Changes touching these must ship with a regression test or assertion.
+- `assets/shell-integration` scripts run in the user's shell, not just at build time. Bash heredocs that generate zsh (e.g. `setup_zsh.sh` writing `faz.zsh`) expand backticks and `$(...)` at generation time, so escape any that must reach the output literally (#450), and never put `local` outside a function (#432/#441). CI gates this: shellcheck (`--severity=error`, catches SC2168) over the bash scripts plus a `zsh -n` parse check of the generated `faz.zsh` in the setup smoke.
 
 ## Release Notes
 
 Tag format is `V0.x.x`. `scripts/release.sh` is the source of truth for tagged releases. The GitHub Release title comes from the first heading in `.github/RELEASE_NOTES.md`.
 
-Before drafting release notes, read the previous formal release (`gh release view <latest-tag>`) and treat it as the format template: title `V{version} {Codename}` with a one-word codename, a centered logo header with the product tagline, `### Changelog` as numbered `**Label**: one sentence` items, a `### 更新日志` section whose Chinese items map one-to-one by number, and a `> https://github.com/tw93/Kaku` footer. After publishing, add all six positive reactions (`+1`, `laugh`, `heart`, `hooray`, `rocket`, `eyes`) to the release via `gh api` and read them back to confirm; never add `-1` or `confused`.
+Before drafting release notes, read the previous formal release (`gh release view <latest-tag>`) and treat it as the format template: title `V{version} {Codename}` with a one-word codename, a centered logo header with the product tagline, `### Changelog` as numbered `**Label**: one sentence` items, a `### 更新日志` section whose Chinese items map one-to-one by number, and a `> https://github.com/tw93/Faz` footer. After publishing, add all six positive reactions (`+1`, `laugh`, `heart`, `hooray`, `rocket`, `eyes`) to the release via `gh api` and read them back to confirm; never add `-1` or `confused`.
 
 ## Pre-release Runtime Smoke
 
-CI gates fmt/check/clippy/tests but cannot see visual layout, native AppKit, render timing, or shell-in-user-env behavior, which is where most post-release reports come from. The checklist lives in one place: `.agents/skills/release/SKILL.md` «Pre-release smoke checklist», covering macOS window, tab bar, shell setup, AI chat, and render timing, with the issue numbers each item guards and a note on which slices now have automated coverage. Run it by hand in the built `dist/Kaku.app` before tagging, and add the reproduction there when a release fixes a bug outside the list.
+CI gates fmt/check/clippy/tests but cannot see visual layout, native AppKit, render timing, or shell-in-user-env behavior, which is where most post-release reports come from. The checklist lives in one place: `.agents/skills/release/SKILL.md` «Pre-release smoke checklist», covering macOS window, tab bar, shell setup, AI chat, and render timing, with the issue numbers each item guards and a note on which slices now have automated coverage. Run it by hand in the built `dist/Faz.app` before tagging, and add the reproduction there when a release fixes a bug outside the list.
 
 Releases that touch windowing, titlebar coloring, tab bar layout, or transparency also need the config matrix in `docs/release-checklist.md`, which enumerates the tab position / tab style / opacity / window state combinations to check by hand and names the `update_titlebar_background()` regression guard.
 

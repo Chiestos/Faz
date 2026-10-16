@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "snapshot_sequence": 8,
+  "agents": [],
+  "coordination": {
+    "schema_version": 1,
+    "sequence": 2,
+    "decisions": [],
+    "write_claims": [],
+    "reconciliations": [],
+    "projections": [
+      {
+        "child_id": "agent_e1996205",
+        "decision_ids": [],
+        "projected_bytes": 0,
+        "deduplicated": 0,
+        "omitted": 0,
+        "sequence": 1
+      },
+      {
+        "child_id": "agent_27ae156f",
+        "decision_ids": [],
+        "projected_bytes": 0,
+        "deduplicated": 0,
+        "omitted": 0,
+        "sequence": 2
+      }
+    ],
+    "contentions": []
+  }
+}

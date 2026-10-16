@@ -677,7 +677,7 @@ fn read_from_pane_pty(
 
         // On Unix, poll before read to avoid blocking indefinitely.
         // This allows the dead flag check to happen even if no data arrives.
-        // Note: Non-Unix platforms will block on read(); acceptable for macOS-only Kaku.
+        // Note: Non-Unix platforms will block on read(); acceptable for macOS-only Faz.
         #[cfg(unix)]
         if let Some(fd) = reader_fd {
             let mut pfd = [pollfd {
@@ -1135,7 +1135,7 @@ impl Mux {
     /// notification across threads (channel send, async task, deferred main
     /// thread handoff) you must `.clone()` it explicitly.** Most existing
     /// subscribers in this repo do exactly that — see
-    /// `kaku-gui/src/termwindow/mod.rs`, `kaku-gui/src/frontend.rs`,
+    /// `faz-gui/src/termwindow/mod.rs`, `faz-gui/src/frontend.rs`,
     /// `crates/wezterm-client/src/domain.rs`, and
     /// `crates/wezterm-mux-server-impl/src/dispatch.rs`.
     pub fn notify(&self, notification: MuxNotification) {

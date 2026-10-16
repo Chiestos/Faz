@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Notarization script for Kaku macOS app
+# Notarization script for Faz macOS app
 # Usage: ./scripts/notarize.sh [--staple-only]
 #
 # Prerequisites:
@@ -16,7 +16,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-APP_NAME="Kaku"
+APP_NAME="Faz"
 OUT_DIR="${OUT_DIR:-dist}"
 APP_BUNDLE="${OUT_DIR}/${APP_NAME}.app"
 DMG_PATH="${OUT_DIR}/${APP_NAME}.dmg"
@@ -54,7 +54,7 @@ require_developer_id_signature() {
 
 	if ! grep -q "^Authority=Developer ID Application:" <<<"$metadata"; then
 		echo "Error: App must be signed with a Developer ID Application certificate before notarization." >&2
-		echo "Rebuild with ./scripts/build.sh after installing a single Developer ID Application certificate, or set KAKU_SIGNING_IDENTITY explicitly." >&2
+		echo "Rebuild with ./scripts/build.sh after installing a single Developer ID Application certificate, or set FAZ_SIGNING_IDENTITY explicitly." >&2
 		echo "$metadata" | grep -E "^(Authority=|TeamIdentifier=|Signature=)" >&2 || true
 		return 1
 	fi
@@ -92,7 +92,7 @@ else
 fi
 
 refresh_update_archive() {
-	local update_zip_name="kaku_for_update.zip"
+	local update_zip_name="faz_for_update.zip"
 	local update_zip_path="$OUT_DIR/$update_zip_name"
 	local update_sha_path="$OUT_DIR/${update_zip_name}.sha256"
 
@@ -132,7 +132,7 @@ staple_and_verify() {
 }
 
 # Preferred: rcodesign with App Store Connect API Key (avoids notarytool SIGBUS on macOS 26)
-ASC_API_KEY_PATH="${KAKU_ASC_API_KEY_PATH:-}"
+ASC_API_KEY_PATH="${FAZ_ASC_API_KEY_PATH:-}"
 if [[ -z "$ASC_API_KEY_PATH" ]]; then
 	ASC_API_KEY_PATH=$(security find-generic-password -s "kaku-asc-api-key-path" -w 2>/dev/null || true)
 fi
@@ -184,7 +184,7 @@ if [[ -n "$ASC_API_KEY_PATH" && -f "$ASC_API_KEY_PATH" ]] && command -v rcodesig
 fi
 
 # Fallback: notarytool with Keychain profile
-NOTARYTOOL_PROFILE="${KAKU_NOTARYTOOL_PROFILE:-}"
+NOTARYTOOL_PROFILE="${FAZ_NOTARYTOOL_PROFILE:-}"
 
 if [[ -z "$NOTARYTOOL_PROFILE" ]]; then
 	NOTARYTOOL_PROFILE=$(security find-generic-password -s "kaku-notarytool-profile" -w 2>/dev/null || true)

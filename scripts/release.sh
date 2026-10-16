@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Release script for Kaku
+# Release script for Faz
 # Usage: ./scripts/release.sh
 #
 # Prerequisites:
 #   - Clean git working tree on main branch
 #   - gh CLI authenticated (for creating releases)
-#   - Apple Developer ID certificate in login Keychain (or set KAKU_SIGNING_IDENTITY)
+#   - Apple Developer ID certificate in login Keychain (or set FAZ_SIGNING_IDENTITY)
 #   - Notarization credentials via rcodesign API key or notarytool Keychain profile
 #
 # Environment variables:
-#   KAKU_SIGNING_IDENTITY    - Signing identity (auto-detected from Keychain if not set)
-#   KAKU_ASC_API_KEY_PATH    - rcodesign App Store Connect API key JSON path
-#   KAKU_NOTARYTOOL_PROFILE  - notarytool Keychain profile name
+#   FAZ_SIGNING_IDENTITY    - Signing identity (auto-detected from Keychain if not set)
+#   FAZ_ASC_API_KEY_PATH    - rcodesign App Store Connect API key JSON path
+#   FAZ_NOTARYTOOL_PROFILE  - notarytool Keychain profile name
 #   HOMEBREW_TAP_TOKEN       - Optional: GitHub token for Homebrew tap (defaults to gh auth token)
 #   REQUIRE_HOMEBREW_TAP_UPDATE - Set to 0 to allow release to continue when tap update fails (default: 1)
 #   RUN_CLIPPY               - Set to 1 to also run clippy (default: 0)
 #   SKIP_TESTS               - Set to 1 to skip tests (default: 0)
 #
 # Resume flags (skip earlier stages after a mid-release failure):
-#   --notarize-only  Skip build; notarize existing dist/Kaku.app, upload, tap.
+#   --notarize-only  Skip build; notarize existing dist/Faz.app, upload, tap.
 #   --upload-only    Skip build + notarize; upload existing dist/Kaku.dmg + tap.
 #   --tap-only       Only re-dispatch the Homebrew tap update.
 #
@@ -36,13 +36,13 @@ cd "$REPO_ROOT"
 # shellcheck source=lib/preflight.sh
 source "$REPO_ROOT/scripts/lib/preflight.sh"
 
-APP_NAME="Kaku"
+APP_NAME="Faz"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/dist}"
 PROFILE="${PROFILE:-release-opt}"
 BUILD_ARCH="${BUILD_ARCH:-universal}"
 RUN_CLIPPY="${RUN_CLIPPY:-0}"
 SKIP_TESTS="${SKIP_TESTS:-0}"
-GITHUB_REPO="${GITHUB_REPO:-tw93/Kaku}"
+GITHUB_REPO="${GITHUB_REPO:-tw93/Faz}"
 HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-tw93/homebrew-tap}"
 REQUIRE_HOMEBREW_TAP_UPDATE="${REQUIRE_HOMEBREW_TAP_UPDATE:-1}"
 DRY_RUN="${DRY_RUN:-0}"
@@ -86,10 +86,10 @@ check_version_consistency() {
     log_info "Checking version consistency..."
     local kaku_version kaku_gui_version
     kaku_version=$(grep '^version =' "$REPO_ROOT/kaku/Cargo.toml" | head -n1 | cut -d'"' -f2)
-    kaku_gui_version=$(grep '^version =' "$REPO_ROOT/kaku-gui/Cargo.toml" | head -n1 | cut -d'"' -f2)
+    kaku_gui_version=$(grep '^version =' "$REPO_ROOT/faz-gui/Cargo.toml" | head -n1 | cut -d'"' -f2)
 
     if [[ "$kaku_version" != "$kaku_gui_version" ]]; then
-        die "Version mismatch: kaku=$kaku_version, kaku-gui=$kaku_gui_version"
+        die "Version mismatch: kaku=$kaku_version, faz-gui=$kaku_gui_version"
     fi
 
     log_info "Version: $kaku_version"
@@ -184,11 +184,11 @@ check_gh_auth() {
 
 # Detect Developer ID from Keychain if not set
 detect_signing_identity() {
-    if [[ -n "${KAKU_SIGNING_IDENTITY:-}" ]]; then
-        if ! is_developer_id_application_identity "$KAKU_SIGNING_IDENTITY"; then
-            die "KAKU_SIGNING_IDENTITY must be a Developer ID Application certificate, got: $KAKU_SIGNING_IDENTITY"
+    if [[ -n "${FAZ_SIGNING_IDENTITY:-}" ]]; then
+        if ! is_developer_id_application_identity "$FAZ_SIGNING_IDENTITY"; then
+            die "FAZ_SIGNING_IDENTITY must be a Developer ID Application certificate, got: $FAZ_SIGNING_IDENTITY"
         fi
-        log_info "Using signing identity from environment: $KAKU_SIGNING_IDENTITY"
+        log_info "Using signing identity from environment: $FAZ_SIGNING_IDENTITY"
         return 0
     fi
 
@@ -203,15 +203,15 @@ detect_signing_identity() {
 
     if [[ "$count" -eq 0 ]]; then
         die "No Developer ID Application certificate found in Keychain.\n" \
-            "Install your certificate or set KAKU_SIGNING_IDENTITY environment variable."
+            "Install your certificate or set FAZ_SIGNING_IDENTITY environment variable."
     fi
 
-    KAKU_SIGNING_IDENTITY=$(echo "$identities" | grep "^Developer ID Application" | head -n1)
-    export KAKU_SIGNING_IDENTITY
+    FAZ_SIGNING_IDENTITY=$(echo "$identities" | grep "^Developer ID Application" | head -n1)
+    export FAZ_SIGNING_IDENTITY
     if [[ "$count" -gt 1 ]]; then
         log_warn "Multiple Developer ID Application certificates found, auto-selecting the first match"
     fi
-    log_info "Auto-detected signing identity: $KAKU_SIGNING_IDENTITY"
+    log_info "Auto-detected signing identity: $FAZ_SIGNING_IDENTITY"
 }
 
 validate_release_profile() {
@@ -232,7 +232,7 @@ check_notarization_creds() {
     local have_creds=0
     local asc_api_key_path notarytool_profile
 
-    asc_api_key_path="${KAKU_ASC_API_KEY_PATH:-}"
+    asc_api_key_path="${FAZ_ASC_API_KEY_PATH:-}"
     if [[ -z "$asc_api_key_path" ]]; then
         asc_api_key_path=$(security find-generic-password -s "kaku-asc-api-key-path" -w 2>/dev/null || true)
     fi
@@ -241,7 +241,7 @@ check_notarization_creds() {
         log_info "Found App Store Connect API key for rcodesign notarization"
     fi
 
-    notarytool_profile="${KAKU_NOTARYTOOL_PROFILE:-}"
+    notarytool_profile="${FAZ_NOTARYTOOL_PROFILE:-}"
     if [[ -z "$notarytool_profile" ]]; then
         notarytool_profile=$(security find-generic-password -s "kaku-notarytool-profile" -w 2>/dev/null || true)
     fi
@@ -293,8 +293,8 @@ run_checks() {
 build_release() {
     log_info "Building release (PROFILE=$PROFILE, ARCH=$BUILD_ARCH)..."
 
-    export KAKU_SIGNING_IDENTITY
-    export KAKU_REQUIRE_SIGNED_RELEASE=1
+    export FAZ_SIGNING_IDENTITY
+    export FAZ_REQUIRE_SIGNED_RELEASE=1
     export PROFILE
     export BUILD_ARCH
     export OUT_DIR
@@ -403,24 +403,24 @@ create_github_release() {
         gh release upload "$tag" \
             -R "$GITHUB_REPO" \
             "$OUT_DIR/Kaku.dmg" \
-            "$OUT_DIR/kaku_for_update.zip" \
-            "$OUT_DIR/kaku_for_update.zip.sha256" \
+            "$OUT_DIR/faz_for_update.zip" \
+            "$OUT_DIR/faz_for_update.zip.sha256" \
             --clobber
     else
         if [[ "$notes_arg" == "--notes-file" ]]; then
             gh release create "$tag" \
                 -R "$GITHUB_REPO" \
                 "$OUT_DIR/Kaku.dmg" \
-                "$OUT_DIR/kaku_for_update.zip" \
-                "$OUT_DIR/kaku_for_update.zip.sha256" \
+                "$OUT_DIR/faz_for_update.zip" \
+                "$OUT_DIR/faz_for_update.zip.sha256" \
                 --title "$release_title" \
                 "$notes_arg" "$notes_tmp"
         else
             gh release create "$tag" \
                 -R "$GITHUB_REPO" \
                 "$OUT_DIR/Kaku.dmg" \
-                "$OUT_DIR/kaku_for_update.zip" \
-                "$OUT_DIR/kaku_for_update.zip.sha256" \
+                "$OUT_DIR/faz_for_update.zip" \
+                "$OUT_DIR/faz_for_update.zip.sha256" \
                 --title "$release_title" \
                 --generate-notes
         fi
@@ -556,7 +556,7 @@ main() {
     if [[ "$DRY_RUN" == "1" ]]; then
         log_warn "[DRY-RUN] All pre-flight checks passed."
         log_warn "[DRY-RUN] Would build → notarize → tag V${version} → upload → tap dispatch"
-        log_warn "[DRY-RUN] Expected artifacts: $OUT_DIR/Kaku.dmg, $OUT_DIR/kaku_for_update.zip, $OUT_DIR/kaku_for_update.zip.sha256"
+        log_warn "[DRY-RUN] Expected artifacts: $OUT_DIR/Kaku.dmg, $OUT_DIR/faz_for_update.zip, $OUT_DIR/faz_for_update.zip.sha256"
         log_warn "[DRY-RUN] GitHub repo: $GITHUB_REPO"
         log_warn "[DRY-RUN] Homebrew tap: $HOMEBREW_TAP_REPO"
         log_warn "[DRY-RUN] Unset DRY_RUN (or drop --dry-run) to run for real."
@@ -593,8 +593,8 @@ main() {
     log_info "Release $version complete!"
     log_info "Artifacts:"
     log_info "  - $OUT_DIR/Kaku.dmg"
-    log_info "  - $OUT_DIR/kaku_for_update.zip"
-    log_info "  - $OUT_DIR/kaku_for_update.zip.sha256"
+    log_info "  - $OUT_DIR/faz_for_update.zip"
+    log_info "  - $OUT_DIR/faz_for_update.zip.sha256"
     log_info ""
     log_info "GitHub Release: https://github.com/${GITHUB_REPO}/releases/tag/V${version}"
 }

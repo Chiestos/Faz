@@ -5,7 +5,7 @@ fn main() {
     let kaku_toml_path = std::path::Path::new(&manifest_dir)
         .join("..")
         .join("..")
-        .join("kaku")
+        .join("faz")
         .join("Cargo.toml");
 
     let mut ci_tag = String::from("0.1.0-unknown");

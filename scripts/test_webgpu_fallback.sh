@@ -6,7 +6,7 @@ usage() {
 Usage: scripts/test_webgpu_fallback.sh [--strict] [--force-kill-existing] [--binary PATH] [--base-config PATH]
 
 Runs a macOS smoke test for the "WebGpu init failure -> OpenGL fallback" path.
-It launches a dedicated kaku-gui process with:
+It launches a dedicated faz-gui process with:
   - front_end = 'WebGpu'
   - webgpu_force_fallback_adapter = true
 
@@ -22,8 +22,8 @@ EOF
 
 STRICT=0
 FORCE_KILL_EXISTING=0
-BINARY="/Applications/Kaku.app/Contents/MacOS/kaku-gui"
-BASE_CONFIG="/Applications/Kaku.app/Contents/Resources/kaku.lua"
+BINARY="/Applications/Faz.app/Contents/MacOS/faz-gui"
+BASE_CONFIG="/Applications/Faz.app/Contents/Resources/faz.lua"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -76,7 +76,7 @@ cfg_file="$tmp_dir/kaku-fallback.lua"
 log_file="$tmp_dir/kaku-fallback.log"
 vmmap_file="$tmp_dir/vmmap.txt"
 summary_file="$tmp_dir/vmmap-summary.txt"
-class_name="fun.tw93.kaku.fallback.$RANDOM.$RANDOM"
+class_name="fun.serendo.faz.fallback.$RANDOM.$RANDOM"
 
 cleanup() {
   local exit_code=$?
@@ -99,15 +99,15 @@ config.webgpu_force_fallback_adapter = true
 return config
 EOF
 
-before_pids="$(pgrep -x kaku-gui || true)"
+before_pids="$(pgrep -x faz-gui || true)"
 if [[ -n "$before_pids" ]]; then
   if [[ "$FORCE_KILL_EXISTING" -eq 1 ]]; then
-    pkill -x kaku-gui >/dev/null 2>&1 || true
+    pkill -x faz-gui >/dev/null 2>&1 || true
     sleep 1
     before_pids=""
   else
-    echo "Found existing kaku-gui process(es): $before_pids" >&2
-    echo "Close Kaku first, or rerun with --force-kill-existing." >&2
+    echo "Found existing faz-gui process(es): $before_pids" >&2
+    echo "Close Faz first, or rerun with --force-kill-existing." >&2
     exit 1
   fi
 fi
@@ -117,7 +117,7 @@ fi
 pid=""
 for _ in $(seq 1 40); do
   sleep 0.25
-  now_pids="$(pgrep -x kaku-gui || true)"
+  now_pids="$(pgrep -x faz-gui || true)"
   for cand in $now_pids; do
     if ! grep -q -w "$cand" <<<"$before_pids"; then
       pid="$cand"
@@ -130,7 +130,7 @@ for _ in $(seq 1 40); do
 done
 
 if [[ -z "$pid" ]]; then
-  echo "FAIL: Could not find a newly launched kaku-gui process." >&2
+  echo "FAIL: Could not find a newly launched faz-gui process." >&2
   echo "Captured log: $log_file" >&2
   tail -n 80 "$log_file" >&2 || true
   exit 1

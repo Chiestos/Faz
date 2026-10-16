@@ -678,7 +678,7 @@ pub enum KeyAssignment {
     /// Write the given string to the pty only when the active pane is NOT
     /// displaying the alternate screen. Full-screen TUI apps (vim, less,
     /// htop, tmux, ...) enable the alt screen; they own the keystroke and
-    /// Kaku must not inject editing shortcuts into them. The shell prompt
+    /// Faz must not inject editing shortcuts into them. The shell prompt
     /// runs on the normal screen, where this action is safe.
     SendStringIfNotAltScreen(String),
     SendKey(KeyNoAction),

@@ -268,7 +268,7 @@ impl RemoteSshDomain {
         // Remote servers won't have the "kaku" terminfo entry, which causes
         // garbled display over SSH.  Override to xterm-256color so the remote
         // side can handle cursor movement, line wrapping, etc. correctly.
-        if env.get("TERM").map(|t| t.as_str()) == Some("kaku") {
+        if env.get("TERM").map(|t| t.as_str()) == Some("faz") {
             env.insert("TERM".to_string(), "xterm-256color".to_string());
         }
 
@@ -577,7 +577,7 @@ fn connect_ssh_session(
         }
     }
 
-    let renderer = termwiz_funcs::new_kaku_terminfo_renderer();
+    let renderer = termwiz_funcs::new_faz_terminfo_renderer();
     let mut shim = TerminalShim {
         stdout: &mut StdoutShim {
             stdout: stdout_write,

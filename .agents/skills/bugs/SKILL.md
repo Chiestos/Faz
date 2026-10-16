@@ -1,6 +1,6 @@
 ---
 name: bugs
-description: "Proactively sweep a Kaku area for latent defects and UX traps before users report them, using this repo's own fix history and multi-entry-point archetypes, and confirm every finding with a probe run this turn."
+description: "Proactively sweep a Faz area for latent defects and UX traps before users report them, using this repo's own fix history and multi-entry-point archetypes, and confirm every finding with a probe run this turn."
 when_to_use: "找找有没有bug, 主动找bug, 有没有隐患, 排查隐患, 举一反三, 上线前扫一遍, 这块可靠吗, 体验问题, latent bug scan, sibling sweep after a fix, /bugs"
 ---
 
@@ -12,7 +12,7 @@ Named **bugs**, not bug: `/bug` is a Claude Code built-in.
 
 ## The Question
 
-Across Kaku's closed bugs and fix commits, the dominant defect is not always a crash. It is often:
+Across Faz's closed bugs and fix commits, the dominant defect is not always a crash. It is often:
 
 - a **second entry point** that skipped the safety path the first entry already had
 - a **wrong-but-plausible** geometry or selection state after a modal/resize/sleep
@@ -32,7 +32,7 @@ Name the area and the depth. Whole-repo sweeps with no budget produce speculatio
 ```bash
 git log --oneline --grep='^fix' -i -- <path>
 git log --pretty=format:'%h %s%n%b' --grep='^fix' -i -- <path> | head -200
-gh issue list --repo tw93/Kaku --state closed --label bug --limit 40
+gh issue list --repo tw93/Faz --state closed --label bug --limit 40
 ```
 
 Bugs recur by shape within a module. Two signals worth acting on:
@@ -46,13 +46,13 @@ Highest historical yield first. Subsystem guides live in crate `AGENTS.md` files
 
 | Boundary | What to ask | Where it usually lives |
 |---|---|---|
-| Multi-entry destructive actions | Menu, toast, CLI, shell, key binding: do they all confirm the same way before quit/replace/kill? | `kaku-gui/src/frontend.rs`, `update.rs`, `overlay/confirm.rs`, `overlay/confirm_close_pane.rs`, `kaku/src/update.rs` |
-| macOS window geometry | Traffic lights vs tab bar, DPI scale, external display drag, sleep/wake, lock screen, fullscreen first frame | `window/src/os/macos/`, `kaku-gui/src/termwindow/resize.rs`, titlebar paint |
-| Tab chrome | Overflow hit targets, rename modal selection, multi-pane title width, top vs bottom bar | `kaku-gui/src/tabbar.rs`, `termwindow/tab_rename.rs` |
-| Selection / mouse state | Survives Ctrl+L, modal cancel, mouse-reporting panes, successful terminal input? | `kaku-gui/src/termwindow/selection.rs`, mouseevent |
-| Shell integration generation | `local` only inside functions; backticks in bash-heredoc that emit zsh; Starship/PATH scoped to Kaku | `assets/shell-integration/`, `kaku/src/init.rs`, `setup_zsh.sh` |
-| Session restore | Split + scrollback both sides, crash backup, stale snapshot resurrecting closed tabs | `kaku-gui/src/session_restore.rs`, paint/quad buffers |
-| AI dual surfaces | Cmd+L vs `#` vs `k` vs chat: same auth, theme, proxy, remote-cwd tool policy? | `kaku-gui/src/ai_*`, `inline_ai.rs`, `cli_chat/`, overlay |
+| Multi-entry destructive actions | Menu, toast, CLI, shell, key binding: do they all confirm the same way before quit/replace/kill? | `faz-gui/src/frontend.rs`, `update.rs`, `overlay/confirm.rs`, `overlay/confirm_close_pane.rs`, `kaku/src/update.rs` |
+| macOS window geometry | Traffic lights vs tab bar, DPI scale, external display drag, sleep/wake, lock screen, fullscreen first frame | `window/src/os/macos/`, `faz-gui/src/termwindow/resize.rs`, titlebar paint |
+| Tab chrome | Overflow hit targets, rename modal selection, multi-pane title width, top vs bottom bar | `faz-gui/src/tabbar.rs`, `termwindow/tab_rename.rs` |
+| Selection / mouse state | Survives Ctrl+L, modal cancel, mouse-reporting panes, successful terminal input? | `faz-gui/src/termwindow/selection.rs`, mouseevent |
+| Shell integration generation | `local` only inside functions; backticks in bash-heredoc that emit zsh; Starship/PATH scoped to Faz | `assets/shell-integration/`, `kaku/src/init.rs`, `setup_zsh.sh` |
+| Session restore | Split + scrollback both sides, crash backup, stale snapshot resurrecting closed tabs | `faz-gui/src/session_restore.rs`, paint/quad buffers |
+| AI dual surfaces | Cmd+L vs `#` vs `k` vs chat: same auth, theme, proxy, remote-cwd tool policy? | `faz-gui/src/ai_*`, `inline_ai.rs`, `cli_chat/`, overlay |
 | Proxy / network | External API uses system proxy; loopback/private/LAN/`.local`/NO_PROXY go direct | `config/src/proxy.rs`, AI transport |
 | AppKit menu intercept | `Ctrl+letter` only `key_is_down: false` in logs? Menu `keyEquivalent` ate it | `window/src/os/macos/menu.rs`, debug_key_events |
 | Render buffer growth | Over-capacity draw after retry budget; sleep invalidates drawable | `renderstate.rs`, paint/draw paths |
@@ -74,7 +74,7 @@ Before flagging unwraps or panics, confirm production code: skip `#[test]`, fixt
 1. Silent data loss or process kill (update/restart, close all, reset) without confirm on some entry path
 2. Crash loop or unrecoverable launch (session restore, paint)
 3. Stuck UI state (selection latch, frozen frame after sleep, window behind menu bar)
-4. Shell/environment pollution outside Kaku (Starship, PATH, generated zsh)
+4. Shell/environment pollution outside Faz (Starship, PATH, generated zsh)
 5. Visual chrome wrong but recoverable (tab clip, traffic-light gap, font weight)
 6. Docs / copy drift
 
@@ -107,7 +107,7 @@ Use these as default scopes when the maintainer says "scan for bugs" without a p
 | Titlebar / tabs / DPI | #516, #504, #490, #483, #460 | External display + scaled resolution + tab top/bottom |
 | Window drag / menubar | #508, #456, #408, #414, #477 | Drag to menubar, lock screen, fill desktop |
 | Selection latch | #495, #487, #455 | Ctrl+L, cancel rename, mouse-reporting TUI |
-| Shell init generation | #432, #441, #450, #503, #420 | clean HOME `kaku init`, `zsh -n` generated file, non-Kaku shell |
+| Shell init generation | #432, #441, #450, #503, #420 | clean HOME `kaku init`, `zsh -n` generated file, non-Faz shell |
 | Session restore paint | #514, #448, #482 | split + dual scrollback snapshot |
 | AI auth / overlay | #506, #501, #502, #418 | Cmd+L vs `#`, split resize, appearance flip |
 | Proxy split brain | private base_url + system proxy | loopback OpenAI-compatible smoke |

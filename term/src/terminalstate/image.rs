@@ -398,7 +398,7 @@ mod tests {
                 dpi: 96,
             },
             Arc::new(TestConfig),
-            "Kaku",
+            "Faz",
             "test",
             Box::new(Vec::new()),
         )

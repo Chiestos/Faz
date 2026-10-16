@@ -1,10 +1,10 @@
 ---
 name: maintainer-sweep
-description: "Run Kaku maintainer follow-up for live GitHub issues and pull requests: triage open items, connect them to code or commits, verify fixes, push main safely, wait for GitHub Actions, then post concise replies and close items when appropriate."
+description: "Run Faz maintainer follow-up for live GitHub issues and pull requests: triage open items, connect them to code or commits, verify fixes, push main safely, wait for GitHub Actions, then post concise replies and close items when appropriate."
 when_to_use: "latest issues, latest PRs, triage issues, triage PRs, close issue, reply issue, reply PR, GitHub follow-up, push then close, maintainer sweep, 看看最新 issue, 看看最新 PR, 回复 issue, 关闭 issue, 处理 PR"
 ---
 
-# Kaku Maintainer Sweep
+# Faz Maintainer Sweep
 
 Use this skill for maintenance work that spans GitHub issues, pull requests, local fixes, `main` CI, and public follow-up. It is not the notarized release flow, and it must not contain private signing credentials or local machine setup.
 

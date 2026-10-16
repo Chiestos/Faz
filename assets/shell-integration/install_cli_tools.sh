@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kaku CLI tools bootstrap
+# Faz CLI tools bootstrap
 # Installs required external tools via Homebrew and migrates legacy bundled binaries.
 
 set -euo pipefail
@@ -9,13 +9,13 @@ YELLOW='\033[1;33m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-case "${KAKU_TARGET_SHELL:-${SHELL:-/bin/zsh}}" in
+case "${FAZ_TARGET_SHELL:-${SHELL:-/bin/zsh}}" in
 *fish|fish)
-	USER_BIN_DIR="$HOME/.config/kaku/fish/bin"
+	USER_BIN_DIR="$HOME/.config/faz/fish/bin"
 	RELOAD_CMD="exec fish"
 	;;
 *)
-	USER_BIN_DIR="$HOME/.config/kaku/zsh/bin"
+	USER_BIN_DIR="$HOME/.config/faz/zsh/bin"
 	RELOAD_CMD="exec zsh"
 	;;
 esac
@@ -57,7 +57,7 @@ prompt_install_homebrew() {
 	fi
 
 	echo ""
-	echo "Homebrew is required to install Kaku's optional CLI tools:"
+	echo "Homebrew is required to install Faz's optional CLI tools:"
 	if [[ ${#MISSING_TOOLS[@]} -gt 0 ]]; then
 		echo "  ${MISSING_TOOLS[*]}"
 	fi
@@ -106,9 +106,9 @@ ensure_homebrew_installation() {
 	if [[ ${#MISSING_TOOLS[@]} -gt 0 ]]; then
 		echo "Missing optional tools: ${MISSING_TOOLS[*]}"
 	fi
-	echo "Kaku shell integration will continue without them."
+	echo "Faz shell integration will continue without them."
 	echo "Install Homebrew later, then refresh optional tools with:"
-	echo "  kaku init --update-only"
+	echo "  faz init --update-only"
 	echo "Homebrew install guide:"
 	echo "  https://brew.sh"
 	return 1
@@ -244,7 +244,7 @@ collect_missing_tools() {
 		MISSING_TOOLS+=("yazi")
 	fi
 	# zoxide is only used by fish shell integration; zsh uses zsh-z instead
-	case "${KAKU_TARGET_SHELL:-${SHELL:-/bin/zsh}}" in
+	case "${FAZ_TARGET_SHELL:-${SHELL:-/bin/zsh}}" in
 	*fish|fish)
 		if should_install_formula "zoxide" "zoxide" 0; then
 			MISSING_TOOLS+=("zoxide")
@@ -294,11 +294,11 @@ install_missing_tools() {
 
 	if [[ -t 0 && -t 1 ]]; then
 		echo ""
-		if [[ "${KAKU_AUTO_INSTALL_TOOLS:-0}" == "1" ]]; then
+		if [[ "${FAZ_AUTO_INSTALL_TOOLS:-0}" == "1" ]]; then
 			echo -e "${BOLD}Installing optional CLI tools automatically...${NC}"
 		else
 			echo -e "${BOLD}Optional CLI tools${NC}"
-			echo "Kaku can install missing tools with Homebrew:"
+			echo "Faz can install missing tools with Homebrew:"
 			for tool in "${MISSING_TOOLS[@]}"; do
 				echo "  - $tool"
 			done
