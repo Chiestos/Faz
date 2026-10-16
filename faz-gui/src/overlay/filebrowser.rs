@@ -158,6 +158,11 @@ impl BrowserState {
     /// Enter on the current row: descend into a directory, or confirm a file.
     fn activate(&mut self) {
         let Some(entry) = self.current().cloned() else {
+            // Nothing under the cursor. In Directory mode that means either an
+            // empty directory or one with no visible entries, and the directory
+            // on screen is the only thing that can be chosen — so Enter picks
+            // it rather than doing nothing.
+            self.choose_current_dir();
             return;
         };
         if entry.is_dir {
@@ -241,8 +246,8 @@ impl BrowserState {
 
         // Footer: the keys that apply to this mode.
         let footer = match self.mode {
-            PickMode::File => "  Enter: 选择文件/进入目录   Backspace: 上级   Esc: 取消",
-            PickMode::Directory => "  Enter: 进入目录   Ctrl-S: 选择当前目录   Backspace: 上级   Esc: 取消",
+            PickMode::File => "  方向键移动   Enter: 选择文件/进入目录   Backspace: 上级   Esc: 取消",
+            PickMode::Directory => "  方向键移动   Enter: 进入目录   空格 或 Ctrl-S: 选择当前目录   Backspace: 上级   Esc: 取消",
         };
         let footer_attr = CellAttributes::default()
             .set_intensity(termwiz::cell::Intensity::Half)
@@ -296,21 +301,35 @@ impl BrowserState {
                     ..
                 }) => self.move_down(),
                 InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char('K'),
-                    modifiers: Modifiers::CTRL,
-                }) => self.move_up(),
+                    key,
+                    modifiers: mods,
+                }) if ctrl_chord(&key, mods) == Some('k') => self.move_up(),
                 InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char('J'),
-                    modifiers: Modifiers::CTRL,
-                }) => self.move_down(),
+                    key,
+                    modifiers: mods,
+                }) if ctrl_chord(&key, mods) == Some('j') => self.move_down(),
                 InputEvent::Key(KeyEvent {
                     key: KeyCode::Enter,
                     ..
                 }) => self.activate(),
+                // Space confirms the current directory in Directory mode. A
+                // bare key: it still works when the Ctrl modifier is dropped
+                // somewhere between AppKit and here.
                 InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char('S'),
-                    modifiers: Modifiers::CTRL,
+                    key: KeyCode::Char(' '),
+                    modifiers: Modifiers::NONE,
                 }) => self.choose_current_dir(),
+                InputEvent::Key(KeyEvent {
+                    key,
+                    modifiers: mods,
+                }) if ctrl_chord(&key, mods) == Some('s') => {
+                    log::info!(
+                        "filebrowser: Ctrl-S ({}) confirmed {}",
+                        describe_ctrl_chord(&key, mods),
+                        self.dir.display()
+                    );
+                    self.choose_current_dir();
+                }
                 InputEvent::Key(KeyEvent {
                     key: KeyCode::Backspace,
                     ..
@@ -331,6 +350,38 @@ impl BrowserState {
         }
         EventAction::Continue
     }
+}
+
+/// Does this event represent `Ctrl+<letter>`?
+///
+/// The same physical chord can arrive in several shapes and the code cannot
+/// assume which: macOS may deliver a control character with no modifier, the
+/// terminal layer may normalise the letter's case, or the letter may arrive
+/// as typed. Accepting all of them keeps the binding working regardless, and
+/// [`describe_ctrl_chord`] logs which shape actually showed up so the set can
+/// be narrowed once observed.
+fn ctrl_chord(key: &KeyCode, mods: Modifiers) -> Option<char> {
+    let KeyCode::Char(c) = key else {
+        return None;
+    };
+    // Control codes for Ctrl+A..Ctrl+Z are 0x01..0x1a.
+    let lower = if ('\u{1}'..='\u{1a}').contains(c) {
+        let offset = (*c as u32 - 1) as u8;
+        (b'a' + offset) as char
+    } else {
+        c.to_ascii_lowercase()
+    };
+    if mods.contains(Modifiers::CTRL) || ('\u{1}'..='\u{1a}').contains(c) {
+        Some(lower)
+    } else {
+        None
+    }
+}
+
+/// Render an event for logging, so a binding that does not fire can be
+/// diagnosed from the log instead of by guessing at the platform's behaviour.
+fn describe_ctrl_chord(key: &KeyCode, mods: Modifiers) -> String {
+    format!("key={key:?} mods={mods:?}")
 }
 
 /// What `BrowserState::handle_event` decided.
@@ -561,20 +612,66 @@ mod tests {
     }
 
     /// Regression for a reported bug: Ctrl-S did nothing after picking a
-    /// directory. `TermWizTerminal::poll_input` normalizes CTRL+lowercase to
-    /// CTRL+uppercase before an overlay sees it, so matching `Char('s')`
-    /// never fires. The Ctrl chords must be matched uppercase.
+    /// directory. The chord's exact shape depends on the platform and the
+    /// terminal layer, so every shape that has been observed must confirm.
     #[test]
-    fn ctrl_s_uppercase_confirms_the_directory() {
+    fn ctrl_s_confirms_the_directory_in_every_shape() {
+        for (label, event) in [
+            ("uppercase + CTRL", ctrl('S')),
+            ("lowercase + CTRL", ctrl('s')),
+            (
+                "control char, no modifier",
+                InputEvent::Key(KeyEvent {
+                    key: KeyCode::Char('\u{13}'),
+                    modifiers: Modifiers::NONE,
+                }),
+            ),
+            (
+                "control char + CTRL",
+                InputEvent::Key(KeyEvent {
+                    key: KeyCode::Char('\u{13}'),
+                    modifiers: Modifiers::CTRL,
+                }),
+            ),
+        ] {
+            let dir = fixture();
+            let mut state =
+                BrowserState::new(dir.path().to_path_buf(), PickMode::Directory, "t".into());
+            state.handle_event(event);
+            assert_eq!(
+                state.outcome,
+                Some(PickResult::Chosen(dir.path().to_path_buf())),
+                "Ctrl-S as {label} must confirm the directory"
+            );
+        }
+    }
+
+    #[test]
+    fn space_confirms_the_directory_without_a_modifier() {
+        // A bare key path, so the binding survives a dropped Ctrl modifier.
         let dir = fixture();
         let mut state =
             BrowserState::new(dir.path().to_path_buf(), PickMode::Directory, "t".into());
-
-        assert_eq!(state.handle_event(ctrl('S')), EventAction::Continue);
+        state.handle_event(InputEvent::Key(KeyEvent {
+            key: KeyCode::Char(' '),
+            modifiers: Modifiers::NONE,
+        }));
         assert_eq!(
             state.outcome,
-            Some(PickResult::Chosen(dir.path().to_path_buf())),
-            "Ctrl-S must confirm the directory"
+            Some(PickResult::Chosen(dir.path().to_path_buf()))
+        );
+    }
+
+    #[test]
+    fn enter_confirms_an_empty_directory_in_directory_mode() {
+        // Nothing to descend into, so the directory on screen is the answer.
+        let empty = tempfile::tempdir().expect("tempdir");
+        let mut state =
+            BrowserState::new(empty.path().to_path_buf(), PickMode::Directory, "t".into());
+        state.handle_event(arrow(KeyCode::Enter));
+        assert_eq!(
+            state.outcome,
+            Some(PickResult::Chosen(empty.path().to_path_buf()))
         );
     }
 
@@ -627,18 +724,6 @@ mod tests {
         assert_eq!(state.dir, dir.path().join("adir"));
         state.handle_event(arrow(KeyCode::Backspace));
         assert_eq!(state.dir, dir.path());
-    }
-
-    #[test]
-    fn lowercase_ctrl_s_does_not_confirm() {
-        // Documents the normalisation this relies on: if the terminal ever
-        // stopped uppercasing, this test would tell us the chord broke rather
-        // than leaving it to a user report.
-        let dir = fixture();
-        let mut state =
-            BrowserState::new(dir.path().to_path_buf(), PickMode::Directory, "t".into());
-        state.handle_event(ctrl('s'));
-        assert_eq!(state.outcome, None);
     }
 
     #[test]
