@@ -7,11 +7,13 @@
 //!
 //!   * [`detect`] watches pty output for the start of a ZMODEM header so a
 //!     transfer the remote initiated can be picked up automatically.
-//!   * The transfer layer bridges the child's stdio to the pty while the pty
-//!     is in a byte-transparent mode, bypassing the VT parser that would
-//!     otherwise corrupt binary payloads.
+//!   * [`transfer`] bridges the child's stdio to the pty while the pty is in
+//!     a byte-transparent mode, bypassing the VT parser that would otherwise
+//!     corrupt binary payloads.
 //!
 //! See the transfer module for why the child gets a socketpair rather than the
 //! pty directly.
 
 pub mod detect;
+pub mod session_transfer;
+pub mod transfer;
