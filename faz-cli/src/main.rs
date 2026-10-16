@@ -25,9 +25,6 @@ use std::path::PathBuf;
 use umask::UmaskSaver;
 use wezterm_gui_subcommands::*;
 
-mod ai_config;
-mod assistant_config;
-mod chat;
 mod cli;
 mod config_cmd;
 mod config_tui;
@@ -121,15 +118,6 @@ enum SubCommand {
     /// <https://github.com/clap-rs/clap/issues/1335>
     #[command(short_flag_alias = 'e', hide = true)]
     BlockingStart(StartCommand),
-
-    #[command(name = "ai", about = "Manage AI settings")]
-    Ai(ai_config::AiConfigCommand),
-
-    #[command(
-        name = "chat",
-        about = "Start the AI chat in this terminal (alias for `k`)"
-    )]
-    Chat(chat::ChatCommand),
 
     #[command(name = "config", about = "Configure Faz settings")]
     Config(config_cmd::ConfigCommand),
@@ -367,12 +355,6 @@ fn run() -> anyhow::Result<()> {
         SubCommand::Init(cmd) => cmd.run(),
         SubCommand::Doctor(cmd) => cmd.run(),
         SubCommand::Reset(cmd) => cmd.run(),
-        SubCommand::Ai(cmd) => cmd.run(
-            opts.config_file.clone(),
-            opts.config_override.clone(),
-            opts.skip_config,
-        ),
-        SubCommand::Chat(cmd) => cmd.run(),
     }
 }
 
@@ -396,8 +378,6 @@ fn select_main_menu_command() -> anyhow::Result<Option<SubCommand>> {
 
     #[derive(Clone, Copy)]
     enum MenuChoice {
-        Chat,
-        Ai,
         Config,
         Init,
         Doctor,
@@ -405,9 +385,7 @@ fn select_main_menu_command() -> anyhow::Result<Option<SubCommand>> {
         Reset,
     }
 
-    const MENU_ITEMS: [(&str, &str, MenuChoice); 7] = [
-        ("chat", "Start AI chat in this terminal", MenuChoice::Chat),
-        ("ai", "Manage AI tools and Faz Assistant", MenuChoice::Ai),
+    const MENU_ITEMS: [(&str, &str, MenuChoice); 5] = [
         (
             "config",
             "Manage terminal and assistant settings",
@@ -483,8 +461,6 @@ fn select_main_menu_command() -> anyhow::Result<Option<SubCommand>> {
 
     fn to_subcommand(choice: MenuChoice) -> SubCommand {
         match choice {
-            MenuChoice::Chat => SubCommand::Chat(chat::ChatCommand::default()),
-            MenuChoice::Ai => SubCommand::Ai(ai_config::AiConfigCommand::default()),
             MenuChoice::Config => SubCommand::Config(config_cmd::ConfigCommand::default()),
             MenuChoice::Init => SubCommand::Init(init::InitCommand::default()),
             MenuChoice::Doctor => SubCommand::Doctor(doctor::DoctorCommand::default()),

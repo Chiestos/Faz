@@ -372,10 +372,8 @@ impl CommandDef {
             ) || matches!(
                 action,
                 EmitEvent(name)
-                    if name == "kaku-ai-chat"
-                        || name == "kaku-launch-lazygit"
+                    if name == "kaku-launch-lazygit"
                         || name == "kaku-launch-yazi"
-                        || name == "run-kaku-ai-config"
             )
         }
 
@@ -731,11 +729,9 @@ impl CommandDef {
                 "Shell" => match action {
                     SpawnWindow => 10,
                     SpawnTab(_) | SpawnCommandInNewTab(_) => 20,
-                    EmitEvent(name) if name == "kaku-ai-chat" => 20,
-                    EmitEvent(name) if name == "run-kaku-ai-config" => 21,
-                    EmitEvent(name) if name == "kaku-launch-lazygit" => 22,
-                    EmitEvent(name) if name == "kaku-launch-yazi" => 23,
-                    EmitEvent(name) if name == "kaku-open-remote-files" => 24,
+                    EmitEvent(name) if name == "kaku-launch-lazygit" => 20,
+                    EmitEvent(name) if name == "kaku-launch-yazi" => 21,
+                    EmitEvent(name) if name == "kaku-open-remote-files" => 22,
                     SplitVertical(_) | SplitHorizontal(_) | SplitPane(_) => 30,
                     CloseCurrentTab { .. } | CloseCurrentPane { .. } => 40,
                     RestorePreviousWindow => 42,
@@ -810,8 +806,8 @@ impl CommandDef {
             match title {
                 "Shell" => match rank {
                     0..=20 => 1,  // New Window, New Tab
-                    21..=26 => 2, // AI Config, Lazygit, Yazi, Remote Files, Command Palette
-                    27..=35 => 3, // Split
+                    21..=29 => 2, // Lazygit, Yazi, Remote Files, Command Palette
+                    30..=35 => 3, // Split
                     36..=45 => 4, // Close
                     46..=55 => 5, // Launcher
                     _ => 6,       // Attach/Detach and others
@@ -1574,34 +1570,7 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
             icon: None,
         },
         EmitEvent(name) => {
-            if name == "kaku-ai-chat" {
-                CommandDef {
-                    brief: "AI Chat".into(),
-                    doc: "Open AI conversation in current terminal pane".into(),
-                    keys: vec![(Modifiers::SUPER, "l".into())],
-                    args: &[ArgType::ActivePane],
-                    menubar: &["Shell"],
-                    icon: None,
-                }
-            } else if name == "run-kaku-ai-config" {
-                CommandDef {
-                    brief: "AI Config".into(),
-                    doc: "Open AI configuration".into(),
-                    keys: vec![(Modifiers::SUPER.union(Modifiers::SHIFT), "a".into())],
-                    args: &[ArgType::ActiveWindow],
-                    menubar: &["Shell"],
-                    icon: None,
-                }
-            } else if name == "kaku-ai-apply-last-fix" {
-                CommandDef {
-                    brief: "Apply Last AI Fix".into(),
-                    doc: "Apply the latest Faz Assistant suggestion for the active pane".into(),
-                    keys: vec![(Modifiers::SUPER.union(Modifiers::SHIFT), "e".into())],
-                    args: &[ArgType::ActiveWindow],
-                    menubar: &["Shell"],
-                    icon: None,
-                }
-            } else if name == "kaku-launch-lazygit" {
+            if name == "kaku-launch-lazygit" {
                 CommandDef {
                     brief: "Lazygit".into(),
                     doc: "Open lazygit".into(),
@@ -2628,8 +2597,6 @@ fn compute_default_actions() -> Vec<KeyAssignment> {
         // ----------------- Shell
         SpawnTab(SpawnTabDomain::CurrentPaneDomain),
         SpawnWindow,
-        EmitEvent("kaku-ai-chat".to_string()),
-        EmitEvent("run-kaku-ai-config".to_string()),
         EmitEvent("kaku-launch-lazygit".to_string()),
         EmitEvent("kaku-launch-yazi".to_string()),
         EmitEvent("kaku-open-remote-files".to_string()),

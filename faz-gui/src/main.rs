@@ -88,22 +88,12 @@ use wezterm_gui_subcommands::{name_equals_value, StartCommand};
 use wezterm_mux_server_impl::update_mux_domains;
 use wezterm_toast_notification::*;
 
-mod ai_auth;
-mod ai_chat_engine;
-mod ai_client;
-mod ai_conversations;
-#[cfg(feature = "remote")]
-mod ai_remote;
-mod ai_state;
-mod ai_tools;
-mod codex_connection;
 mod colorease;
 mod commands;
 mod customglyph;
 mod download;
 mod frontend;
 mod glyphcache;
-mod inline_ai;
 mod inputmap;
 mod local_hostname;
 #[cfg(target_os = "macos")]
@@ -117,7 +107,6 @@ mod scrollbar;
 mod selection;
 mod session_restore;
 mod shapecache;
-mod soul;
 mod spawn;
 mod startup_trace;
 mod stats;
@@ -851,10 +840,6 @@ fn run_terminal_gui(opts: StartCommand, default_domain_name: Option<String>) -> 
         opts.new_tab,
     )? {
         return Ok(());
-    }
-
-    if let Err(err) = faz_gui_lib::inline_ai_control::initialize_capability() {
-        log::error!("Inline AI control messages are disabled: {err:#}");
     }
 
     // This process owns the GUI and will create the first window through the

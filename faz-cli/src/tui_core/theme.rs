@@ -4,9 +4,9 @@ use std::sync::Mutex;
 use wezterm_term::color::SrgbaTuple;
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)] // error/secondary complete the palette even when unused
 struct Theme {
     primary: Color,
-    secondary: Color,
     accent: Color,
     error: Color,
     text: Color,
@@ -40,7 +40,6 @@ fn theme_from_palette(palette: &crate::faz_theme::ThemePalette) -> Theme {
 
     Theme {
         primary: to_color(palette.primary),
-        secondary: to_color(palette.secondary),
         accent: to_color(palette.accent),
         error: to_color(palette.error),
         text: to_color(palette.text),
@@ -71,16 +70,8 @@ pub fn primary() -> Color {
     current_theme().primary
 }
 
-pub fn success() -> Color {
-    current_theme().secondary
-}
-
 pub fn accent() -> Color {
     current_theme().accent
-}
-
-pub fn red() -> Color {
-    current_theme().error
 }
 
 pub fn text_fg() -> Color {

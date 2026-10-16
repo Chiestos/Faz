@@ -75,7 +75,6 @@ use wezterm_term::input::LastMouseClick;
 use wezterm_term::{Alert, Progress, StableRowIndex, TerminalConfiguration, TerminalSize};
 use wezterm_toast_notification::ToastNotification;
 
-mod ai_chat;
 pub mod background;
 pub mod box_model;
 pub mod charselect;
@@ -200,39 +199,7 @@ struct FileLinkTarget {
     col: Option<usize>,
 }
 
-fn decode_hex_event_payload(payload: &str) -> Option<String> {
-    if payload.is_empty() || payload.len() % 2 != 0 {
-        return None;
-    }
-
-    let mut bytes = Vec::with_capacity(payload.len() / 2);
-    let chars: Vec<char> = payload.chars().collect();
-    for i in (0..chars.len()).step_by(2) {
-        let hi = chars[i].to_digit(16)?;
-        let lo = chars[i + 1].to_digit(16)?;
-        bytes.push(((hi << 4) | lo) as u8);
-    }
-
-    Some(String::from_utf8_lossy(&bytes).into_owned())
-}
-
 pub use config::is_light_color;
-
-fn ai_toast_lifetime_ms(message: &str) -> u64 {
-    let lower = message.to_ascii_lowercase();
-    if lower.contains("checking")
-        || lower.contains("analy")
-        || lower.contains("fail")
-        || lower.contains("error")
-        || lower.contains("missing")
-        || lower.contains("unavailable")
-        || lower.contains("not found")
-    {
-        3000
-    } else {
-        2000
-    }
-}
 
 fn normalize_bell_notification_source(value: &str) -> Option<String> {
     let first_line = value
@@ -467,29 +434,6 @@ fn lookup_kaku_toast(event_name: &str) -> Option<&'static str> {
         ("kaku-toast-yazi-dispatch-failed", "Yazi: Dispatch failed"),
     ];
     FAZ_TOAST_MAP
-        .iter()
-        .find(|(k, _)| *k == event_name)
-        .map(|(_, v)| *v)
-}
-
-/// Lookup table for AI result-notice toast messages dispatched via EmitEvent.
-fn lookup_ai_toast(event_name: &str) -> Option<&'static str> {
-    const AI_TOAST_MAP: &[(&str, &str)] = &[
-        (
-            "kaku-toast-ai-ready",
-            "Faz Assistant suggestion ready. Press Cmd+Shift+E",
-        ),
-        ("kaku-toast-ai-unavailable", "Faz Assistant unavailable"),
-        (
-            "kaku-toast-ai-missing-key",
-            "Run faz ai to set up Faz Assistant.",
-        ),
-        ("kaku-toast-ai-no-pane", "No active pane"),
-        ("kaku-toast-ai-no-suggestion", "No executable suggestion"),
-        ("kaku-toast-ai-send-failed", "Failed to apply suggestion"),
-        ("kaku-toast-ai-info", "Faz Assistant update"),
-    ];
-    AI_TOAST_MAP
         .iter()
         .find(|(k, _)| *k == event_name)
         .map(|(_, v)| *v)
@@ -1202,10 +1146,6 @@ pub struct TermWindow {
     selection_copy_disabled_hint_shown: bool,
     last_window_title: String,
 
-    /// Panes that currently have an ai_chat overlay open. The sender keeps each
-    /// running overlay synchronized with config-driven palette changes.
-    ai_chat_overlay_panes:
-        HashMap<PaneId, std::sync::mpsc::Sender<crate::overlay::ai_chat::ChatPalette>>,
 }
 
 /// Set once WebGpu has failed to initialize in this process. Every later
@@ -1505,20 +1445,6 @@ impl TermWindow {
     pub(crate) fn layout_is_effective_fullscreen(&self) -> bool {
         self.effective_layout_window_state()
             .contains(WindowState::FULL_SCREEN)
-    }
-
-    /// Returns true when the currently focused pane has the AI chat overlay
-    /// active. Used by the resize path to temporarily shrink the bottom
-    /// padding so the chat box sits closer to the window / tab-bar edge.
-    fn has_ai_chat_overlay_on_active_pane(&self) -> bool {
-        let mux = mux::Mux::try_get();
-        let pane_id = mux
-            .and_then(|m| m.get_active_tab_for_window(self.mux_window_id))
-            .and_then(|tab| tab.get_active_pane().map(|p| p.pane_id()));
-        match pane_id {
-            Some(id) => self.ai_chat_overlay_panes.contains_key(&id),
-            None => false,
-        }
     }
 
     /// Fullscreen should keep the historical V0.7.1 padding behavior.
@@ -1864,7 +1790,6 @@ impl TermWindow {
             toast_shaped_width: None,
             selection_copy_disabled_hint_shown: false,
             last_window_title: String::new(),
-            ai_chat_overlay_panes: HashMap::new(),
             live_resizing: false,
             pending_screen_change_resize: false,
             pending_pty_flush_after_resize: false,
@@ -2543,13 +2468,7 @@ impl TermWindow {
                                 .map(|pane| {
                                     let user_vars = pane.copy_user_vars();
                                     (
-                                        user_vars.get("kaku_last_cmd").and_then(|value| {
-                                            faz_gui_lib::inline_ai_control::decode_control_value(
-                                                "kaku_last_cmd",
-                                                value,
-                                            )
-                                            .map(str::to_string)
-                                        }),
+                                        user_vars.get("kaku_last_cmd").cloned(),
                                         user_vars.get("WEZTERM_PROG").cloned(),
                                         pane.get_title(),
                                         pane.get_foreground_process_name(CachePolicy::AllowStale),
@@ -3263,10 +3182,6 @@ impl TermWindow {
         };
         self.config = config.clone();
         self.palette.take();
-        let chat_colors = ai_chat::chat_palette(self.palette());
-        self.ai_chat_overlay_panes
-            .retain(|_, sender| sender.send(chat_colors.clone()).is_ok());
-
         let mux = Mux::get();
         let window = match mux.get_window(self.mux_window_id) {
             Some(window) => window,
@@ -3627,29 +3542,7 @@ impl TermWindow {
             return;
         }
 
-        let value = match faz_gui_lib::inline_ai_control::decode_control_value(&name, &value) {
-            Some(value) => value.to_string(),
-            None => {
-                log::warn!("Ignored unauthenticated Faz control user var {name}");
-                return;
-            }
-        };
-
-        // `k` CLI running inside a Faz pane signals us to open the AI chat overlay.
-        if name == "kaku_open_ai_chat" {
-            if let Some(win) = self.window.clone() {
-                win.notify(TermWindowNotif::Apply(Box::new(move |term_window| {
-                    let mux = Mux::get();
-                    if let Some(pane) = mux.get_pane(pane_id) {
-                        let _ = term_window.perform_key_assignment(
-                            &pane,
-                            &KeyAssignment::EmitEvent("kaku-ai-chat".to_string()),
-                        );
-                    }
-                })));
-            }
-            return;
-        }
+        let value = value.to_string();
 
         let mux = Mux::get();
         let window = GuiWin::new(self);
@@ -4922,14 +4815,7 @@ impl TermWindow {
                 self.do_open_link_at_mouse_cursor(pane);
             }
             EmitEvent(name) => {
-                if let Some(job_id) = name.strip_prefix(crate::inline_ai::EVENT_PREFIX) {
-                    if let Err(err) = crate::inline_ai::spawn_job(job_id) {
-                        log::error!("failed to start inline AI job {job_id}: {err:#}");
-                    }
-                    return Ok(PerformAssignmentResult::Handled);
-                } else if name == "kaku-ai-chat" {
-                    ai_chat::toggle_overlay(self, pane);
-                } else if name == "update-kaku" || name == "run-kaku-update" {
+                if name == "update-kaku" || name == "run-kaku-update" {
                     crate::frontend::check_for_updates_from_menu();
                 } else if name == "restart-to-update" {
                     crate::frontend::confirm_and_apply_update();
@@ -4937,29 +4823,8 @@ impl TermWindow {
                     let command = format!("{}\n", crate::frontend::kaku_cli_shell_invocation());
                     let result = pane.writer().write_all(command.as_bytes());
                     self.finish_terminal_input(pane, result)?;
-                } else if name == "run-kaku-ai-config" {
-                    let command = format!("{} ai\n", crate::frontend::kaku_cli_shell_invocation());
-                    let result = pane.writer().write_all(command.as_bytes());
-                    self.finish_terminal_input(pane, result)?;
                 } else if let Some(msg) = lookup_kaku_toast(name) {
                     self.show_toast(msg.to_string());
-                } else if name == "kaku-toast-ai-analyzing" {
-                    let message = "Faz Assistant analyzing command";
-                    self.show_ai_progress_toast(message.to_string(), ai_toast_lifetime_ms(message));
-                } else if name == "kaku-toast-ai-generating" {
-                    let message = "Faz generating command";
-                    self.show_ai_progress_toast(message.to_string(), ai_toast_lifetime_ms(message));
-                } else if name == "kaku-toast-ai-clear-progress" {
-                    self.clear_ai_progress_toast();
-                } else if name == "kaku-toast-ai-applied" {
-                    // No notification on successful apply; command output is enough.
-                } else if let Some(msg) = lookup_ai_toast(name) {
-                    self.show_ai_result_notice(msg.to_string(), ai_toast_lifetime_ms(msg));
-                } else if let Some(payload) = name.strip_prefix("kaku-toast-ai-") {
-                    if let Some(message) = decode_hex_event_payload(payload) {
-                        let lifetime = ai_toast_lifetime_ms(&message);
-                        self.show_ai_result_notice(message, lifetime);
-                    }
                 } else if name == "open-kaku-config" {
                     crate::frontend::open_kaku_config();
                 } else if name == crate::frontend::SET_DEFAULT_TERMINAL_EVENT {
@@ -6767,18 +6632,8 @@ impl TermWindow {
                 Mux::get().remove_pane(overlay.pane.pane_id());
             }
         }
-        let was_chat = self.ai_chat_overlay_panes.remove(&pane_id).is_some();
         if let Some(window) = self.window.as_ref() {
             window.invalidate();
-        }
-        // The AI chat overlay uses a tighter bottom padding. When it closes,
-        // re-run layout so the normal padding is restored immediately instead
-        // of waiting for the next external resize event.
-        if was_chat {
-            if let Some(window) = self.window.clone() {
-                let dims = self.dimensions.clone();
-                self.apply_dimensions(&dims, None, &window, false);
-            }
         }
     }
 

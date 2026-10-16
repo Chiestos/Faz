@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use wezterm_term::color::{ColorPalette, SrgbaTuple};
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)] // palette carries the full theme even when a slot is unused
 pub struct ThemePalette {
     pub primary: SrgbaTuple,
     pub secondary: SrgbaTuple,

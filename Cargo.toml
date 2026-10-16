@@ -75,7 +75,6 @@ async-io = "2.3"
 async-task = "4.7"
 async-trait = "0.1"
 async_ossl = { path = "crates/async_ossl" }
-faz-ai-utils = { path = "crates/faz-ai-utils" }
 faz-unicode-names = { path = "crates/faz-unicode-names" }
 backtrace = "0.3"
 base64 = {version="0.22", default-features=false }
