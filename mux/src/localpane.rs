@@ -434,6 +434,12 @@ impl Pane for LocalPane {
         self.zmodem.finish()
     }
 
+    fn zmodem_pty_fd(&self) -> Option<std::os::fd::RawFd> {
+        // portable-pty returns `None` on platforms or backends without a raw
+        // descriptor; those panes simply cannot carry a transfer.
+        self.pty.lock().as_raw_fd()
+    }
+
     fn mouse_event(&self, event: MouseEvent) -> Result<(), Error> {
         Mux::get().record_input_for_current_identity();
         self.terminal.lock().mouse_event(event)

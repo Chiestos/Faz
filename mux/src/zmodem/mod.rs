@@ -19,10 +19,12 @@
 
 pub mod detect;
 pub mod session_transfer;
+pub mod runner;
 pub mod state;
 pub mod transfer;
 
 pub use detect::{Detector, ScanResult};
+pub use runner::{missing_lrzsz, run_transfer, StartError};
 pub use session_transfer::{
     local_command, lrzsz_available, program_available, Direction, LocalCommand, Outcome, Transfer,
 };

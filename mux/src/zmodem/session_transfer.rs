@@ -153,6 +153,14 @@ pub struct Transfer {
     restored: bool,
     /// Injection point for tests: how the local child is spawned.
     spawner: Spawner,
+    /// Called once the transfer's socketpair exists, with the fd the pane's
+    /// output parser should write remote bytes to. The transfer thread invokes
+    /// it before spawning the child so no early bytes are lost.
+    ///
+    /// In Faz this installs the fd into the pane's [`ZmodemState`], which is
+    /// what makes the parser divert output here instead of feeding it to the
+    /// VT parser.
+    on_sink_ready: Option<Box<dyn FnOnce(RawFd) + Send>>,
 }
 
 /// How to launch the local child. Production uses [`Spawner::Real`]; tests
@@ -248,7 +256,18 @@ impl Transfer {
             child: None,
             restored: false,
             spawner,
+            on_sink_ready: None,
         }
+    }
+
+    /// Install a callback that receives the sink fd once the transfer's
+    /// socketpair is ready.
+    ///
+    /// The fd is the socketpair end the pane's parser must write to. It is
+    /// only valid for the duration of the transfer.
+    pub fn on_sink_ready(mut self, cb: impl FnOnce(RawFd) + Send + 'static) -> Self {
+        self.on_sink_ready = Some(Box::new(cb));
+        self
     }
 
     /// Test constructor: run `substitute` instead of the lrzsz binary.
@@ -310,6 +329,12 @@ impl Transfer {
             Err(e) => return Outcome::SpawnFailed(e),
         };
         self.cancel_fd = Some(relay.peer_fd());
+
+        // Hand the sink fd to the caller before the child starts, so the
+        // pane's parser can begin diverting remote bytes here without a gap.
+        if let Some(cb) = self.on_sink_ready.take() {
+            cb(relay.peer_fd());
+        }
 
         // Pick the command and the spawner together: a substitute runs its own
         // program, production runs the lrzsz binary the direction implies.
@@ -548,6 +573,57 @@ mod tests {
         let outcome = transfer.run();
         assert!(!outcome.succeeded(), "expected failure, got {:?}", outcome);
         assert!(matches!(outcome, Outcome::Finished(_)));
+    }
+
+    #[test]
+    fn sink_ready_callback_receives_a_working_fd() {
+        use std::sync::mpsc;
+        let (pty_master, remote_side) = fake_pty();
+        let (tx, rx) = mpsc::channel();
+
+        let mut sub = LocalCommand::new("sh");
+        sub.args = vec!["-c".into(), "printf from-transfer; exit 0".into()];
+
+        let transfer = Transfer::start_for_test(
+            Direction::Upload,
+            pty_master.as_raw_fd(),
+            LocalCommand::new("sz"),
+            sub,
+        )
+        .on_sink_ready(move |fd| {
+            // Prove the fd is usable: write through it, then hand it to the
+            // test thread to read the child's reply.
+            tx.send(fd).expect("send fd");
+        });
+
+        let outcome = transfer.run();
+        assert!(outcome.succeeded(), "got {outcome:?}");
+
+        // The callback fired with a real fd. Data written to it reaches the
+        // child, whose output the relay forwards to the remote side.
+        let _fd = rx.recv().expect("callback ran");
+        let mut buf = [0u8; 64];
+        let mut got = Vec::new();
+        for _ in 0..50 {
+            match nix::unistd::read(remote_side.as_raw_fd(), &mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    got.extend_from_slice(&buf[..n]);
+                    if got.ends_with(b"from-transfer") {
+                        break;
+                    }
+                }
+                Err(nix::errno::Errno::EAGAIN) | Err(nix::errno::Errno::EINTR) => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => break,
+            }
+        }
+        assert!(
+            got.ends_with(b"from-transfer"),
+            "child output did not reach the pty side: {:?}",
+            String::from_utf8_lossy(&got)
+        );
     }
 
     #[test]

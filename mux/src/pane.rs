@@ -340,6 +340,17 @@ pub trait Pane: Downcast + Send + Sync {
     /// Called by the parser thread when a diversion fails, and by the transfer
     /// thread when a session ends.
     fn zmodem_finish(&self) {}
+
+    /// The pane's pty master fd, used to write a ZMODEM child's output back to
+    /// the remote and to switch the tty into a byte-transparent mode.
+    ///
+    /// Returns `None` for panes with no local pty (remote mux clients, overlay
+    /// panes), which therefore cannot carry a transfer. The fd stays valid only
+    /// while the pane is alive, so callers must hold the pane for as long as
+    /// they use it.
+    fn zmodem_pty_fd(&self) -> Option<std::os::fd::RawFd> {
+        None
+    }
     fn is_dead(&self) -> bool;
     fn kill(&self) {}
     fn palette(&self) -> ColorPalette;
