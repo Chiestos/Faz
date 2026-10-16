@@ -587,6 +587,9 @@ impl GuiFrontEnd {
         mux.subscribe(move |n| {
             let n = n.clone();
             match n {
+                // Handled by the termwindow's subscription, which owns the
+                // transfer UI. Nothing to do at the frontend level.
+                MuxNotification::ZmodemDetected { .. } => {}
                 MuxNotification::WorkspaceRenamed {
                     old_workspace,
                     new_workspace,

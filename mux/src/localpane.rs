@@ -150,6 +150,10 @@ pub struct LocalPane {
     foreground_proc: Mutex<Option<CachedForegroundProc>>,
     encoding: Arc<AtomicU8>,
     command_description: String,
+    /// ZMODEM transfer state for this pane. The output parser consults it on
+    /// every read to decide whether bytes go to the VT parser or to a local
+    /// `sz`/`rz` child.
+    zmodem: Arc<super::zmodem::state::ZmodemState>,
 }
 
 #[async_trait(?Send)]
@@ -420,6 +424,14 @@ impl Pane for LocalPane {
 
     fn perform_actions(&self, actions: Vec<termwiz::escape::Action>) {
         self.terminal.lock().perform_actions(actions)
+    }
+
+    fn zmodem_sink(&self) -> Option<std::os::fd::RawFd> {
+        self.zmodem.sink()
+    }
+
+    fn zmodem_finish(&self) {
+        self.zmodem.finish()
     }
 
     fn mouse_event(&self, event: MouseEvent) -> Result<(), Error> {
@@ -1127,6 +1139,7 @@ impl LocalPane {
             foreground_proc: Mutex::new(None),
             encoding,
             command_description,
+            zmodem: Arc::new(super::zmodem::state::ZmodemState::new()),
         }
     }
 

@@ -319,6 +319,27 @@ pub trait Pane: Downcast + Send + Sync {
     }
     fn mouse_event(&self, event: MouseEvent) -> anyhow::Result<()>;
     fn perform_actions(&self, _actions: Vec<termwiz::escape::Action>) {}
+
+    /// While a ZMODEM transfer is running on this pane, return the fd that raw
+    /// pty bytes must be written to instead of being fed to the VT parser.
+    ///
+    /// ZMODEM payloads are binary, so they cannot pass through the escape
+    /// parser: control bytes in the stream would be interpreted as terminal
+    /// commands and the payload would be corrupted. The pane's output parser
+    /// checks this on every read and, when it is `Some`, forwards the bytes
+    /// verbatim to the local `sz`/`rz` child and skips the parser entirely.
+    ///
+    /// `None` (the default) means no transfer is active, which is the case for
+    /// every pane that has no local pty behind it.
+    fn zmodem_sink(&self) -> Option<std::os::fd::RawFd> {
+        None
+    }
+
+    /// Stop diverting output to a ZMODEM child and resume normal parsing.
+    ///
+    /// Called by the parser thread when a diversion fails, and by the transfer
+    /// thread when a session ends.
+    fn zmodem_finish(&self) {}
     fn is_dead(&self) -> bool;
     fn kill(&self) {}
     fn palette(&self) -> ColorPalette;

@@ -203,6 +203,10 @@ where
                 stream.flush().await.context("flushing PDU to client")?;
             }
             Ok(Item::Notif(MuxNotification::ActiveWorkspaceChanged(_))) => {}
+            // ZMODEM transfers run `sz`/`rz` against a local pty, which a
+            // remote mux client does not have. The GUI that owns the pty sees
+            // this notification directly; there is nothing to forward.
+            Ok(Item::Notif(MuxNotification::ZmodemDetected { .. })) => {}
             Ok(Item::Notif(MuxNotification::Empty)) => {}
             Err(err) => {
                 log::error!("process_async Err {}", err);

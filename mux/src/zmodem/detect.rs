@@ -21,6 +21,28 @@ pub const ZDLE: u8 = 0x18;
 /// The marker that introduces a ZMODEM header.
 pub const HEADER_MARKER: [u8; 2] = [b'*', b'*'];
 
+/// Which side initiated, inferred from the first header's frame type.
+///
+/// `sz` opens with ZRQINIT (it has something to send); `rz` opens with
+/// ZRINIT (it is ready to receive). Seeing ZRQINIT therefore means the remote
+/// is sending, so we receive; ZRINIT means the remote wants to receive, so we
+/// send.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Initiator {
+    /// The remote is offering a file: we receive.
+    RemoteSends,
+    /// The remote is asking for a file: we send.
+    RemoteReceives,
+    /// A header started, but the frame type is not in this chunk yet, or it is
+    /// a frame that does not identify the initiator (a mid-session header).
+    Unknown,
+}
+
+/// ZMODEM frame type codes that appear as the first two hex digits of a ZHEX
+/// header.
+const ZRQINIT: u8 = 0x00;
+const ZRINIT: u8 = 0x01;
+
 /// Result of scanning one chunk of pty output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanResult {
@@ -29,7 +51,10 @@ pub enum ScanResult {
     /// A header begins at this offset within the chunk (the offset of the
     /// first `*`). Bytes before the offset are ordinary terminal output;
     /// bytes from the offset on belong to the ZMODEM session.
-    Started { offset: usize },
+    Started {
+        offset: usize,
+        initiator: Initiator,
+    },
 }
 
 /// Streaming scanner for the ZMODEM header prefix.
@@ -74,16 +99,10 @@ impl Detector {
         window.extend_from_slice(&self.tail);
         window.extend_from_slice(chunk);
 
-        if let Some(pos) = find_header(&window) {
+        if let Some((pos, initiator)) = find_header(&window) {
             self.tail.clear();
-            if pos >= carried {
-                return ScanResult::Started {
-                    offset: pos - carried,
-                };
-            }
-            // The header began inside the carried bytes, so this chunk only
-            // contributes its later bytes; everything from here is a session.
-            return ScanResult::Started { offset: 0 };
+            let offset = if pos >= carried { pos - carried } else { 0 };
+            return ScanResult::Started { offset, initiator };
         }
 
         // No header. Keep the last two bytes of the *window* so a `**` split
@@ -97,14 +116,51 @@ impl Detector {
     }
 }
 
-/// Find the first `**` + ZDLE triple, returning the index of its first `*`.
-fn find_header(haystack: &[u8]) -> Option<usize> {
+/// Find the first `**` + ZDLE triple.
+///
+/// Returns the index of its first `*` and, when the frame type is already
+/// present in the buffer, which side initiated the session.
+///
+/// The frame type follows as either `B` + two hex digits (ZHEX, what `sz`/`rz`
+/// emit for control frames) or a raw byte (binary frames). Only ZHEX is
+/// decoded here: a binary first frame does not identify the initiator, and the
+/// GUI can still ask the user which direction to run.
+fn find_header(haystack: &[u8]) -> Option<(usize, Initiator)> {
     if haystack.len() < 3 {
         return None;
     }
-    (0..=haystack.len() - 3).find(|&i| {
-        haystack[i] == b'*' && haystack[i + 1] == b'*' && haystack[i + 2] == ZDLE
-    })
+    for i in 0..=haystack.len() - 3 {
+        if haystack[i] != b'*' || haystack[i + 1] != b'*' || haystack[i + 2] != ZDLE {
+            continue;
+        }
+        return Some((i, initiator_at(haystack, i + 3)));
+    }
+    None
+}
+
+/// Decode the initiator from a ZHEX frame type at `idx`, if present.
+fn initiator_at(buf: &[u8], idx: usize) -> Initiator {
+    // ZHEX: 'B' then two hex digits.
+    if buf.get(idx) != Some(&b'B') {
+        return Initiator::Unknown;
+    }
+    let (Some(hi), Some(lo)) = (buf.get(idx + 1), buf.get(idx + 2)) else {
+        return Initiator::Unknown;
+    };
+    let Some(frame) = hex_byte(*hi, *lo) else {
+        return Initiator::Unknown;
+    };
+    match frame {
+        ZRQINIT => Initiator::RemoteSends,
+        ZRINIT => Initiator::RemoteReceives,
+        _ => Initiator::Unknown,
+    }
+}
+
+fn hex_byte(hi: u8, lo: u8) -> Option<u8> {
+    let hi = (hi as char).to_digit(16)?;
+    let lo = (lo as char).to_digit(16)?;
+    Some(((hi << 4) | lo) as u8)
 }
 
 #[cfg(test)]
@@ -130,7 +186,57 @@ mod tests {
     fn finds_header_at_start() {
         let mut d = Detector::new();
         let h = zrqinit();
-        assert_eq!(d.scan(&h), ScanResult::Started { offset: 0 });
+        assert_eq!(
+            d.scan(&h),
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::RemoteSends
+            }
+        );
+    }
+
+    #[test]
+    fn zrinit_means_the_remote_wants_to_receive() {
+        // `rz` on the remote opens with ZRINIT, asking us to send.
+        let mut d = Detector::new();
+        let mut h = b"**".to_vec();
+        h.push(ZDLE);
+        h.extend_from_slice(b"B01");
+        assert_eq!(
+            d.scan(&h),
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::RemoteReceives
+            }
+        );
+    }
+
+    #[test]
+    fn header_without_a_frame_type_is_unknown() {
+        let mut d = Detector::new();
+        assert_eq!(
+            d.scan(b"**\x18"),
+            ScanResult::Started { offset: 0, initiator: Initiator::Unknown }
+        );
+    }
+
+    #[test]
+    fn header_with_a_partial_frame_type_is_unknown() {
+        let mut d = Detector::new();
+        assert_eq!(
+            d.scan(b"**\x18B0"),
+            ScanResult::Started { offset: 0, initiator: Initiator::Unknown }
+        );
+    }
+
+    #[test]
+    fn header_with_a_non_control_frame_type_is_unknown() {
+        // ZFILE (0x04) appears mid-session, not as the initiator.
+        let mut d = Detector::new();
+        assert_eq!(
+            d.scan(b"**\x18B04"),
+            ScanResult::Started { offset: 0, initiator: Initiator::Unknown }
+        );
     }
 
     #[test]
@@ -141,7 +247,8 @@ mod tests {
         assert_eq!(
             d.scan(&data),
             ScanResult::Started {
-                offset: b"remote$ sz file.bin\r\n".len()
+                offset: b"remote$ sz file.bin\r\n".len(),
+                initiator: Initiator::RemoteSends,
             }
         );
     }
@@ -151,14 +258,20 @@ mod tests {
         let mut d = Detector::new();
         assert_eq!(d.scan(b"*"), ScanResult::NotStarted);
         assert_eq!(d.scan(b"*"), ScanResult::NotStarted);
-        assert_eq!(d.scan(&[ZDLE]), ScanResult::Started { offset: 0 });
+        assert_eq!(d.scan(&[ZDLE]), ScanResult::Started { offset: 0, initiator: Initiator::Unknown });
     }
 
     #[test]
     fn header_split_after_both_stars() {
         let mut d = Detector::new();
         assert_eq!(d.scan(b"**"), ScanResult::NotStarted);
-        assert_eq!(d.scan(&[ZDLE, b'B', b'0', b'0']), ScanResult::Started { offset: 0 });
+        assert_eq!(
+            d.scan(&[ZDLE, b'B', b'0', b'0']),
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::RemoteSends
+            }
+        );
     }
 
     #[test]
@@ -166,14 +279,14 @@ mod tests {
         // The `**Zdle` triple is enough to know a session started; the frame
         // type byte after it belongs to the transfer, not to the detection.
         let mut d = Detector::new();
-        assert_eq!(d.scan(b"**\x18"), ScanResult::Started { offset: 0 });
+        assert_eq!(d.scan(b"**\x18"), ScanResult::Started { offset: 0, initiator: Initiator::Unknown });
     }
 
     #[test]
     fn stray_single_star_before_a_real_header() {
         let mut d = Detector::new();
         // `*x` is not a prefix, but the `**Zdle` right after it is a header.
-        assert_eq!(d.scan(b"*x**\x18"), ScanResult::Started { offset: 2 });
+        assert_eq!(d.scan(b"*x**\x18"), ScanResult::Started { offset: 2, initiator: Initiator::Unknown });
     }
 
     #[test]
@@ -181,7 +294,13 @@ mod tests {
         let mut d = Detector::new();
         assert_eq!(d.scan(b"**x"), ScanResult::NotStarted);
         // The trailing `x` clears the carry; a later real header is found.
-        assert_eq!(d.scan(&zrqinit()), ScanResult::Started { offset: 0 });
+        assert_eq!(
+            d.scan(&zrqinit()),
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::RemoteSends
+            }
+        );
     }
 
     #[test]
@@ -189,7 +308,7 @@ mod tests {
         let mut d = Detector::new();
         let mut data = b"***".to_vec();
         data.push(ZDLE);
-        assert_eq!(d.scan(&data), ScanResult::Started { offset: 1 });
+        assert_eq!(d.scan(&data), ScanResult::Started { offset: 1, initiator: Initiator::Unknown });
     }
 
     #[test]

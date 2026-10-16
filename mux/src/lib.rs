@@ -150,6 +150,18 @@ pub enum MuxNotification {
         old_workspace: String,
         new_workspace: String,
     },
+    /// A ZMODEM header appeared in this pane's output, so the remote is asking
+    /// to send or receive a file.
+    ///
+    /// The GUI decides what to do — prompt for a destination, then start a
+    /// transfer — and until it does, the pane's parser holds the bytes rather
+    /// than feeding them to the VT parser. See `zmodem` for the handshake.
+    ZmodemDetected {
+        pane_id: PaneId,
+        /// Whether the remote is sending (we receive) or asking to receive
+        /// (we send), inferred from which header arrived.
+        direction: crate::zmodem::Direction,
+    },
 }
 
 static SUB_ID: AtomicUsize = AtomicUsize::new(0);
@@ -339,6 +351,38 @@ fn rescue_user_var_actions(pane_id: PaneId, actions: &[Action]) {
     }
 }
 
+/// Read the fd a pane's output should be diverted to during a ZMODEM transfer.
+///
+/// Kept as a free function so the parser thread's hot path does not need the
+/// concrete pane type; `Pane::zmodem_sink` defaults to `None`.
+fn pane_zmodem_sink(pane: &Weak<dyn Pane>) -> Option<std::os::fd::RawFd> {
+    pane.upgrade().and_then(|p| p.zmodem_sink())
+}
+
+/// Tell the GUI that a ZMODEM header arrived on this pane.
+///
+/// The pane's parser has already stopped feeding these bytes to the VT parser.
+/// The GUI decides what to do next; see the `zmodem` module docs.
+fn notify_zmodem_detected(
+    pane: &Weak<dyn Pane>,
+    pane_id: PaneId,
+    initiator: crate::zmodem::detect::Initiator,
+) {
+    use crate::zmodem::detect::Initiator;
+    let direction = match initiator {
+        // The remote opened with ZRQINIT: it has a file to send, so we receive.
+        Initiator::RemoteSends => crate::zmodem::Direction::Download,
+        // The remote opened with ZRINIT: it is ready to receive from us.
+        Initiator::RemoteReceives => crate::zmodem::Direction::Upload,
+        // A binary first frame, or a frame type we did not get to decode yet.
+        // The GUI still prompts; the user's choice settles the direction.
+        Initiator::Unknown => crate::zmodem::Direction::Download,
+    };
+    if pane.upgrade().is_some() {
+        Mux::notify_from_any_thread(MuxNotification::ZmodemDetected { pane_id, direction });
+    }
+}
+
 fn parse_buffered_data(
     pane: Weak<dyn Pane>,
     pane_id: PaneId,
@@ -348,6 +392,7 @@ fn parse_buffered_data(
     let mut buf = vec![0; configuration().mux_output_parser_buffer_size];
     let mut parser = termwiz::escape::parser::Parser::new();
     let mut actions = vec![];
+    let mut zmodem = crate::zmodem::Detector::new();
     let mut synchronized_output = SynchronizedOutputState::default();
     let mut action_size = 0;
     let mut delay = Duration::from_millis(configuration().mux_output_parser_coalesce_delay_ms);
@@ -437,7 +482,45 @@ fn parse_buffered_data(
                 break;
             }
             Ok(size) => {
-                parser.parse(&buf[0..size], |action| {
+                // ZMODEM takes priority over normal parsing. Two cases:
+                //
+                // 1. A transfer is already running on this pane: the bytes are
+                //    binary protocol data, so hand them straight to the local
+                //    `sz`/`rz` child and skip the parser entirely. Feeding
+                //    them to the parser would treat payload bytes as terminal
+                //    commands and corrupt the transfer.
+                //
+                // 2. No transfer yet: scan for the header prefix that starts
+                //    one. If found, the bytes from the header on belong to the
+                //    session, so they are diverted rather than parsed.
+                if let Some(sink) = pane_zmodem_sink(&pane) {
+                    let chunk = &buf[..size];
+                    if let Err(err) = crate::zmodem::transfer::write_all(sink, chunk) {
+                        log::warn!("zmodem: diverting pane {pane_id} bytes failed: {err:#}");
+                        // Drop the transfer; the pane returns to normal parsing
+                        // so the user is not left with a frozen terminal.
+                        if let Some(pane) = pane.upgrade() {
+                            pane.zmodem_finish();
+                        }
+                    }
+                    continue;
+                }
+
+                let chunk = &buf[..size];
+                let (parse_upto, diverted) = match zmodem.scan(chunk) {
+                    crate::zmodem::ScanResult::NotStarted => (size, false),
+                    crate::zmodem::ScanResult::Started { offset, initiator } => {
+                        notify_zmodem_detected(&pane, pane_id, initiator);
+                        (offset, true)
+                    }
+                };
+
+                if parse_upto == 0 && diverted {
+                    // The chunk begins with a header: nothing to parse.
+                    continue;
+                }
+                let chunk = &buf[..parse_upto];
+                parser.parse(chunk, |action| {
                     let mut flush = false;
                     match &action {
                         Action::CSI(CSI::Mode(Mode::SetDecPrivateMode(DecPrivateMode::Code(

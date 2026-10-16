@@ -11,9 +11,18 @@
 //!     a byte-transparent mode, bypassing the VT parser that would otherwise
 //!     corrupt binary payloads.
 //!
+//! [`state`] is the shared cell between the parser thread, the transfer
+//! thread, and the UI.
+//!
 //! See the transfer module for why the child gets a socketpair rather than the
 //! pty directly.
 
 pub mod detect;
 pub mod session_transfer;
+pub mod state;
 pub mod transfer;
+
+pub use detect::{Detector, ScanResult};
+pub use session_transfer::{
+    local_command, lrzsz_available, program_available, Direction, LocalCommand, Outcome, Transfer,
+};

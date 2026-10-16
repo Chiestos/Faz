@@ -376,6 +376,17 @@ fn summarize_bell_tokens(tokens: &[&str]) -> Option<String> {
     None
 }
 
+/// A ZMODEM session waiting for the user to choose a file or destination.
+///
+/// Set when the remote initiates a transfer; cleared when the transfer starts
+/// or is abandoned. Holds only what the picker needs to start the transfer once
+/// it has an answer.
+#[derive(Debug, Clone, Copy)]
+pub struct ZmodemPending {
+    pub pane_id: PaneId,
+    pub direction: mux::zmodem::Direction,
+}
+
 fn bell_notification_message(
     last_command: Option<&str>,
     reported_program: Option<&str>,
@@ -1146,6 +1157,10 @@ pub struct TermWindow {
     selection_copy_disabled_hint_shown: bool,
     last_window_title: String,
 
+    /// A ZMODEM session the remote started, waiting for the user to pick a
+    /// file or a destination. Set by `on_zmodem_detected`, consumed when the
+    /// transfer starts.
+    zmodem_pending: Option<ZmodemPending>,
 }
 
 /// Set once WebGpu has failed to initialize in this process. Every later
@@ -1669,6 +1684,7 @@ impl TermWindow {
             deferred_layout_relayout_epoch: 0,
             layout_sticky_fullscreen_until: None,
             closed_tab_history: std::collections::VecDeque::new(),
+            zmodem_pending: None,
             os_parameters: None,
             render_backend: None,
             window: None,
@@ -2603,6 +2619,12 @@ impl TermWindow {
                     self.resize_overlays();
                     self.update_title_post_status();
                 }
+                MuxNotification::ZmodemDetected {
+                    pane_id,
+                    direction,
+                } => {
+                    self.on_zmodem_detected(pane_id, direction);
+                }
                 MuxNotification::WorkspaceRenamed { .. }
                 | MuxNotification::WindowWorkspaceChanged(_)
                 | MuxNotification::ActiveWorkspaceChanged(_)
@@ -2867,6 +2889,17 @@ impl TermWindow {
                 .map(|mux| !mux.is_main_thread())
                 .unwrap_or(false);
             match &n {
+                // ZMODEM notifications carry a pane, not a window. Only the
+                // window that owns the pane should act on it.
+                MuxNotification::ZmodemDetected { pane_id, .. } => {
+                    let dominated_mux = Mux::try_get();
+                    if let Some(mux) = dominated_mux {
+                        match mux.get_pane(*pane_id) {
+                            Some(_) => {}
+                            None => return true,
+                        }
+                    }
+                }
                 // Notifications with explicit window_id: skip if not for this window
                 MuxNotification::TabAddedToWindow { window_id, .. }
                 | MuxNotification::WindowTitleChanged { window_id, .. }
@@ -6620,6 +6653,44 @@ impl TermWindow {
 
     pub fn schedule_cancel_overlay(window: Window, tab_id: TabId, pane_id: Option<PaneId>) {
         window.notify(TermWindowNotif::CancelOverlayForTab { tab_id, pane_id });
+    }
+
+    /// A ZMODEM header arrived on a pane the remote initiated.
+    ///
+    /// The pane's parser has already stopped feeding bytes to the VT parser,
+    /// so the session is live and waiting for a local `sz`/`rz` to be started.
+    ///
+    /// The transfer itself is started once a destination (for a receive) or a
+    /// source (for a send) is known, which the file browser supplies. Until
+    /// then the pane shows a status line so the user can see why output has
+    /// stopped arriving.
+    fn on_zmodem_detected(&mut self, pane_id: PaneId, direction: mux::zmodem::Direction) {
+        log::info!("zmodem: session detected on pane {pane_id} ({direction:?})");
+
+        let (sz, rz) = mux::zmodem::lrzsz_available();
+        if !sz || !rz {
+            // Without lrzsz there is no local program to bridge the session to.
+            let missing = match (sz, rz) {
+                (false, false) => "sz and rz",
+                (false, true) => "sz",
+                _ => "rz",
+            };
+            let message = format!(
+                "ZMODEM transfer requested but {missing} is not installed. \
+                 Install lrzsz (brew install lrzsz) and retry."
+            );
+            log::warn!("zmodem: {message}");
+            self.show_toast(message);
+            // Release the pane so the terminal keeps working.
+            if let Some(pane) = Mux::get().get_pane(pane_id) {
+                pane.zmodem_finish();
+            }
+            return;
+        }
+
+        // The destination/source picker is opened by the caller that has the
+        // window handle; this method only reports the detection.
+        self.zmodem_pending = Some(ZmodemPending { pane_id, direction });
     }
 
     fn cancel_overlay_for_pane(&mut self, pane_id: PaneId) {
