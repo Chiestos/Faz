@@ -374,6 +374,8 @@ impl CommandDef {
                 EmitEvent(name)
                     if name == "kaku-launch-lazygit"
                         || name == "kaku-launch-yazi"
+                        || name == "kaku-zmodem-send"
+                        || name == "kaku-zmodem-receive"
             )
         }
 
@@ -732,6 +734,8 @@ impl CommandDef {
                     EmitEvent(name) if name == "kaku-launch-lazygit" => 20,
                     EmitEvent(name) if name == "kaku-launch-yazi" => 21,
                     EmitEvent(name) if name == "kaku-open-remote-files" => 22,
+                    EmitEvent(name) if name == "kaku-zmodem-send" => 23,
+                    EmitEvent(name) if name == "kaku-zmodem-receive" => 24,
                     SplitVertical(_) | SplitHorizontal(_) | SplitPane(_) => 30,
                     CloseCurrentTab { .. } | CloseCurrentPane { .. } => 40,
                     RestorePreviousWindow => 42,
@@ -1594,6 +1598,27 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                     doc: "Open the current SSH domain in a local Yazi tab".into(),
                     keys: vec![(Modifiers::SUPER.union(Modifiers::SHIFT), "r".into())],
                     args: &[ArgType::ActiveWindow],
+                    menubar: &["Shell"],
+                    icon: None,
+                }
+            } else if name == "kaku-zmodem-send" {
+                CommandDef {
+                    brief: "Send File…".into(),
+                    doc: "Transfer a local file to the remote host with ZMODEM ".into(),
+                    // No key binding on purpose: a transfer needs a file
+                    // choice, so it belongs in the menu rather than on a
+                    // shortcut that would have to guess.
+                    keys: vec![],
+                    args: &[ArgType::ActivePane],
+                    menubar: &["Shell"],
+                    icon: None,
+                }
+            } else if name == "kaku-zmodem-receive" {
+                CommandDef {
+                    brief: "Receive File…".into(),
+                    doc: "Wait for the remote to send a file with ZMODEM, then choose where to save it".into(),
+                    keys: vec![],
+                    args: &[ArgType::ActivePane],
                     menubar: &["Shell"],
                     icon: None,
                 }
@@ -2600,6 +2625,8 @@ fn compute_default_actions() -> Vec<KeyAssignment> {
         EmitEvent("kaku-launch-lazygit".to_string()),
         EmitEvent("kaku-launch-yazi".to_string()),
         EmitEvent("kaku-open-remote-files".to_string()),
+        EmitEvent("kaku-zmodem-send".to_string()),
+        EmitEvent("kaku-zmodem-receive".to_string()),
         SplitVertical(SpawnCommand {
             domain: SpawnTabDomain::CurrentPaneDomain,
             ..Default::default()

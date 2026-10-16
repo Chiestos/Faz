@@ -159,6 +159,17 @@ impl InputBroadcastMode {
     }
 }
 
+/// Is this pane already diverting output into a ZMODEM session?
+///
+/// True only once the remote's header has arrived and the parser switched
+/// modes; a menu-initiated receive before that point is `false`.
+fn pane_has_active_transfer(pane_id: PaneId) -> bool {
+    Mux::get()
+        .get_pane(pane_id)
+        .and_then(|pane| pane.zmodem_state())
+        .is_some_and(|state| state.is_active())
+}
+
 fn scrollback_erase_mode_for_pane(
     requested: ScrollbackEraseMode,
     alternate_screen_active: bool,
@@ -381,10 +392,15 @@ fn summarize_bell_tokens(tokens: &[&str]) -> Option<String> {
 /// Set when the remote initiates a transfer; cleared when the transfer starts
 /// or is abandoned. Holds only what the picker needs to start the transfer once
 /// it has an answer.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ZmodemPending {
     pub pane_id: PaneId,
     pub direction: mux::zmodem::Direction,
+    /// Set when the user already chose a path via the menu, before the remote
+    /// started sending. A detection that finds this set skips the picker and
+    /// starts the transfer straight away, because asking twice for the same
+    /// answer would be hostile.
+    pub chosen: Option<PathBuf>,
 }
 
 fn bell_notification_message(
@@ -706,6 +722,11 @@ pub enum TermWindowNotif {
     /// A ZMODEM transfer on this pane ended, for any reason. Clears the
     /// pending record so the pane can start another transfer.
     ZmodemFinished(PaneId),
+    /// The user chose where to save a file the remote has not sent yet.
+    ZmodemDestinationChosen {
+        pane_id: PaneId,
+        destination: PathBuf,
+    },
     CancelOverlayForTab {
         tab_id: TabId,
         pane_id: Option<PaneId>,
@@ -2394,8 +2415,28 @@ impl TermWindow {
                     self.schedule_silent_config_reload(window);
                 }
             }
+            TermWindowNotif::ZmodemDestinationChosen {
+                pane_id,
+                destination,
+            } => {
+                if let Some(pending) = self
+                    .zmodem_pending
+                    .as_mut()
+                    .filter(|p| p.pane_id == pane_id)
+                {
+                    pending.chosen = Some(destination.clone());
+                }
+                self.show_toast(format!(
+                    "Ready to receive. Run `sz <file>` on the remote host to send into {}",
+                    destination.display()
+                ));
+            }
             TermWindowNotif::ZmodemFinished(pane_id) => {
-                if self.zmodem_pending.is_some_and(|p| p.pane_id == pane_id) {
+                if self
+                    .zmodem_pending
+                    .as_ref()
+                    .is_some_and(|p| p.pane_id == pane_id)
+                {
                     self.zmodem_pending = None;
                 }
             }
@@ -4868,6 +4909,10 @@ impl TermWindow {
                     self.show_toast(msg.to_string());
                 } else if name == "open-kaku-config" {
                     crate::frontend::open_kaku_config();
+                } else if name == "kaku-zmodem-send" {
+                    self.start_zmodem_send_from_menu(pane.pane_id());
+                } else if name == "kaku-zmodem-receive" {
+                    self.start_zmodem_receive_from_menu(pane.pane_id());
                 } else if name == crate::frontend::SET_DEFAULT_TERMINAL_EVENT {
                     match Connection::get() {
                         Some(conn) => match conn.set_default_terminal() {
@@ -6677,7 +6722,7 @@ impl TermWindow {
 
         // One session at a time per pane. A second detection while a picker is
         // open would otherwise stack overlays and race for the same pty.
-        if let Some(pending) = self.zmodem_pending {
+        if let Some(pending) = self.zmodem_pending.as_ref() {
             if pending.pane_id == pane_id {
                 log::warn!(
                     "zmodem: ignoring a second detection on pane {pane_id} while \
@@ -6713,7 +6758,27 @@ impl TermWindow {
         // so the picker has to be opened now or the transfer stalls with the
         // remote waiting. The result arrives on the overlay's own thread via
         // the promise below.
-        self.zmodem_pending = Some(ZmodemPending { pane_id, direction });
+        // A menu-initiated receive already knows where to save; the remote
+        // only had to be asked to send. Start immediately in that case.
+        if let Some(pending) = self
+            .zmodem_pending
+            .as_ref()
+            .filter(|p| p.pane_id == pane_id && p.direction == direction)
+            .cloned()
+        {
+            if let Some(chosen) = pending.chosen {
+                if let Some(window) = self.window.clone() {
+                    TermWindow::start_zmodem_transfer(window, pane_id, direction, chosen);
+                    return;
+                }
+            }
+        }
+
+        self.zmodem_pending = Some(ZmodemPending {
+            pane_id,
+            direction,
+            chosen: None,
+        });
         self.open_zmodem_picker(pane_id, direction);
     }
 
@@ -6769,12 +6834,23 @@ impl TermWindow {
             promise::spawn::spawn_into_main_thread(async move {
                 match picked {
                     Ok(crate::overlay::filebrowser::PickResult::Chosen(path)) => {
-                        TermWindow::start_zmodem_transfer(
-                            window.clone(),
-                            pane_id,
-                            direction,
-                            path,
-                        );
+                        // A receive chosen before the remote started sending is
+                        // only half the answer: remember the directory and let
+                        // the detection path start the transfer. Starting `rz`
+                        // now would block on a header that has not been sent.
+                        let waiting_for_remote = direction
+                            == mux::zmodem::Direction::Download
+                            && !pane_has_active_transfer(pane_id);
+                        if waiting_for_remote {
+                            TermWindow::remember_zmodem_destination(window.clone(), pane_id, path);
+                        } else {
+                            TermWindow::start_zmodem_transfer(
+                                window.clone(),
+                                pane_id,
+                                direction,
+                                path,
+                            );
+                        }
                     }
                     Ok(crate::overlay::filebrowser::PickResult::Cancelled) => {
                         log::info!("zmodem: picker cancelled for pane {pane_id}");
@@ -6793,6 +6869,45 @@ impl TermWindow {
         .detach();
     }
 
+    /// Menu entry: send a local file to the remote host.
+    ///
+    /// Unlike a detected session, here the user initiates: we pick the file
+    /// first, then start the remote receiver. Typing `rz` into the pane is what
+    /// makes this one action instead of two.
+    fn start_zmodem_send_from_menu(&mut self, pane_id: PaneId) {
+        if let Some(missing) = mux::zmodem::missing_lrzsz() {
+            let message = format!(
+                "ZMODEM needs lrzsz ({missing} not found). Install it with: brew install lrzsz"
+            );
+            log::warn!("zmodem: {message}");
+            self.show_toast(message);
+            return;
+        }
+        self.open_zmodem_picker(pane_id, mux::zmodem::Direction::Upload);
+    }
+
+    /// Menu entry: wait for the remote to send a file.
+    ///
+    /// The remote has to be told to send, and only the user knows what to send,
+    /// so this picks the destination directory up front and then waits for the
+    /// header. The detection path takes over from there.
+    fn start_zmodem_receive_from_menu(&mut self, pane_id: PaneId) {
+        if let Some(missing) = mux::zmodem::missing_lrzsz() {
+            let message = format!(
+                "ZMODEM needs lrzsz ({missing} not found). Install it with: brew install lrzsz"
+            );
+            log::warn!("zmodem: {message}");
+            self.show_toast(message);
+            return;
+        }
+        self.zmodem_pending = Some(ZmodemPending {
+            pane_id,
+            direction: mux::zmodem::Direction::Download,
+            chosen: None,
+        });
+        self.open_zmodem_picker(pane_id, mux::zmodem::Direction::Download);
+    }
+
     /// Look up the working directory of a pane, for defaulting the picker.
     fn pane_cwd(&self, pane_id: PaneId) -> Option<PathBuf> {
         let mux = Mux::get();
@@ -6805,6 +6920,19 @@ impl TermWindow {
     ///
     /// Clears the diversion so the terminal keeps working, and drops the
     /// pending record so a later detection is not mistaken for this one.
+    /// Record the destination for a receive whose remote has not started
+    /// sending yet, and tell the user what to do next.
+    ///
+    /// Returns via a notification rather than touching `TermWindow` directly,
+    /// because the picker result arrives on a worker thread.
+    pub fn remember_zmodem_destination(
+        window: window::Window,
+        pane_id: PaneId,
+        destination: PathBuf,
+    ) {
+        window.notify(TermWindowNotif::ZmodemDestinationChosen { pane_id, destination });
+    }
+
     pub fn abandon_zmodem(window: &window::Window, pane_id: PaneId) {
         if let Some(pane) = Mux::get().get_pane(pane_id) {
             pane.zmodem_finish();
