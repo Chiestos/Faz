@@ -46,13 +46,12 @@ Highest historical yield first. Subsystem guides live in crate `AGENTS.md` files
 
 | Boundary | What to ask | Where it usually lives |
 |---|---|---|
-| Multi-entry destructive actions | Menu, toast, CLI, shell, key binding: do they all confirm the same way before quit/replace/kill? | `faz-gui/src/frontend.rs`, `update.rs`, `overlay/confirm.rs`, `overlay/confirm_close_pane.rs`, `kaku/src/update.rs` |
+| Multi-entry destructive actions | Menu, toast, CLI, shell, key binding: do they all confirm the same way before quit/replace/kill? | `faz-gui/src/frontend.rs`, `update.rs`, `overlay/confirm.rs`, `overlay/confirm_close_pane.rs`, `faz-cli/src/update.rs` |
 | macOS window geometry | Traffic lights vs tab bar, DPI scale, external display drag, sleep/wake, lock screen, fullscreen first frame | `window/src/os/macos/`, `faz-gui/src/termwindow/resize.rs`, titlebar paint |
 | Tab chrome | Overflow hit targets, rename modal selection, multi-pane title width, top vs bottom bar | `faz-gui/src/tabbar.rs`, `termwindow/tab_rename.rs` |
 | Selection / mouse state | Survives Ctrl+L, modal cancel, mouse-reporting panes, successful terminal input? | `faz-gui/src/termwindow/selection.rs`, mouseevent |
-| Shell integration generation | `local` only inside functions; backticks in bash-heredoc that emit zsh; Starship/PATH scoped to Faz | `assets/shell-integration/`, `kaku/src/init.rs`, `setup_zsh.sh` |
+| Shell integration generation | `local` only inside functions; backticks in bash-heredoc that emit zsh; Starship/PATH scoped to Faz | `assets/shell-integration/`, `faz-cli/src/init.rs`, `setup_zsh.sh` |
 | Session restore | Split + scrollback both sides, crash backup, stale snapshot resurrecting closed tabs | `faz-gui/src/session_restore.rs`, paint/quad buffers |
-| AI dual surfaces | Cmd+L vs `#` vs `k` vs chat: same auth, theme, proxy, remote-cwd tool policy? | `faz-gui/src/ai_*`, `inline_ai.rs`, `cli_chat/`, overlay |
 | Proxy / network | External API uses system proxy; loopback/private/LAN/`.local`/NO_PROXY go direct | `config/src/proxy.rs`, AI transport |
 | AppKit menu intercept | `Ctrl+letter` only `key_is_down: false` in logs? Menu `keyEquivalent` ate it | `window/src/os/macos/menu.rs`, debug_key_events |
 | Render buffer growth | Over-capacity draw after retry budget; sleep invalidates drawable | `renderstate.rs`, paint/draw paths |

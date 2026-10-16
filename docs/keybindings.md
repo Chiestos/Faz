@@ -69,7 +69,6 @@ All keybindings use macOS-native modifier keys. `Opt` = Option/Alt, `Ctrl` = Con
 | Open Settings panel | `Cmd + ,` (type to filter model lists inside the panel) |
 | Open Command Palette | `Cmd + Shift + P` |
 | Open AI panel | `Cmd + Shift + A` |
-| Open AI Chat | `Cmd + L` |
 | Apply Faz Assistant suggestion | `Cmd + Shift + E` |
 | Restore previous window snapshot | `Cmd + Opt + Shift + T` |
 | Open lazygit | `Cmd + Shift + G` |

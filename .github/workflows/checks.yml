@@ -191,8 +191,6 @@ jobs:
       - name: Guard production logging discipline
         run: ./scripts/check_logs.sh
 
-      - name: Guard prompt metadata headers
-        run: ./scripts/check_prompts.sh
 
       - name: Check key crates
         run: cargo check --locked -p kaku -p faz-gui

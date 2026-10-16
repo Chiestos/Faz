@@ -1,7 +1,7 @@
 <div align="center">
   <img src="https://gw.alipayobjects.com/zos/k/6h/dwarf.svg" width="120" />
   <h1>Faz</h1>
-  <p><em>A fast, out-of-the-box terminal built for AI coding.</em></p>
+  <p><em>A fast, out-of-the-box Mac terminal.</em></p>
 </div>
 
 <p align="center">
@@ -50,36 +50,11 @@ Part of a trilogy: [Faz](https://github.com/tw93/Faz) (書く) writes code, [Waz
 | Split Pane Vertical | `Cmd + D` |
 | Split Pane Horizontal | `Cmd + Shift + D` |
 | Open Settings Panel | `Cmd + ,` |
-| AI Panel | `Cmd + Shift + A` |
-| AI Chat | `Cmd + L` |
-| Apply AI Suggestion | `Cmd + Shift + E` |
 | Open Lazygit | `Cmd + Shift + G` |
 | Yazi File Manager | `Cmd + Shift + Y` or `y` |
 | Clear Screen | `Cmd + K` |
 
 Full keybinding reference: [docs/keybindings.md](docs/keybindings.md)
-
-## Faz AI
-
-Faz has a built-in assistant with two modes and a settings page for AI coding tools.
-
-- **Error recovery**: When a command fails, Faz automatically suggests a fix. Press `Cmd + Shift + E` to apply.
-- **Natural language to command**: Type `# <description>` at the prompt and press Enter. Faz sends the query to the LLM and injects the resulting command back into the prompt, ready to review and run.
-- **AI Tools Config**: Manage settings for Claude Code, Codex, Gemini CLI, Copilot CLI, Kimi Code, and more.
-
-### Assistant Setup
-
-Run `kaku ai` to configure the assistant fields directly:
-
-| Field | Use |
-| :--- | :--- |
-| Auth Type | API key or Follow Codex user connection |
-| Simple Model | Lightweight command generation and quick chat model |
-| Deep Model | Primary `Cmd + L` / `k` chat model |
-| Base URL | OpenAI-compatible API root, such as `https://api.openai.com/v1` |
-| API Key | Provider API key when Auth Type is API key |
-
-Full AI assistant docs: [docs/features.md](docs/features.md)
 
 ## Performance
 
@@ -103,9 +78,9 @@ Full FAQ: [docs/faq.md](docs/faq.md)
 ## Docs
 
 - [Keybindings](docs/keybindings.md) - full shortcut reference
-- [Features](docs/features.md) - AI assistant, lazygit, yazi, remote files, shell suite
+- [Features](docs/features.md) - lazygit, yazi, remote files, shell suite
 - [Configuration](docs/configuration.md) - themes, fonts, custom keybindings, Lua API
-- [CLI Reference](docs/cli.md) - `kaku ai`, `kaku config`, `kaku doctor`, and more
+- [CLI Reference](docs/cli.md) - `faz config`, `faz doctor`, and more
 - [FAQ](docs/faq.md) - common questions and troubleshooting
 
 ## Background

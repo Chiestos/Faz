@@ -50,7 +50,6 @@ config.window_background_opacity = 0.95
 
 Keep terminal behavior, appearance, key bindings, launch behavior, and other WezTerm-compatible settings in `faz.lua`.
 
-Manage Faz Assistant settings with `kaku ai`. That command writes `~/.config/faz/assistant.toml` for model, base URL, auth, API keys, and tool settings. The Lua/TOML split is intentional: `faz.lua` stays compatible with WezTerm-style terminal configuration, while `assistant.toml` is managed by the AI setup flow.
 
 ---
 
@@ -328,17 +327,6 @@ Full list of available actions: [WezTerm KeyAssignment reference](https://wezfur
 ---
 
 ## Advanced
-
-**Enterprise proxy headers**
-
-Add custom HTTP headers to Faz Assistant API requests (for corporate proxies or API gateways):
-
-```toml
-# ~/.config/faz/assistant.toml
-custom_headers = ["X-Customer-ID: your-id", "X-Org: your-org"]
-```
-
-Note: `Authorization` and `Content-Type` are reserved and cannot be overridden.
 
 **Extend Command Palette**
 

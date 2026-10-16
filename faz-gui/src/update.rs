@@ -314,7 +314,7 @@ fn check_update_completed() {
 }
 
 // ---------------------------------------------------------------------------
-// Helper script for restart-to-update (duplicated from kaku/src/update.rs
+// Helper script for restart-to-update (duplicated from faz-cli/src/update.rs
 // because faz-gui does not depend on the kaku crate).
 // ---------------------------------------------------------------------------
 
@@ -349,7 +349,7 @@ pub fn resolve_target_app_path() -> anyhow::Result<PathBuf> {
 }
 
 pub fn write_update_helper_script(script_path: &Path) -> anyhow::Result<()> {
-    // This is the same helper script as kaku/src/update.rs::write_helper_script.
+    // This is the same helper script as faz-cli/src/update.rs::write_helper_script.
     let script = include_str!("../../scripts/update_helper.sh");
     std::fs::write(script_path, script)
         .map_err(|e| anyhow!("failed to write helper script: {}", e))?;

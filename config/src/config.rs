@@ -2236,7 +2236,7 @@ pub fn default_hyperlink_rules() -> Vec<hyperlink::Rule> {
         )
         .unwrap(),
         // File paths: support absolute paths, common relative prefixes, and
-        // bare relative paths like `kaku/src/main.rs`.
+        // bare relative paths like `faz-cli/src/main.rs`.
         // Supports file:line and file:line:col formats.
         //
         // The trailing character class is intentionally restricted to ASCII

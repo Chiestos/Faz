@@ -822,8 +822,6 @@ end
 --   action = wezterm.action.ClearScrollback('ScrollbackAndViewport'),
 -- })
 --
--- AI assistant settings (provider, model, API key) live in
--- ~/.config/faz/assistant.toml, not in this file.
 
 return config
 "#

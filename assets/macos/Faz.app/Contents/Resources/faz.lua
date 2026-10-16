@@ -153,7 +153,7 @@ end
 
 -- Detect macOS appearance via `defaults read` as a reliable fallback when
 -- wezterm.gui is not yet available (early Lua init, TUI processes like
--- `faz config` / `faz ai`). Mirrors the Rust-side is_macos_dark_mode().
+-- `faz config`). Mirrors the Rust-side is_macos_dark_mode().
 -- The subprocess result is memoized for this config evaluation: TUI loads
 -- otherwise fork `defaults` several times per load. The GUI never consults
 -- this fallback at runtime (wezterm.gui.get_appearance takes priority), and
@@ -2847,7 +2847,6 @@ config.keys = (function() return {
     action = wezterm.action.SpawnTab('CurrentPaneDomain'),
   },
 
-  -- Cmd+Shift+A: open Faz AI settings in current pane
   {
     key = 'A',
     mods = 'CMD|SHIFT',

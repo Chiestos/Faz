@@ -47,21 +47,6 @@ config.split_pane_inherit_working_directory = true
 
 All are enabled by default.
 
-## How do I disable Faz Assistant?
-
-Run `kaku ai`, open Faz Assistant settings, and set Enabled to Off. Or edit `~/.config/faz/assistant.toml` directly:
-
-```toml
-enabled = false
-```
-
-## How do I use a custom LLM provider?
-
-Run `kaku ai`, keep Auth Type set to API key, and enter your Base URL, API Key,
-Simple Model, and Deep Model manually. Choose **API Mode** `chat_completions`
-for `/v1/chat/completions`, or `responses` for `/v1/responses`. If the Responses
-provider supports hosted search, set **Native Web Search** to On; no separate
-search provider or search API key is required.
 
 ## How do I restore default config?
 
@@ -74,7 +59,7 @@ defaults, selected Faz state, and managed theme blocks in
 `~/.config/faz/faz.lua`. User-authored Lua outside managed blocks is
 preserved. Run `kaku init` again if you want shell integration back.
 
-## The `kaku` command is missing. How do I recover it?
+## The `faz` command is missing. How do I recover it?
 
 ```bash
 /Applications/Faz.app/Contents/MacOS/kaku init --update-only
@@ -95,7 +80,7 @@ See [cli.md](cli.md) for full reference.
 
 ## How do I enable the scrollbar?
 
-Open `kaku config` and toggle the scrollbar option, or add to `~/.config/faz/faz.lua`:
+Open `faz config` and toggle the scrollbar option, or add to `~/.config/faz/faz.lua`:
 
 ```lua
 config.enable_scroll_bar = true

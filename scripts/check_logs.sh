@@ -6,7 +6,7 @@
 # offending lines printed if any new violation appears.
 #
 # Allowlist rationale:
-#   - CLI binaries (kaku/src/main.rs, kaku/src/cli/*, faz-gui/src/bin/k.rs,
+#   - CLI binaries (faz-cli/src/main.rs, faz-cli/src/cli/*,
 #     faz-gui/src/cli_chat) speak directly to the user on stdout/stderr;
 #     log:: would either be filtered out or end up double-printed.
 #   - Test functions (#[test], tests/, *_test.rs) use println! as expected
@@ -32,17 +32,16 @@ cd "$REPO_ROOT"
 #   - The configmeta proc-macro derive prints generated tokens for debugging
 #     macro expansion.
 ALLOW_FILES=(
-  'kaku/src/main\.rs'
-  'kaku/src/cli/'
-  'kaku/src/config_cmd\.rs'
-  'kaku/src/doctor\.rs'
-  'kaku/src/init\.rs'
-  'kaku/src/reset\.rs'
-  'kaku/src/update\.rs'
-  'kaku/src/utils\.rs'
-  'kaku/src/shell\.rs'
-  'kaku/src/chat\.rs'
-  'kaku/src/tui_splash\.rs'
+  'faz-cli/src/main\.rs'
+  'faz-cli/src/cli/'
+  'faz-cli/src/config_cmd\.rs'
+  'faz-cli/src/doctor\.rs'
+  'faz-cli/src/init\.rs'
+  'faz-cli/src/reset\.rs'
+  'faz-cli/src/update\.rs'
+  'faz-cli/src/utils\.rs'
+  'faz-cli/src/shell\.rs'
+    'faz-cli/src/tui_splash\.rs'
   'faz-gui/src/bin/'
   'faz-gui/src/cli_chat/'
   'faz-gui/src/startup_trace\.rs'
@@ -62,7 +61,7 @@ allow_pattern="$(IFS='|'; echo "${ALLOW_FILES[*]}")"
 # heuristic but sufficient for the call sites that exist today).
 violations=$(
   grep -rnE 'eprintln!|println!' --include='*.rs' \
-    faz-gui/src kaku/src config mux term \
+    faz-gui/src faz-cli/src config mux term \
     2>/dev/null \
     | grep -vE "($allow_pattern)" \
     | grep -vE '"[^"]*(eprintln!|println!)' \

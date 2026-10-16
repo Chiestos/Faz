@@ -23,11 +23,11 @@ make app
 ./scripts/check_config_release_readiness.sh
 ```
 
-`make fmt` and `make fmt-check` both run `cargo +nightly fmt`, so both require the nightly toolchain. Use `make app` when the change touches GUI, rendering, windowing, input, or AI overlay behavior.
+`make fmt` and `make fmt-check` both run `cargo +nightly fmt`, so both require the nightly toolchain. Use `make app` when the change touches GUI, rendering, windowing, or input behavior.
 
 ## Project-Specific Rules
 
-- AI chat and shell flows are core product surfaces. Before changing `faz-gui/src/ai_*`, `ai_chat_engine/`, `cli_chat/`, or `overlay/ai_chat/`, read `faz-gui/AGENTS.md`.
+- Shell integration is a core product surface. Before changing `assets/shell-integration/`, read the root `AGENTS.md` notes on heredoc generation and the CI smoke tests.
 - `config_version` bumps every release (source of truth: `assets/shell-integration/config_version.txt`; enforced by `scripts/check_release_config.sh`). Schema changes must update bundled defaults, docs, release checks, and migration behavior together. Per-version history and migration rules live in `docs/config-versions.md`; do not hardcode the current number in instruction files.
 - Startup performance depends on shell user-var caching, Lua bytecode, early appearance queries, GLSL version detection, and bundled font caching. Measure before invalidating those paths.
 - Notification actions that call back into Faz must resolve bundled executables relative to the running app.

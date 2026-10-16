@@ -255,7 +255,7 @@ pub fn open_kaku_config() {
 // - Menu Check (staged)     -> confirm_and_apply_update (overlay)
 // - Menu Check (download)   -> run_kaku_update_in_tab(auto_confirm=false) -> CLI prompt
 // - Overlay confirmed       -> apply_update_now -> staged restart or tab(auto_confirm=true)
-// - CLI direct / brew       -> confirm_apply_update in kaku/src/update.rs
+// - CLI direct / brew       -> confirm_apply_update in faz-cli/src/update.rs
 // AUTO_CONFIRM is set only after overlay confirm, never for exploratory menu check.
 
 /// Menu "Check for Updates...". When a staged package is already ready, ask

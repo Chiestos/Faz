@@ -1,6 +1,6 @@
 # Config Agent Guide
 
-The `config` crate owns config loading, Lua integration, schema behavior, proxy settings, versioned defaults, and AI configuration.
+The `config` crate owns config loading, Lua integration, schema behavior, proxy settings, and versioned defaults.
 
 ## Scope
 
@@ -9,7 +9,7 @@ The `config` crate owns config loading, Lua integration, schema behavior, proxy 
 - Lua execution and binding lifecycle
 - schema mapping between Lua and Rust
 - config subscriptions and reload behavior
-- AI model, fast-model, and proxy settings consumed by GUI and CLI flows
+- proxy settings consumed by the update paths and network-facing flows
 - versioned default config and release readiness checks
 
 ## Where to Look
@@ -20,21 +20,13 @@ The `config` crate owns config loading, Lua integration, schema behavior, proxy 
 - `config/src/version.rs`: config version and migration-related constants
 - `assets/macos/Faz.app/Contents/Resources/faz.lua`: bundled fallback config
 
-## Config TUI (`kaku/src/config_tui/` and `kaku/src/tui_core/`)
+## Config TUI (`faz-cli/src/config_tui/` and `faz-cli/src/tui_core/`)
 
 The config TUI is the interactive terminal UI for editing Faz config. It lives in the `kaku` CLI crate, not the `config` crate.
 
-- `kaku/src/config_tui/` - TUI app: `mod.rs` (form state and main loop), `ui.rs` (rendering)
-- `kaku/src/tui_core/` - shared TUI primitives, currently `theme.rs` only (`accent`, `bg`, `muted`, `panel`, `primary`, `red`, `success`, `text_fg`)
-- `tui_core::theme` is consumed by `config_tui/ui.rs`, `ai_config/tui/ui.rs`, and `tui_splash.rs`. New primitives shared by more than one TUI flow belong in `tui_core`, not copied per feature.
-
-## AI Config TUI (`kaku/src/ai_config/`)
-
-The AI config TUI lives in the `kaku` CLI crate and shares terminal UI primitives with `config_tui`.
-
-- Keep `fast_model`, primary model, and proxy settings aligned between CLI config, GUI AI chat, and documentation.
-- Do not duplicate form widgets or debounce behavior outside `kaku/src/tui_core/`.
-- Verify AI config changes against both config parsing and the visible TUI flow.
+- `faz-cli/src/config_tui/` - TUI app: `mod.rs` (form state and main loop), `ui.rs` (rendering)
+- `faz-cli/src/tui_core/` - shared TUI primitives, currently `theme.rs` only (`accent`, `bg`, `muted`, `panel`, `primary`, `red`, `success`, `text_fg`)
+- `tui_core::theme` is consumed by `config_tui/ui.rs` and `tui_splash.rs`. New primitives shared by more than one TUI flow belong in `tui_core`, not copied per feature.
 
 ## Practical Rules
 
