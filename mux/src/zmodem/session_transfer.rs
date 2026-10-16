@@ -296,7 +296,16 @@ impl Transfer {
 
         // Start the relay before spawning so no early bytes are lost. It runs
         // until `stop` is set and the child end closes.
-        let relay = match Relay::start(relay_end, self.pty_master_fd, self.stop.clone()) {
+        // The pane's output parser owns the pty's read side and forwards bytes
+        // to this transfer's socketpair, so the relay must only carry the
+        // child's output back to the pty. A bidirectional relay would race the
+        // parser for the same pty bytes.
+        let relay = match Relay::start_with_mode(
+            relay_end,
+            self.pty_master_fd,
+            self.stop.clone(),
+            crate::zmodem::transfer::RelayMode::ChildToPty,
+        ) {
             Ok(r) => r,
             Err(e) => return Outcome::SpawnFailed(e),
         };

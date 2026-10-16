@@ -161,9 +161,26 @@ pub fn drain(fd: RawFd) {
     let _ = fcntl(fd, FcntlArg::F_SETFL(old));
 }
 
+/// Which directions the relay copies.
+///
+/// zssh owns its pty and therefore reads it, so its relay is bidirectional.
+/// In Faz the pane's output parser already reads the pty and forwards bytes to
+/// the transfer's socketpair, so a relay that also read the pty would race the
+/// parser for the same bytes. Faz therefore uses [`RelayMode::ChildToPty`] and
+/// leaves the pty-to-child direction to the parser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelayMode {
+    /// Both directions. Used when nothing else reads the pty.
+    Bidirectional,
+    /// socketpair -> pty only. The pane's output parser supplies the other
+    /// direction, so the relay must not touch the pty's read side.
+    ChildToPty,
+}
+
 /// Bridges the local child's socketpair and the pty master.
 ///
-/// The thread exits when `stop` is set or either end reports EOF/error.
+/// The thread exits when `stop` is set or the copied direction reports
+/// EOF/error.
 pub struct Relay {
     handle: Option<JoinHandle<()>>,
     /// A dup of the relay end, so the cancel path can inject CAN bytes toward
@@ -177,13 +194,23 @@ impl Relay {
         pty_master_fd: RawFd,
         stop: Arc<AtomicBool>,
     ) -> io::Result<Relay> {
+        Relay::start_with_mode(relay_end, pty_master_fd, stop, RelayMode::Bidirectional)
+    }
+
+    /// Start the relay in a specific mode. See [`RelayMode`].
+    pub fn start_with_mode(
+        relay_end: OwnedFd,
+        pty_master_fd: RawFd,
+        stop: Arc<AtomicBool>,
+        mode: RelayMode,
+    ) -> io::Result<Relay> {
         // Dup so the caller (cancel path) can write CAN bytes without racing
         // ownership with the thread.
         let peer = relay_end.try_clone()?;
 
         let handle = std::thread::Builder::new()
             .name("zmodem-relay".into())
-            .spawn(move || relay_loop(relay_end, pty_master_fd, &stop))?;
+            .spawn(move || relay_loop(relay_end, pty_master_fd, &stop, mode))?;
 
         Ok(Relay {
             handle: Some(handle),
@@ -204,7 +231,12 @@ impl Relay {
     }
 }
 
-fn relay_loop(relay_end: OwnedFd, pty_master_fd: RawFd, stop: &AtomicBool) {
+fn relay_loop(
+    relay_end: OwnedFd,
+    pty_master_fd: RawFd,
+    stop: &AtomicBool,
+    mode: RelayMode,
+) {
     use nix::fcntl::{fcntl, FcntlArg, OFlag};
 
     let sock = relay_end.as_raw_fd();
@@ -237,8 +269,9 @@ fn relay_loop(relay_end: OwnedFd, pty_master_fd: RawFd, stop: &AtomicBool) {
                 CopyResult::Ok => {}
             }
         }
-        // pty master -> socketpair (what the remote sends to the local child)
-        if revents_readable(&fds[1]) {
+        // pty master -> socketpair (what the remote sends to the local child).
+        // Skipped when the pane's parser owns the pty's read side.
+        if mode == RelayMode::Bidirectional && revents_readable(&fds[1]) {
             match relay_copy(pty_master_fd, sock, &mut buf) {
                 CopyResult::Eof | CopyResult::Error => break,
                 CopyResult::Ok => {}
@@ -325,6 +358,56 @@ mod tests {
         write_all(test_side.as_raw_fd(), b"download").expect("pty write");
         let n = unistd::read(child_end.as_raw_fd(), &mut buf).expect("child read");
         assert_eq!(&buf[..n], b"download");
+
+        stop.store(true, Ordering::SeqCst);
+        relay.join();
+    }
+
+
+
+    #[test]
+    fn child_to_pty_mode_carries_child_output_only() {
+        // This is the mode Faz uses: the pane's parser owns the pty's read
+        // side, so the relay must not consume bytes the parser expects.
+        //
+        // socketpair note: writing to one end makes the bytes readable at the
+        // *other* end. So "the parser's view" of the pty is `pty_side`'s peer,
+        // and the relay holding `pty_side` is what could steal them.
+        let (pty_side, parser_side) = make_socketpair().expect("pty stand-in");
+        let (relay_end, child_end) = make_socketpair().expect("child pair");
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let relay = Relay::start_with_mode(
+            relay_end,
+            pty_side.as_raw_fd(),
+            stop.clone(),
+            RelayMode::ChildToPty,
+        )
+        .expect("relay start");
+
+        // child -> pty still works: the relay forwards it to `pty_side`.
+        write_all(child_end.as_raw_fd(), b"to remote").expect("child write");
+        let mut buf = [0u8; 32];
+        let n = unistd::read(parser_side.as_raw_fd(), &mut buf).expect("parser read");
+        assert_eq!(&buf[..n], b"to remote");
+
+        // Put bytes on the pty for the parser. In ChildToPty mode the relay
+        // must leave them alone, so they are still there to read.
+        write_all(parser_side.as_raw_fd(), b"for the parser").expect("pty write");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let n = unistd::read(pty_side.as_raw_fd(), &mut buf).expect("read back from pty side");
+        assert_eq!(
+            &buf[..n],
+            b"for the parser",
+            "the relay stole bytes the parser needed"
+        );
+
+        // Nothing should have reached the child through the relay. `child_end`
+        // is a blocking fd with no data on it, so use a zero-timeout poll
+        // rather than a read that would hang forever on a passing test.
+        let mut pfd = [PollFd::new(borrow(child_end.as_raw_fd()), PollFlags::POLLIN)];
+        let ready = nix::poll::poll(&mut pfd, PollTimeout::from(0u16)).unwrap_or(0);
+        assert_eq!(ready, 0, "child received bytes it should not have");
 
         stop.store(true, Ordering::SeqCst);
         relay.join();
