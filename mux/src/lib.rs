@@ -102,6 +102,7 @@ pub mod tmux;
 pub mod tmux_commands;
 mod tmux_pty;
 pub mod window;
+pub mod zmodem;
 
 use crate::activity::Activity;
 
