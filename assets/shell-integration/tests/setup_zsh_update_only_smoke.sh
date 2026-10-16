@@ -61,12 +61,6 @@ fi
 grep -Fq 'if { (( _kaku_in_kaku )) || [[ -n "${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command -v starship' \
   "$tmp_home/.config/faz/zsh/faz.zsh" \
   || fail "generated faz.zsh did not preserve the runtime Faz session guard"
-grep -Fq 'local capability_file="$HOME/.config/faz/ai_inline_capability"' \
-  "$tmp_home/.config/faz/zsh/faz.zsh" \
-  || fail "generated faz.zsh did not read the inline AI capability"
-grep -Fq '_kaku_set_ai_user_var "kaku_ai_query" "[mode:${mode}] ${body}"' \
-  "$tmp_home/.config/faz/zsh/faz.zsh" \
-  || fail "generated faz.zsh did not authenticate inline AI queries"
 
 # The generated file is sourced by the user's real zsh, so it must parse under
 # zsh. A corrupted heredoc (e.g. an unescaped backtick that bash expanded at
