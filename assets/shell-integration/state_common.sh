@@ -46,7 +46,14 @@ config_update_highlight_language() {
 
 detect_config_highlight_language() {
 	local highlight="$1"
-	if [[ "$highlight" == *[一-龥]* ]]; then
+	# Match CJK Unified Ideographs by their leading UTF-8 byte instead of a
+	# character range. A range like [一-龥] is resolved through the active
+	# collation order, and under LC_ALL=zh_CN.UTF-8 (or C) it fails to match
+	# ordinary Han characters such as 标 or 签, so Chinese entries were
+	# classified as English and leaked into the English output. The byte
+	# class below is locale independent: U+4E00-U+9FFF always encodes as
+	# bytes in the E4-E9 lead range.
+	if [[ "$highlight" == *[$'\xE4'-$'\xE9']* ]]; then
 		printf 'zh\n'
 	else
 		printf 'en\n'
