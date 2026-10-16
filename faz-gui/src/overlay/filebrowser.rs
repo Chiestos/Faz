@@ -266,8 +266,27 @@ impl BrowserState {
                 return Ok(PickResult::Cancelled);
             };
 
-            match event {
-                InputEvent::Resized { .. } => continue,
+            match self.handle_event(event) {
+                EventAction::Continue => {}
+                EventAction::Done(result) => return Ok(result),
+            }
+        }
+    }
+
+    /// Apply one input event, returning what the loop should do next.
+    ///
+    /// Split out of `run_loop` so the key handling can be tested without a
+    /// terminal: the Ctrl chords in particular are easy to break by matching
+    /// lowercase, which never fires.
+    fn handle_event(&mut self, event: InputEvent) -> EventAction {
+        match event {
+            InputEvent::Resized { .. } => {}
+                // Ctrl chords match UPPERCASE letters. `TermWizTerminal::poll_input`
+                // normalizes CTRL+lowercase to CTRL+uppercase before overlays see
+                // it (see `mux/src/termwiztermtab.rs`), and `overlay::selector`
+                // matches the same way. Matching lowercase here silently never
+                // fires.
+
                 InputEvent::Key(KeyEvent {
                     key: KeyCode::UpArrow,
                     ..
@@ -277,11 +296,11 @@ impl BrowserState {
                     ..
                 }) => self.move_down(),
                 InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char('k'),
+                    key: KeyCode::Char('K'),
                     modifiers: Modifiers::CTRL,
                 }) => self.move_up(),
                 InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char('j'),
+                    key: KeyCode::Char('J'),
                     modifiers: Modifiers::CTRL,
                 }) => self.move_down(),
                 InputEvent::Key(KeyEvent {
@@ -289,7 +308,7 @@ impl BrowserState {
                     ..
                 }) => self.activate(),
                 InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char('s'),
+                    key: KeyCode::Char('S'),
                     modifiers: Modifiers::CTRL,
                 }) => self.choose_current_dir(),
                 InputEvent::Key(KeyEvent {
@@ -300,18 +319,27 @@ impl BrowserState {
                     key: KeyCode::LeftArrow,
                     ..
                 }) => self.go_up(),
-                InputEvent::Key(KeyEvent {
-                    key: KeyCode::Escape,
-                    ..
-                })
-                | InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char('q'),
-                    ..
-                }) => return Ok(PickResult::Cancelled),
-                _ => {}
-            }
+            InputEvent::Key(KeyEvent {
+                key: KeyCode::Escape,
+                ..
+            })
+            | InputEvent::Key(KeyEvent {
+                key: KeyCode::Char('q'),
+                ..
+            }) => return EventAction::Done(PickResult::Cancelled),
+            _ => {}
         }
+        EventAction::Continue
     }
+}
+
+/// What `BrowserState::handle_event` decided.
+#[derive(Debug, PartialEq, Eq)]
+enum EventAction {
+    /// Keep looping.
+    Continue,
+    /// Return this result from `run_loop`.
+    Done(PickResult),
 }
 
 /// Render `s` clipped to `width` columns.
@@ -515,6 +543,102 @@ mod tests {
         let clipped = truncate("abcdefghij", 5);
         assert_eq!(clipped.chars().count(), 5);
         assert!(clipped.ends_with('…'));
+    }
+
+    /// Build a key event the way `TermWizTerminal::poll_input` delivers it.
+    fn ctrl(c: char) -> InputEvent {
+        InputEvent::Key(KeyEvent {
+            key: KeyCode::Char(c),
+            modifiers: Modifiers::CTRL,
+        })
+    }
+
+    fn arrow(key: KeyCode) -> InputEvent {
+        InputEvent::Key(KeyEvent {
+            key,
+            modifiers: Modifiers::NONE,
+        })
+    }
+
+    /// Regression for a reported bug: Ctrl-S did nothing after picking a
+    /// directory. `TermWizTerminal::poll_input` normalizes CTRL+lowercase to
+    /// CTRL+uppercase before an overlay sees it, so matching `Char('s')`
+    /// never fires. The Ctrl chords must be matched uppercase.
+    #[test]
+    fn ctrl_s_uppercase_confirms_the_directory() {
+        let dir = fixture();
+        let mut state =
+            BrowserState::new(dir.path().to_path_buf(), PickMode::Directory, "t".into());
+
+        assert_eq!(state.handle_event(ctrl('S')), EventAction::Continue);
+        assert_eq!(
+            state.outcome,
+            Some(PickResult::Chosen(dir.path().to_path_buf())),
+            "Ctrl-S must confirm the directory"
+        );
+    }
+
+    #[test]
+    fn ctrl_j_and_k_move_the_cursor() {
+        let dir = fixture();
+        let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
+
+        state.handle_event(ctrl('J'));
+        assert_eq!(state.cursor, 1);
+        state.handle_event(ctrl('K'));
+        assert_eq!(state.cursor, 0);
+    }
+
+    #[test]
+    fn arrows_move_the_cursor() {
+        let dir = fixture();
+        let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
+        state.handle_event(arrow(KeyCode::DownArrow));
+        assert_eq!(state.cursor, 1);
+        state.handle_event(arrow(KeyCode::UpArrow));
+        assert_eq!(state.cursor, 0);
+    }
+
+    #[test]
+    fn escape_and_q_cancel() {
+        let dir = fixture();
+        for key in ['q'] {
+            let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
+            assert_eq!(
+                state.handle_event(InputEvent::Key(KeyEvent {
+                    key: KeyCode::Char(key),
+                    modifiers: Modifiers::NONE,
+                })),
+                EventAction::Done(PickResult::Cancelled)
+            );
+        }
+        let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
+        assert_eq!(
+            state.handle_event(arrow(KeyCode::Escape)),
+            EventAction::Done(PickResult::Cancelled)
+        );
+    }
+
+    #[test]
+    fn enter_descends_and_backspace_goes_up() {
+        let dir = fixture();
+        let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
+        assert_eq!(state.handle_event(arrow(KeyCode::Enter)), EventAction::Continue);
+        assert_eq!(state.dir, dir.path().join("adir"));
+        state.handle_event(arrow(KeyCode::Backspace));
+        assert_eq!(state.dir, dir.path());
+    }
+
+    #[test]
+    fn lowercase_ctrl_s_does_not_confirm() {
+        // Documents the normalisation this relies on: if the terminal ever
+        // stopped uppercasing, this test would tell us the chord broke rather
+        // than leaving it to a user report.
+        let dir = fixture();
+        let mut state =
+            BrowserState::new(dir.path().to_path_buf(), PickMode::Directory, "t".into());
+        state.handle_event(ctrl('s'));
+        assert_eq!(state.outcome, None);
     }
 
     #[test]
