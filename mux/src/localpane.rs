@@ -434,6 +434,10 @@ impl Pane for LocalPane {
         self.zmodem.finish()
     }
 
+    fn zmodem_state(&self) -> Option<Arc<super::zmodem::state::ZmodemState>> {
+        Some(Arc::clone(&self.zmodem))
+    }
+
     fn zmodem_pty_fd(&self) -> Option<std::os::fd::RawFd> {
         // portable-pty returns `None` on platforms or backends without a raw
         // descriptor; those panes simply cannot carry a transfer.

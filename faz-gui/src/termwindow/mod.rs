@@ -703,6 +703,9 @@ pub enum TermWindowNotif {
     GetConfigOverrides(Sender<wezterm_dynamic::Value>),
     SetConfigOverrides(wezterm_dynamic::Value),
     CancelOverlayForPane(PaneId),
+    /// A ZMODEM transfer on this pane ended, for any reason. Clears the
+    /// pending record so the pane can start another transfer.
+    ZmodemFinished(PaneId),
     CancelOverlayForTab {
         tab_id: TabId,
         pane_id: Option<PaneId>,
@@ -2389,6 +2392,11 @@ impl TermWindow {
                     // so keep this reload silent to avoid noisy toast spam.
                     // Defer the reload to avoid re-entrant borrow of WindowInner.
                     self.schedule_silent_config_reload(window);
+                }
+            }
+            TermWindowNotif::ZmodemFinished(pane_id) => {
+                if self.zmodem_pending.is_some_and(|p| p.pane_id == pane_id) {
+                    self.zmodem_pending = None;
                 }
             }
             TermWindowNotif::CancelOverlayForPane(pane_id) => {
@@ -6667,6 +6675,19 @@ impl TermWindow {
     fn on_zmodem_detected(&mut self, pane_id: PaneId, direction: mux::zmodem::Direction) {
         log::info!("zmodem: session detected on pane {pane_id} ({direction:?})");
 
+        // One session at a time per pane. A second detection while a picker is
+        // open would otherwise stack overlays and race for the same pty.
+        if let Some(pending) = self.zmodem_pending {
+            if pending.pane_id == pane_id {
+                log::warn!(
+                    "zmodem: ignoring a second detection on pane {pane_id} while \
+                     a {:?} session is already pending",
+                    pending.direction
+                );
+                return;
+            }
+        }
+
         let (sz, rz) = mux::zmodem::lrzsz_available();
         if !sz || !rz {
             // Without lrzsz there is no local program to bridge the session to.
@@ -6680,17 +6701,191 @@ impl TermWindow {
                  Install lrzsz (brew install lrzsz) and retry."
             );
             log::warn!("zmodem: {message}");
-            self.show_toast(message);
-            // Release the pane so the terminal keeps working.
-            if let Some(pane) = Mux::get().get_pane(pane_id) {
+            if let Some(window) = self.window.clone() {
+                TermWindow::abandon_zmodem(&window, pane_id);
+            } else if let Some(pane) = Mux::get().get_pane(pane_id) {
                 pane.zmodem_finish();
             }
             return;
         }
 
-        // The destination/source picker is opened by the caller that has the
-        // window handle; this method only reports the detection.
+        // The session is live and the pane is already diverting remote bytes,
+        // so the picker has to be opened now or the transfer stalls with the
+        // remote waiting. The result arrives on the overlay's own thread via
+        // the promise below.
         self.zmodem_pending = Some(ZmodemPending { pane_id, direction });
+        self.open_zmodem_picker(pane_id, direction);
+    }
+
+    /// Open the directory browser for a pending ZMODEM session and start the
+    /// transfer once the user picks a path.
+    ///
+    /// Both directions need a different kind of path, which is why the picker
+    /// mode is derived from the direction rather than chosen by the user:
+    /// receiving writes into a directory, sending reads a file.
+    fn open_zmodem_picker(&mut self, pane_id: PaneId, direction: mux::zmodem::Direction) {
+        let mux = Mux::get();
+        let Some(window) = mux.get_window(self.mux_window_id) else {
+            return;
+        };
+        let Some(tab) = window.iter().find(|t| t.contains_pane(pane_id)).cloned() else {
+            log::warn!("zmodem: pane {pane_id} is not in this window; cannot open picker");
+            return;
+        };
+        drop(window);
+
+        let (mode, title) = match direction {
+            mux::zmodem::Direction::Download => (
+                crate::overlay::filebrowser::PickMode::Directory,
+                "保存远程文件到…".to_string(),
+            ),
+            mux::zmodem::Direction::Upload => (
+                crate::overlay::filebrowser::PickMode::File,
+                "选择要发送的文件".to_string(),
+            ),
+        };
+        // Start where the user most likely wants to be: the shell's cwd for a
+        // send, downloads for a receive.
+        let start_dir = match direction {
+            mux::zmodem::Direction::Download => dirs_next::download_dir()
+                .filter(|p| p.is_dir())
+                .unwrap_or_else(|| config::HOME_DIR.to_path_buf()),
+            mux::zmodem::Direction::Upload => self
+                .pane_cwd(pane_id)
+                .unwrap_or_else(|| config::HOME_DIR.to_path_buf()),
+        };
+
+        let (overlay, future) = crate::overlay::start_overlay(self, &tab, move |_tab_id, term| {
+            crate::overlay::filebrowser::browse(term, start_dir, mode, title)
+        });
+        self.assign_overlay(tab.tab_id(), overlay);
+
+        let Some(window) = self.window.clone() else {
+            log::warn!("zmodem: no window to attach the picker result to");
+            return;
+        };
+        promise::spawn::spawn(async move {
+            let picked = future.await;
+            promise::spawn::spawn_into_main_thread(async move {
+                match picked {
+                    Ok(crate::overlay::filebrowser::PickResult::Chosen(path)) => {
+                        TermWindow::start_zmodem_transfer(
+                            window.clone(),
+                            pane_id,
+                            direction,
+                            path,
+                        );
+                    }
+                    Ok(crate::overlay::filebrowser::PickResult::Cancelled) => {
+                        log::info!("zmodem: picker cancelled for pane {pane_id}");
+                        TermWindow::abandon_zmodem(&window, pane_id);
+                    }
+                    Err(err) => {
+                        log::error!("zmodem: picker failed for pane {pane_id}: {err:#}");
+                        TermWindow::abandon_zmodem(&window, pane_id);
+                    }
+                }
+                anyhow::Result::<()>::Ok(())
+            })
+            .detach();
+            anyhow::Result::<()>::Ok(())
+        })
+        .detach();
+    }
+
+    /// Look up the working directory of a pane, for defaulting the picker.
+    fn pane_cwd(&self, pane_id: PaneId) -> Option<PathBuf> {
+        let mux = Mux::get();
+        let pane = mux.get_pane(pane_id)?;
+        let url = pane.get_current_working_dir(mux::pane::CachePolicy::AllowStale)?;
+        url.to_file_path().ok()
+    }
+
+    /// Release a pane whose ZMODEM session will not be completed.
+    ///
+    /// Clears the diversion so the terminal keeps working, and drops the
+    /// pending record so a later detection is not mistaken for this one.
+    pub fn abandon_zmodem(window: &window::Window, pane_id: PaneId) {
+        if let Some(pane) = Mux::get().get_pane(pane_id) {
+            pane.zmodem_finish();
+        }
+        // Clear the pending record too, otherwise the re-entry guard would
+        // block every later transfer on this pane.
+        window.notify(TermWindowNotif::ZmodemFinished(pane_id));
+    }
+
+    /// Kick off the transfer on a worker thread once the user has chosen a
+    /// path.
+    ///
+    /// `run_transfer` blocks until the transfer ends, so it cannot run on the
+    /// main thread. The `Arc<dyn Pane>` is moved into the thread because the
+    /// transfer writes to the pty fd that pane owns.
+    pub fn start_zmodem_transfer(
+        window: window::Window,
+        pane_id: PaneId,
+        direction: mux::zmodem::Direction,
+        picked: PathBuf,
+    ) {
+        let mux = Mux::get();
+        let Some(pane) = mux.get_pane(pane_id) else {
+            log::warn!("zmodem: pane {pane_id} vanished before the transfer started");
+            return;
+        };
+
+        // Only the pty-owning pane can carry a transfer, and only it has the
+        // ZmodemState the parser consults.
+        let Some(state) = pane.zmodem_state() else {
+            log::warn!("zmodem: pane {pane_id} has no transfer state; not a local pty");
+            return;
+        };
+
+        let command = match direction {
+            mux::zmodem::Direction::Upload => {
+                let name = picked.display().to_string();
+                mux::zmodem::local_command(mux::zmodem::Direction::Upload, &[name], None)
+            }
+            mux::zmodem::Direction::Download => {
+                // `rz` writes into its working directory, so point it at the
+                // directory the user chose.
+                mux::zmodem::local_command(
+                    mux::zmodem::Direction::Download,
+                    &[],
+                    Some(picked.as_path()),
+                )
+            }
+        };
+
+        // A send needs the remote to be running `rz` first. Typing it into the
+        // pane is what makes the send a one-step action for the user instead of
+        // asking them to run `rz` by hand and then pick a file.
+        if direction == mux::zmodem::Direction::Upload {
+            let mut writer = pane.writer();
+            if let Err(err) = writer.write_all(b"rz\n") {
+                log::error!("zmodem: could not start the remote receiver: {err:#}");
+                drop(writer);
+                TermWindow::abandon_zmodem(&window, pane_id);
+                return;
+            }
+        }
+
+        std::thread::Builder::new()
+            .name("zmodem-transfer".into())
+            .spawn(move || {
+                let result = mux::zmodem::run_transfer(&pane, &state, direction, command);
+                match &result {
+                    Ok(outcome) if outcome.succeeded() => {
+                        log::info!("zmodem: transfer on pane {pane_id} finished");
+                    }
+                    Ok(outcome) => log::warn!("zmodem: pane {pane_id} did not finish: {outcome:?}"),
+                    Err(err) => log::error!("zmodem: pane {pane_id} could not start: {err}"),
+                }
+
+                // Clear the pending record so this pane can transfer again.
+                // `notify` on a window that has since closed is a no-op, so
+                // there is nothing to guard against here.
+                window.notify(TermWindowNotif::ZmodemFinished(pane_id));
+            })
+            .ok();
     }
 
     fn cancel_overlay_for_pane(&mut self, pane_id: PaneId) {

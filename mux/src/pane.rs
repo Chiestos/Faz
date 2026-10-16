@@ -341,6 +341,15 @@ pub trait Pane: Downcast + Send + Sync {
     /// thread when a session ends.
     fn zmodem_finish(&self) {}
 
+    /// The pane's ZMODEM state cell, if it can carry a transfer.
+    ///
+    /// Returns the same cell the output parser consults, so installing a sink
+    /// here is what makes the parser divert. `None` for panes with no local
+    /// pty.
+    fn zmodem_state(&self) -> Option<Arc<crate::zmodem::state::ZmodemState>> {
+        None
+    }
+
     /// The pane's pty master fd, used to write a ZMODEM child's output back to
     /// the remote and to switch the tty into a byte-transparent mode.
     ///
