@@ -2,7 +2,7 @@
 authors = ["Wez Furlong"]
 name = "termwiz"
 version = "0.24.0"
-edition = "2018"
+edition = "2021"
 repository = "https://github.com/tw93/Faz"
 description = "Terminal Wizardry for Unix and Windows"
 license = "MIT"
