@@ -4,7 +4,7 @@
 #
 # rustup resolves rust-toolchain.toml over whatever the workflow installed, so a
 # mismatch silently downgrades CI to a minimal toolchain: `components: clippy`
-# and `targets: x86_64-apple-darwin` are installed for the pinned version, then
+# and `targets: aarch64-apple-darwin` are installed for the pinned version, then
 # cargo runs under the toolchain-file version that has neither. The failures read
 # as unrelated ("cargo-clippy is not installed", "can't find crate for `core`"),
 # and only the jobs needing an extra component or target go red, so the break

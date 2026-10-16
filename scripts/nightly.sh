@@ -106,7 +106,7 @@ if [[ "$UPLOAD_ONLY" -eq 0 ]]; then
     # Filter the noisy ranlib warning, but preserve build.sh's exit code via
     # PIPESTATUS: `| grep ... || true` would mask any build failure.
     set +e
-    PROFILE="$PROFILE" BUILD_ARCH=universal OUT_DIR="$OUT_DIR" \
+    PROFILE="$PROFILE" BUILD_ARCH=arm64 OUT_DIR="$OUT_DIR" \
         FAZ_REQUIRE_SIGNED_RELEASE=1 CARGO_FEATURES="$FEATURES" \
         ./scripts/build.sh 2>&1 | grep -v 'ranlib: warning:.*has no symbols'
     BUILD_STATUS=${PIPESTATUS[0]}

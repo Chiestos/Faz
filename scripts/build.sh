@@ -22,12 +22,10 @@ APP_ONLY="${APP_ONLY:-0}"
 BUILD_ARCH="${BUILD_ARCH:-}"
 FAZ_REQUIRE_SIGNED_RELEASE="${FAZ_REQUIRE_SIGNED_RELEASE:-0}"
 
+# Faz ships Apple Silicon only; there is no x86_64 build. `native` and
+# `arm64` are accepted for compatibility with older invocations.
 if [[ -z "$BUILD_ARCH" ]]; then
-	if [[ "$PROFILE" == "release" || "$PROFILE" == "release-opt" ]]; then
-		BUILD_ARCH="universal"
-	else
-		BUILD_ARCH="native"
-	fi
+	BUILD_ARCH="native"
 fi
 
 resolve_native_target() {
@@ -35,11 +33,8 @@ resolve_native_target() {
 	arm64 | aarch64)
 		echo "aarch64-apple-darwin"
 		;;
-	x86_64)
-		echo "x86_64-apple-darwin"
-		;;
 	*)
-		echo "Unsupported macOS architecture: $(uname -m)" >&2
+		echo "Unsupported macOS architecture: $(uname -m) (Faz requires Apple Silicon)" >&2
 		exit 1
 		;;
 	esac
@@ -47,20 +42,19 @@ resolve_native_target() {
 
 resolve_build_targets() {
 	case "$BUILD_ARCH" in
-	universal)
-		echo "aarch64-apple-darwin x86_64-apple-darwin"
-		;;
 	native)
 		resolve_native_target
 		;;
 	arm64)
 		echo "aarch64-apple-darwin"
 		;;
-	x86_64)
-		echo "x86_64-apple-darwin"
+	universal | x86_64)
+		echo "Unsupported BUILD_ARCH=$BUILD_ARCH: Faz ships Apple Silicon only." >&2
+		echo "Use arm64 or native (the default)." >&2
+		exit 1
 		;;
 	*)
-		echo "Unsupported BUILD_ARCH=$BUILD_ARCH (expected: universal, native, arm64, x86_64)" >&2
+		echo "Unsupported BUILD_ARCH=$BUILD_ARCH (expected: native, arm64)" >&2
 		exit 1
 		;;
 	esac
@@ -217,23 +211,11 @@ for target in "${BUILD_TARGETS[@]}"; do
 	CARGO_TERM_PROGRESS_WHEN=auto cargo build --locked ${CARGO_PROFILE_ARGS[@]+"${CARGO_PROFILE_ARGS[@]}"} ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"} --target "$target" --target-dir "$TARGET_DIR" -p faz-gui -p faz-cli
 done
 
-if [[ "$BUILD_ARCH" == "universal" ]]; then
-	BIN_DIR="$TARGET_DIR/universal/$PROFILE_DIR"
-	mkdir -p "$BIN_DIR"
-	for bin in faz faz-gui; do
-		lipo -create \
-			-output "$BIN_DIR/$bin" \
-			"$TARGET_DIR/aarch64-apple-darwin/$PROFILE_DIR/$bin" \
-			"$TARGET_DIR/x86_64-apple-darwin/$PROFILE_DIR/$bin"
-		chmod +x "$BIN_DIR/$bin"
-	done
-else
-	BIN_DIR="$TARGET_DIR/${BUILD_TARGETS[0]}/$PROFILE_DIR"
-fi
+BIN_DIR="$TARGET_DIR/${BUILD_TARGETS[0]}/$PROFILE_DIR"
 
 for bin in faz faz-gui; do
 	echo -n "Built $bin: "
-	lipo -info "$BIN_DIR/$bin"
+	file "$BIN_DIR/$bin"
 done
 
 echo "[2/7] Preparing app bundle..."

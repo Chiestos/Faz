@@ -23,13 +23,13 @@ The `FAZ_ASC_API_KEY_PATH=/dev/null` prefix skips rcodesign and forces the notar
 
 ## Nightly preview package
 
-`scripts/nightly.sh` is authoritative for the rolling `nightly` GitHub prerelease. It builds a release-grade universal app, signs, notarizes, staples, copies `dist/Kaku.dmg` to `dist/Faz-nightly.dmg`, and recreates the `nightly` release. It does not bump versions, create a `V*` tag, update Homebrew, or refresh any stable release surface.
+`scripts/nightly.sh` is authoritative for the rolling `nightly` GitHub prerelease. It builds a release-grade universal app, signs, notarizes, staples, copies `dist/Faz.dmg` to `dist/Faz-nightly.dmg`, and recreates the `nightly` release. It does not bump versions, create a `V*` tag, update Homebrew, or refresh any stable release surface.
 
 Rules:
 
 1. Only publish Nightly from the commit users should test. The script checks that HEAD exists on `tw93/Faz` before deleting the old nightly release.
 2. Do not tell reporters to try Nightly until `./scripts/nightly.sh` has completed and `gh release view nightly -R tw93/Faz --json tagName,targetCommitish,publishedAt,assets,url` points at the intended commit with `Faz-nightly.dmg`.
-3. Do not use `--upload-only` unless the existing `dist/Kaku.dmg` is already known to be a signed, notarized, stapled build from the intended commit.
+3. Do not use `--upload-only` unless the existing `dist/Faz.dmg` is already known to be a signed, notarized, stapled build from the intended commit.
 4. Keep public wording precise: "available in the latest Nightly" only after the check above; otherwise say "fixed on main and will be in the next Nightly or release."
 
 ## One-time machine setup
@@ -112,7 +112,7 @@ When a release fixes a bug outside this list, add the reproduction here so the n
 
 1. **preflight** — clean git, version consistency, gh auth, release notes, config, profile, signing identity, notarization creds.
 2. **stage:checks** — `make fmt-check && make check && make test`. Set `RUN_CLIPPY=1` to add clippy. Set `SKIP_TESTS=1` to skip tests (avoid).
-3. **stage:build** — `./scripts/build.sh`, `PROFILE=release-opt`, `BUILD_ARCH=universal`. Output: `dist/Faz.app`, `dist/Kaku.dmg`, `dist/faz_for_update.zip`, `dist/faz_for_update.zip.sha256`.
+3. **stage:build** — `./scripts/build.sh`, `PROFILE=release-opt`, `BUILD_ARCH=arm64`. Output: `dist/Faz.app`, `dist/Faz.dmg`, `dist/faz_for_update.zip`, `dist/faz_for_update.zip.sha256`.
 4. **stage:notarize** — `./scripts/notarize.sh`. Tries rcodesign first; falls back to notarytool if rcodesign fails and a notarytool profile exists.
 5. **stage:tag** — `git tag -a V<version> -m 'Release V<version>'` then `git push origin V<version>`. Idempotent: reuses an existing tag at HEAD instead of dying.
 6. **stage:upload** — `gh release create V<version>` (or `gh release edit` if it already exists) with the dmg, zip, and sha256. Title is taken from the first `# ` line of `RELEASE_NOTES.md`.

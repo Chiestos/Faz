@@ -50,7 +50,7 @@ RUST_LOG=debug make dev
 ## Build Release
 
 ```bash
-# Build application and DMG (release, universal binary)
+# Build application and DMG (release, Apple Silicon)
 ./scripts/build.sh
 # Outputs: dist/Faz.app and dist/Kaku.dmg
 
@@ -72,4 +72,4 @@ RUST_LOG=debug make dev
 4. Commit and push
 5. Open PR targeting `main`
 
-CI runs format check → unit tests → cargo check → universal build validation in order.
+CI runs format check → unit tests → cargo check → release build validation in order.

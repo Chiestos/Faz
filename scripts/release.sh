@@ -39,7 +39,7 @@ source "$REPO_ROOT/scripts/lib/preflight.sh"
 APP_NAME="Faz"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/dist}"
 PROFILE="${PROFILE:-release-opt}"
-BUILD_ARCH="${BUILD_ARCH:-universal}"
+BUILD_ARCH="${BUILD_ARCH:-arm64}"
 RUN_CLIPPY="${RUN_CLIPPY:-0}"
 SKIP_TESTS="${SKIP_TESTS:-0}"
 GITHUB_REPO="${GITHUB_REPO:-tw93/Faz}"
@@ -115,7 +115,7 @@ check_release_config() {
     "$REPO_ROOT/scripts/check_release_config.sh"
 }
 
-# Release-shaped builds (universal binaries, bundle assembly) are validated by
+# Release-shaped builds (app bundle assembly) are validated by
 # the Build Validation workflow, which only runs on build-pipeline changes,
 # daily, or on dispatch — not on every push. Require its latest run on main to
 # be green before starting the local release ritual, so a broken x86_64 build
