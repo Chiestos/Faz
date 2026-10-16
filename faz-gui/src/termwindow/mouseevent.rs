@@ -65,10 +65,6 @@ fn terminal_context_menu_actions() -> Vec<(&'static str, KeyAssignment)> {
             KeyAssignment::PasteFrom(ClipboardPasteSource::Clipboard),
         ),
         ("Search", KeyAssignment::Search(Pattern::default())),
-        (
-            "AI Chat",
-            KeyAssignment::EmitEvent("kaku-ai-chat".to_string()),
-        ),
         ("Command Palette", KeyAssignment::ActivateCommandPalette),
         (
             "Split Left",

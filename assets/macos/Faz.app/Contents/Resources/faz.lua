@@ -60,7 +60,7 @@ end
 local function default_kaku_user_config_path()
   local xdg = os.getenv('XDG_CONFIG_HOME')
   if xdg and xdg ~= '' then
-    return xdg .. '/kaku/faz.lua'
+    return xdg .. '/faz/faz.lua'
   end
   local home = os.getenv('HOME')
   if home then
@@ -75,8 +75,8 @@ local function is_bundled_kaku_config_path(path)
   end
 
   local normalized = path:gsub('\\', '/')
-  return normalized:match('/Faz%.app/Contents/Resources/kaku%.lua$') ~= nil
-    or normalized:match('/assets/macos/Faz%.app/Contents/Resources/kaku%.lua$') ~= nil
+  return normalized:match('/Faz%.app/Contents/Resources/faz%.lua$') ~= nil
+    or normalized:match('/assets/macos/Faz%.app/Contents/Resources/faz%.lua$') ~= nil
 end
 
 -- Detect if user has custom config overrides in their config file.
@@ -409,7 +409,7 @@ local home_dir = os.getenv("HOME") or wezterm.home_dir
 local kaku_state_dir = home_dir and (home_dir .. "/.config/faz") or nil
 local xdg_config_home = os.getenv("XDG_CONFIG_HOME")
 local kaku_config_dir = xdg_config_home and xdg_config_home ~= ""
-    and (xdg_config_home .. "/kaku")
+    and (xdg_config_home .. "/faz")
   or kaku_state_dir
 local lazygit_state_file = kaku_state_dir and (kaku_state_dir .. "/lazygit_state.json") or nil
 local last_cwd_file = kaku_state_dir and (kaku_state_dir .. "/last_cwd") or nil
@@ -444,7 +444,7 @@ local yazi_command_probe = { value = nil, command = nil, checked_at = 0 }
 local yazi_command_probe_interval_secs = 30
 local sshfs_command_probe = { value = nil, command = nil, checked_at = 0 }
 local sshfs_command_probe_interval_secs = 30
-local remote_files_mount_root = home_dir and (home_dir .. "/Library/Caches/dev.kaku/sshfs") or nil
+local remote_files_mount_root = home_dir and (home_dir .. "/Library/Caches/fun.serendo.faz/sshfs") or nil
 local lazygit_hint_startup_grace_secs = 3
 local lazygit_hint_warmup_until_secs = now_secs() + lazygit_hint_startup_grace_secs
 local lazygit_hint_schedule_cooldown_secs = 8
@@ -1539,7 +1539,7 @@ local function maybe_show_lazygit_hint(window, pane)
     return
   end
 
-  show_lazygit_toast(window, pane, "kaku-toast-try-lazygit")
+  show_lazygit_toast(window, pane, "faz-toast-try-lazygit")
   mark_repo_lazygit_hinted(repo_root)
 end
 
@@ -1584,13 +1584,13 @@ end
 local function launch_lazygit(window, pane)
   pane = resolve_active_pane(window, pane)
   if not pane then
-    show_lazygit_toast(window, pane, "kaku-toast-lazygit-no-pane")
+    show_lazygit_toast(window, pane, "faz-toast-lazygit-no-pane")
     return
   end
 
   local lazygit_cmd = resolve_lazygit_command()
   if not lazygit_cmd then
-    show_lazygit_toast(window, pane, "kaku-toast-lazygit-missing")
+    show_lazygit_toast(window, pane, "faz-toast-lazygit-missing")
     return
   end
 
@@ -1603,7 +1603,7 @@ local function launch_lazygit(window, pane)
     )
   end)
   if not ok then
-    show_lazygit_toast(window, pane, "kaku-toast-lazygit-dispatch-failed")
+    show_lazygit_toast(window, pane, "faz-toast-lazygit-dispatch-failed")
     return
   end
   -- The shell that receives this input owns the real working directory. In a
@@ -1615,7 +1615,7 @@ end
 local function launch_yazi(window, pane)
   pane = resolve_active_pane(window, pane)
   if not pane then
-    show_yazi_toast(window, pane, "kaku-toast-yazi-no-pane")
+    show_yazi_toast(window, pane, "faz-toast-yazi-no-pane")
     return
   end
 
@@ -1627,7 +1627,7 @@ local function launch_yazi(window, pane)
     local yazi_cmd = resolve_yazi_command()
     if not yazi_cmd then
       set_yazi_mode_hint(pane, false)
-      show_yazi_toast(window, pane, "kaku-toast-yazi-missing")
+      show_yazi_toast(window, pane, "faz-toast-yazi-missing")
       return
     end
 
@@ -1648,7 +1648,7 @@ local function launch_yazi(window, pane)
   end)
   if not ok then
     set_yazi_mode_hint(pane, false)
-    show_yazi_toast(window, pane, "kaku-toast-yazi-dispatch-failed")
+    show_yazi_toast(window, pane, "faz-toast-yazi-dispatch-failed")
     return
   end
 end
@@ -2107,15 +2107,15 @@ wezterm.on('window-resized', function(window, _)
   update_window_config(window, dims.is_full_screen, active_pane)
 end)
 
-wezterm.on('kaku-launch-lazygit', function(window, pane)
+wezterm.on('faz-launch-lazygit', function(window, pane)
   launch_lazygit(window, pane)
 end)
 
-wezterm.on('kaku-launch-yazi', function(window, pane)
+wezterm.on('faz-launch-yazi', function(window, pane)
   launch_yazi(window, pane)
 end)
 
-wezterm.on('kaku-open-remote-files', function(window, pane)
+wezterm.on('faz-open-remote-files', function(window, pane)
   open_remote_files(window, pane)
 end)
 
@@ -2384,8 +2384,8 @@ config.use_cap_height_to_scale_fallback_fonts = false
 config.custom_block_glyphs = true
 config.unicode_version = 14
 
--- Do NOT set config.term = 'kaku' here.
--- Remote servers lack the 'kaku' terminfo entry, causing SSH issues like
+-- Do NOT set config.term = 'faz' here.
+-- Remote servers lack the 'faz' terminfo entry, causing SSH issues like
 -- broken backspace/delete keys. Let the default 'xterm-256color' apply.
 -- See: https://github.com/tw93/Faz/issues/130
 
@@ -2847,48 +2847,25 @@ config.keys = (function() return {
     action = wezterm.action.SpawnTab('CurrentPaneDomain'),
   },
 
-  {
-    key = 'A',
-    mods = 'CMD|SHIFT',
-    action = wezterm.action.EmitEvent('run-kaku-ai-config'),
-  },
-
-  -- Cmd+Shift+E: apply latest Faz Assistant suggestion for the active pane
-  {
-    key = 'E',
-    mods = 'CMD|SHIFT',
-    action = wezterm.action.EmitEvent('kaku-ai-apply-last-fix'),
-  },
-
-  -- Cmd+L: open AI chat overlay.
-  -- Default chosen to avoid the macOS system "select previous input source"
-  -- shortcut on Cmd+Shift+Space. To override, add your own binding in
-  -- ~/.config/faz/faz.lua with action = wezterm.action.EmitEvent('kaku-ai-chat').
-  {
-    key = 'l',
-    mods = 'CMD',
-    action = wezterm.action.EmitEvent('kaku-ai-chat'),
-  },
-
   -- Cmd+Shift+G: launch lazygit in current pane
   {
     key = 'G',
     mods = 'CMD|SHIFT',
-    action = wezterm.action.EmitEvent('kaku-launch-lazygit'),
+    action = wezterm.action.EmitEvent('faz-launch-lazygit'),
   },
 
   -- Cmd+Shift+Y: launch yazi in current pane
   {
     key = 'Y',
     mods = 'CMD|SHIFT',
-    action = wezterm.action.EmitEvent('kaku-launch-yazi'),
+    action = wezterm.action.EmitEvent('faz-launch-yazi'),
   },
 
   -- Cmd+Shift+R: open the current SSH domain in a local yazi tab via sshfs
   {
     key = 'R',
     mods = 'CMD|SHIFT',
-    action = wezterm.action.EmitEvent('kaku-open-remote-files'),
+    action = wezterm.action.EmitEvent('faz-open-remote-files'),
   },
 
   -- Window Controls

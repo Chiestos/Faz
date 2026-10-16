@@ -372,10 +372,10 @@ impl CommandDef {
             ) || matches!(
                 action,
                 EmitEvent(name)
-                    if name == "kaku-launch-lazygit"
-                        || name == "kaku-launch-yazi"
-                        || name == "kaku-zmodem-send"
-                        || name == "kaku-zmodem-receive"
+                    if name == "faz-launch-lazygit"
+                        || name == "faz-launch-yazi"
+                        || name == "faz-zmodem-send"
+                        || name == "faz-zmodem-receive"
             )
         }
 
@@ -731,11 +731,11 @@ impl CommandDef {
                 "Shell" => match action {
                     SpawnWindow => 10,
                     SpawnTab(_) | SpawnCommandInNewTab(_) => 20,
-                    EmitEvent(name) if name == "kaku-launch-lazygit" => 20,
-                    EmitEvent(name) if name == "kaku-launch-yazi" => 21,
-                    EmitEvent(name) if name == "kaku-open-remote-files" => 22,
-                    EmitEvent(name) if name == "kaku-zmodem-send" => 23,
-                    EmitEvent(name) if name == "kaku-zmodem-receive" => 24,
+                    EmitEvent(name) if name == "faz-launch-lazygit" => 20,
+                    EmitEvent(name) if name == "faz-launch-yazi" => 21,
+                    EmitEvent(name) if name == "faz-open-remote-files" => 22,
+                    EmitEvent(name) if name == "faz-zmodem-send" => 23,
+                    EmitEvent(name) if name == "faz-zmodem-receive" => 24,
                     SplitVertical(_) | SplitHorizontal(_) | SplitPane(_) => 30,
                     CloseCurrentTab { .. } | CloseCurrentPane { .. } => 40,
                     RestorePreviousWindow => 42,
@@ -1574,7 +1574,7 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
             icon: None,
         },
         EmitEvent(name) => {
-            if name == "kaku-launch-lazygit" {
+            if name == "faz-launch-lazygit" {
                 CommandDef {
                     brief: "Lazygit".into(),
                     doc: "Open lazygit".into(),
@@ -1583,7 +1583,7 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                     menubar: &["Shell"],
                     icon: None,
                 }
-            } else if name == "kaku-launch-yazi" {
+            } else if name == "faz-launch-yazi" {
                 CommandDef {
                     brief: "Yazi File Manager".into(),
                     doc: "Open Yazi file manager".into(),
@@ -1592,7 +1592,7 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                     menubar: &["Shell"],
                     icon: None,
                 }
-            } else if name == "kaku-open-remote-files" {
+            } else if name == "faz-open-remote-files" {
                 CommandDef {
                     brief: "Remote Files".into(),
                     doc: "Open the current SSH domain in a local Yazi tab".into(),
@@ -1601,7 +1601,7 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                     menubar: &["Shell"],
                     icon: None,
                 }
-            } else if name == "kaku-zmodem-send" {
+            } else if name == "faz-zmodem-send" {
                 CommandDef {
                     brief: "Send File…".into(),
                     doc: "Transfer a local file to the remote host with ZMODEM ".into(),
@@ -1613,7 +1613,7 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                     menubar: &["Shell"],
                     icon: None,
                 }
-            } else if name == "kaku-zmodem-receive" {
+            } else if name == "faz-zmodem-receive" {
                 CommandDef {
                     brief: "Receive File…".into(),
                     doc: "Wait for the remote to send a file with ZMODEM, then choose where to save it".into(),
@@ -2622,11 +2622,11 @@ fn compute_default_actions() -> Vec<KeyAssignment> {
         // ----------------- Shell
         SpawnTab(SpawnTabDomain::CurrentPaneDomain),
         SpawnWindow,
-        EmitEvent("kaku-launch-lazygit".to_string()),
-        EmitEvent("kaku-launch-yazi".to_string()),
-        EmitEvent("kaku-open-remote-files".to_string()),
-        EmitEvent("kaku-zmodem-send".to_string()),
-        EmitEvent("kaku-zmodem-receive".to_string()),
+        EmitEvent("faz-launch-lazygit".to_string()),
+        EmitEvent("faz-launch-yazi".to_string()),
+        EmitEvent("faz-open-remote-files".to_string()),
+        EmitEvent("faz-zmodem-send".to_string()),
+        EmitEvent("faz-zmodem-receive".to_string()),
         SplitVertical(SpawnCommand {
             domain: SpawnTabDomain::CurrentPaneDomain,
             ..Default::default()

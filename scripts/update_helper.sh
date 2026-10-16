@@ -109,7 +109,7 @@ for candidate in \
   fi
 done
 
-  echo "kaku: Faz.app not found. Expected /Applications/Faz.app." >&2
+  echo "faz: Faz.app not found. Expected /Applications/Faz.app." >&2
   exit 127
 EOF
 

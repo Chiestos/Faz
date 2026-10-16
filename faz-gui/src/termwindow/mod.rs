@@ -438,27 +438,27 @@ fn bell_notification_message(
 /// Lookup table for simple lazygit/yazi toast messages dispatched via EmitEvent.
 fn lookup_kaku_toast(event_name: &str) -> Option<&'static str> {
     const FAZ_TOAST_MAP: &[(&str, &str)] = &[
-        ("kaku-toast-try-lazygit", "Try Lazygit: Cmd+Shift+G"),
-        ("kaku-toast-lazygit-no-pane", "Lazygit: No active pane"),
+        ("faz-toast-try-lazygit", "Try Lazygit: Cmd+Shift+G"),
+        ("faz-toast-lazygit-no-pane", "Lazygit: No active pane"),
         (
-            "kaku-toast-lazygit-no-cwd",
+            "faz-toast-lazygit-no-cwd",
             "Lazygit: Cannot detect current directory",
         ),
         (
-            "kaku-toast-lazygit-not-git",
+            "faz-toast-lazygit-not-git",
             "Lazygit: Not a git repository",
         ),
         (
-            "kaku-toast-lazygit-missing",
+            "faz-toast-lazygit-missing",
             "Lazygit not found. Run faz init",
         ),
         (
-            "kaku-toast-lazygit-dispatch-failed",
+            "faz-toast-lazygit-dispatch-failed",
             "Lazygit: Dispatch failed",
         ),
-        ("kaku-toast-yazi-no-pane", "Yazi: No active pane"),
-        ("kaku-toast-yazi-missing", "Yazi not found. Run faz init"),
-        ("kaku-toast-yazi-dispatch-failed", "Yazi: Dispatch failed"),
+        ("faz-toast-yazi-no-pane", "Yazi: No active pane"),
+        ("faz-toast-yazi-missing", "Yazi not found. Run faz init"),
+        ("faz-toast-yazi-dispatch-failed", "Yazi: Dispatch failed"),
     ];
     FAZ_TOAST_MAP
         .iter()
@@ -4909,9 +4909,9 @@ impl TermWindow {
                     self.show_toast(msg.to_string());
                 } else if name == "open-kaku-config" {
                     crate::frontend::open_kaku_config();
-                } else if name == "kaku-zmodem-send" {
+                } else if name == "faz-zmodem-send" {
                     self.start_zmodem_send_from_menu(pane.pane_id());
-                } else if name == "kaku-zmodem-receive" {
+                } else if name == "faz-zmodem-receive" {
                     self.start_zmodem_receive_from_menu(pane.pane_id());
                 } else if name == crate::frontend::SET_DEFAULT_TERMINAL_EVENT {
                     match Connection::get() {
