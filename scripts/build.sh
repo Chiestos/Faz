@@ -220,7 +220,7 @@ done
 if [[ "$BUILD_ARCH" == "universal" ]]; then
 	BIN_DIR="$TARGET_DIR/universal/$PROFILE_DIR"
 	mkdir -p "$BIN_DIR"
-	for bin in faz faz-gui k; do
+	for bin in faz faz-gui; do
 		lipo -create \
 			-output "$BIN_DIR/$bin" \
 			"$TARGET_DIR/aarch64-apple-darwin/$PROFILE_DIR/$bin" \
@@ -231,7 +231,7 @@ else
 	BIN_DIR="$TARGET_DIR/${BUILD_TARGETS[0]}/$PROFILE_DIR"
 fi
 
-for bin in faz faz-gui k; do
+for bin in faz faz-gui; do
 	echo -n "Built $bin: "
 	lipo -info "$BIN_DIR/$bin"
 done
@@ -291,7 +291,7 @@ if ! tic -xe faz -o "$APP_BUNDLE_OUT/Contents/Resources/terminfo" termwiz/data/f
 	tic -x -o "$APP_BUNDLE_OUT/Contents/Resources/terminfo" termwiz/data/faz.terminfo
 fi
 
-for bin in faz faz-gui k; do
+for bin in faz faz-gui; do
 	cp "$BIN_DIR/$bin" "$APP_BUNDLE_OUT/Contents/MacOS/$bin"
 	chmod +x "$APP_BUNDLE_OUT/Contents/MacOS/$bin"
 done
@@ -361,7 +361,7 @@ done < <(find "$APP_BUNDLE_OUT/Contents/Frameworks" -type f -name '*.dylib' -pri
 # validates the other executables in Contents/MacOS as nested code and refuses
 # while any of them is still unsigned ("code object is not signed at all,
 # In subcomponent: .../k"), so the helpers must be signed before it.
-for bin in "$APP_BUNDLE_OUT/Contents/MacOS/faz" "$APP_BUNDLE_OUT/Contents/MacOS/k" "$APP_BUNDLE_OUT/Contents/MacOS/faz-gui"; do
+for bin in "$APP_BUNDLE_OUT/Contents/MacOS/faz" "$APP_BUNDLE_OUT/Contents/MacOS/faz-gui"; do
 	codesign_with_retry "${RUNTIME_SIGN_ARGS[@]}" "$bin"
 done
 
