@@ -455,6 +455,15 @@ impl Pane for LocalPane {
 
     fn key_down(&self, key: KeyCode, mods: KeyModifiers) -> Result<(), Error> {
         Mux::get().record_input_for_current_identity();
+        if self.zmodem.is_active() {
+            // A transfer owns the pty's byte stream. Anything typed now lands in
+            // the middle of a ZMODEM frame: the peer's CRC check fails, it
+            // aborts with ZCAN, and the whole transfer dies. zssh dodges this
+            // because the user is at its local prompt while sz/rz runs; Faz
+            // keeps the pane live, so the input has to be refused here.
+            log::debug!("zmodem: dropping key {key:?} pressed during a transfer");
+            return Ok(());
+        }
         if self.tmux_domain.lock().is_some() {
             log::trace!("key: {:?}", key);
             if key == KeyCode::Char('q') {
@@ -509,6 +518,11 @@ impl Pane for LocalPane {
 
     fn send_paste(&self, text: &str) -> Result<(), Error> {
         Mux::get().record_input_for_current_identity();
+        if self.zmodem.is_active() {
+            // See `key_down`: pasted text would corrupt the frame stream.
+            log::debug!("zmodem: dropping {} pasted byte(s) during a transfer", text.len());
+            return Ok(());
+        }
         if self.tmux_domain.lock().is_some() {
             Ok(())
         } else {
