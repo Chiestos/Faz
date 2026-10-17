@@ -138,6 +138,30 @@ fn find_header(haystack: &[u8]) -> Option<(usize, Initiator)> {
     None
 }
 
+/// Offset of the last complete control frame in `bytes`, if any.
+///
+/// A peer waiting for its counterpart retransmits its opening frame (ZRINIT
+/// from `rz`, ZRQINIT from `sz`) every few seconds. Those retransmissions pile
+/// up while the destination is being chosen, and handing the local child the
+/// whole pile makes it see a peer that restarted its side of the handshake mid
+/// conversation — which it answers with a CAN burst that aborts the transfer.
+///
+/// Only the newest copy describes the state the peer is actually in, so this
+/// returns where it starts and the caller drops everything before it.
+pub fn last_control_frame_start(bytes: &[u8]) -> Option<usize> {
+    let mut last = None;
+    let mut i = 0;
+    while i + 3 <= bytes.len() {
+        if bytes[i] == b'*' && bytes[i + 1] == b'*' && bytes[i + 2] == ZDLE {
+            last = Some(i);
+            i += 3;
+            continue;
+        }
+        i += 1;
+    }
+    last
+}
+
 /// Decode the initiator from a ZHEX frame type at `idx`, if present.
 fn initiator_at(buf: &[u8], idx: usize) -> Initiator {
     // ZHEX: 'B' then two hex digits.
@@ -326,5 +350,44 @@ mod tests {
         d.reset();
         // A bare ZDLE after reset must not complete a stale header.
         assert_eq!(d.scan(&[ZDLE, b'B', b'0', b'0']), ScanResult::NotStarted);
+    }
+
+    /// A complete ZRINIT as `rz` emits it: 21 bytes.
+    fn zrinit() -> Vec<u8> {
+        let mut v = b"**".to_vec();
+        v.push(ZDLE);
+        v.extend_from_slice(b"B0100000023be50\r\x8a\x11");
+        v
+    }
+
+    #[test]
+    fn last_control_frame_finds_a_single_header() {
+        let frame = zrinit();
+        assert_eq!(last_control_frame_start(&frame), Some(0));
+    }
+
+    #[test]
+    fn last_control_frame_points_at_the_newest_retransmission() {
+        // While the picker is open the peer keeps repeating ZRINIT. Replaying
+        // every copy makes the child think the handshake restarted.
+        let frame = zrinit();
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&frame);
+        buf.extend_from_slice(&frame);
+        assert_eq!(last_control_frame_start(&buf), Some(frame.len()));
+    }
+
+    #[test]
+    fn last_control_frame_is_none_without_a_header() {
+        assert_eq!(last_control_frame_start(b"plain shell output"), None);
+        assert_eq!(last_control_frame_start(b""), None);
+    }
+
+    #[test]
+    fn last_control_frame_ignores_output_before_the_header() {
+        let frame = zrinit();
+        let mut buf = b"noise\r\n".to_vec();
+        buf.extend_from_slice(&frame);
+        assert_eq!(last_control_frame_start(&buf), Some(7));
     }
 }

@@ -130,10 +130,26 @@ pub fn run_transfer(
 
             let buffered = state.buffered();
             if !buffered.is_empty() {
-                match crate::zmodem::transfer::write_all(sink, &buffered) {
+                // The peer retransmits its opening frame while the user picks a
+                // destination, so the buffer usually holds several copies of
+                // the same handshake. Replaying all of them makes the local
+                // child see a peer restarting mid-conversation, and lrzsz
+                // answers that with a CAN burst — the transfer dies on its
+                // first block. Only the newest copy describes where the peer
+                // actually is.
+                let replay_from = crate::zmodem::detect::last_control_frame_start(&buffered)
+                    .unwrap_or(0);
+                let replay = &buffered[replay_from..];
+                match crate::zmodem::transfer::write_all(sink, replay) {
                     Ok(_) => log::info!(
-                        "zmodem: replayed {} buffered byte(s) into the transfer",
-                        buffered.len()
+                        "zmodem: replayed {} of {} buffered byte(s) into the transfer{}",
+                        replay.len(),
+                        buffered.len(),
+                        if replay_from > 0 {
+                            format!(" (dropped {replay_from} superseded byte(s))")
+                        } else {
+                            String::new()
+                        }
                     ),
                     Err(err) => {
                         log::warn!("zmodem: replaying buffered bytes failed: {err:#}");
