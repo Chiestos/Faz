@@ -79,6 +79,18 @@ pub fn write_all(fd: RawFd, mut data: &[u8]) -> io::Result<usize> {
     Ok(total)
 }
 
+/// Size of the socketpair buffer between the relay and the local child.
+///
+/// The default is 8 KiB, which holds about 40 ms of a typical link. In Faz the
+/// pane's output parser — not the relay thread — feeds the peer-to-child
+/// direction, so every time this buffer fills the parser blocks in
+/// `write_all` and stops reading the pty; the ssh client then stalls on its own
+/// write, and the whole transfer lurches. The child cannot receive faster than
+/// it processes frames, so the buffer is what absorbs the difference. zssh does
+/// not need this because its relay thread blocks alone, with nothing else
+/// waiting behind it.
+pub const SOCKETPAIR_BUFFER: usize = 1024 * 1024;
+
 /// Create a connected `AF_UNIX` stream socketpair.
 ///
 /// Returns `(relay_end, child_end)`: the relay thread owns `relay_end`;
@@ -92,7 +104,28 @@ pub fn make_socketpair() -> io::Result<(OwnedFd, OwnedFd)> {
     }
     let a = unsafe { OwnedFd::from_raw_fd(fds[0]) };
     let b = unsafe { OwnedFd::from_raw_fd(fds[1]) };
+    grow_socket_buffer(&a);
+    grow_socket_buffer(&b);
     Ok((a, b))
+}
+
+/// Widen a socketpair buffer so a slow reader does not stall the writer.
+///
+/// Best-effort: the kernel caps the value at `net.local.stream.sendspace`, and
+/// a refusal is not a reason to fail the transfer.
+fn grow_socket_buffer(fd: &OwnedFd) {
+    let size = SOCKETPAIR_BUFFER as libc::c_int;
+    for option in [libc::SO_SNDBUF, libc::SO_RCVBUF] {
+        unsafe {
+            libc::setsockopt(
+                fd.as_raw_fd(),
+                libc::SOL_SOCKET,
+                option,
+                &size as *const libc::c_int as *const _,
+                std::mem::size_of_val(&size) as libc::socklen_t,
+            );
+        }
+    }
 }
 
 /// Prepare a pty fd to carry raw binary ZMODEM: 8-bit clean, no flow control,
@@ -323,6 +356,32 @@ pub const CANCEL_SEQUENCE: [u8; 32] = [0x18u8; 32];
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn socketpair_buffer_is_widened_beyond_the_default() {
+        // The default is 8 KiB, which stalls the pane's parser whenever the
+        // child falls behind. The kernel caps the request, so assert growth
+        // rather than an exact size.
+        let (a, _b) = make_socketpair().expect("socketpair");
+        for option in [libc::SO_SNDBUF, libc::SO_RCVBUF] {
+            let mut value: libc::c_int = 0;
+            let mut len = std::mem::size_of_val(&value) as libc::socklen_t;
+            let rc = unsafe {
+                libc::getsockopt(
+                    a.as_raw_fd(),
+                    libc::SOL_SOCKET,
+                    option,
+                    &mut value as *mut libc::c_int as *mut _,
+                    &mut len,
+                )
+            };
+            assert_eq!(rc, 0, "getsockopt failed");
+            assert!(
+                value > 64 * 1024,
+                "socketpair buffer is still {value} bytes; the parser would stall"
+            );
+        }
+    }
 
     #[test]
     fn socketpair_is_connected_both_ways() {
