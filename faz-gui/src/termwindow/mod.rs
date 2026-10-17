@@ -6965,7 +6965,15 @@ impl TermWindow {
         if let Some(pane) = Mux::get().get_pane(pane_id) {
             let cancelled = match (pane.zmodem_state(), pane.zmodem_pty_fd()) {
                 (Some(state), Some(pty_fd)) => state.cancel_pending(pty_fd),
-                _ => false,
+                (state, fd) => {
+                    log::warn!(
+                        "zmodem: abandon on pane {pane_id} could not notify the remote \
+                         (state present: {}, pty fd present: {})",
+                        state.is_some(),
+                        fd.is_some()
+                    );
+                    false
+                }
             };
             if !cancelled {
                 // No pending session (or no pty): just restore normal parsing.

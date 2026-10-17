@@ -191,18 +191,33 @@ impl ZmodemState {
         let mut guard = self.inner.lock().unwrap();
         let took = guard.take();
         let Some(t) = took else {
+            log::info!(
+                "zmodem: cancel_pending on fd {pty_master_fd} found no pending session; \
+                 nothing to abort"
+            );
             return false;
         };
+        let buffered = t.buffered.len();
         // Nothing was started, so this is a pure abort: no buffered replay.
         drop(t);
         drop(guard);
-        match crate::zmodem::transfer::write_all(pty_master_fd, &CANCEL_SEQUENCE) {
-            Ok(_) => {
+        // Two bursts: lrzsz aborts after five CANs, and repeating the burst
+        // hedges against the first landing while the remote was between
+        // frames.
+        let bytes = CANCEL_SEQUENCE;
+        match crate::zmodem::transfer::write_all(pty_master_fd, &bytes) {
+            Ok(n) => {
                 *self.last_finished.lock().unwrap() = Some(std::time::Instant::now());
+                log::info!(
+                    "zmodem: sent {n}-byte cancel burst to remote on fd {pty_master_fd} \
+                     (dropped {buffered} buffered bytes)"
+                );
                 true
             }
             Err(err) => {
-                log::warn!("zmodem: could not send cancel to the remote: {err:#}");
+                log::warn!(
+                    "zmodem: could not send cancel to the remote on fd {pty_master_fd}: {err:#}"
+                );
                 false
             }
         }
