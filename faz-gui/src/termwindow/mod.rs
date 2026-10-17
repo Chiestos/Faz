@@ -6954,9 +6954,23 @@ impl TermWindow {
         window.notify(TermWindowNotif::ZmodemDestinationChosen { pane_id, destination });
     }
 
+    /// The user backed out, so tell the remote to stop waiting.
+    ///
+    /// A picker that closes without a choice is an abort, not a pause: the
+    /// remote is sitting in `rz`/`sz` waiting for a transfer that will never
+    /// start. Leaving it there wedges that pane until the peer times out, and
+    /// the frames it keeps retransmitting look like new sessions. Sending the
+    /// ZMODEM CAN burst makes the remote exit.
     pub fn abandon_zmodem(window: &window::Window, pane_id: PaneId) {
         if let Some(pane) = Mux::get().get_pane(pane_id) {
-            pane.zmodem_finish();
+            let cancelled = match (pane.zmodem_state(), pane.zmodem_pty_fd()) {
+                (Some(state), Some(pty_fd)) => state.cancel_pending(pty_fd),
+                _ => false,
+            };
+            if !cancelled {
+                // No pending session (or no pty): just restore normal parsing.
+                pane.zmodem_finish();
+            }
         }
         // Clear the pending record too, otherwise the re-entry guard would
         // block every later transfer on this pane.

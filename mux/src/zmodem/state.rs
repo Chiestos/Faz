@@ -16,6 +16,8 @@ use std::os::fd::{OwnedFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use super::transfer::CANCEL_SEQUENCE;
+
 /// How much of a detected session to hold while the user picks a destination.
 ///
 /// The remote's first frames arrive before `rz` can be attached — `rz` needs
@@ -38,6 +40,11 @@ struct ActiveTransfer {
     /// Bytes that arrived before a sink existed. Drained into the sink on
     /// [`ZmodemState::begin`].
     buffered: Vec<u8>,
+    /// Whether the parser should still divert bytes into `buffered`.
+    ///
+    /// True while the session is open with no sink; false once a sink is
+    /// installed or the session is aborted.
+    buffering: bool,
 }
 
 /// Shared per-pane ZMODEM state.
@@ -71,6 +78,7 @@ impl ZmodemState {
             sink: Some(sink),
             cancel: Arc::clone(&cancel),
             buffered,
+            buffering: false,
         });
         cancel
     }
@@ -89,7 +97,7 @@ impl ZmodemState {
     /// Is a session open with no sink installed yet?
     pub fn is_buffering(&self) -> bool {
         let guard = self.inner.lock().unwrap();
-        guard.as_ref().is_some_and(|t| t.sink.is_none())
+        guard.as_ref().is_some_and(|t| t.buffering)
     }
 
     /// Bytes received before a sink was installed, in arrival order.
@@ -115,6 +123,11 @@ impl ZmodemState {
             // A sink exists; the caller should have written there instead.
             return true;
         }
+        if !t.buffering {
+            // The session was abandoned; keep the old handshake, ignore new
+            // bytes so the pane is not frozen.
+            return true;
+        }
         if t.buffered.len() + bytes.len() > PENDING_CAPACITY {
             return false;
         }
@@ -131,6 +144,7 @@ impl ZmodemState {
                 sink: None,
                 cancel: Arc::new(AtomicBool::new(false)),
                 buffered: Vec::new(),
+                buffering: true,
             });
         }
     }
@@ -166,6 +180,34 @@ impl ZmodemState {
         *self.last_finished.lock().unwrap() = Some(std::time::Instant::now());
     }
 
+    /// Abort a pending session that never reached a transfer.
+    ///
+    /// No child exists yet, so nothing will send CAN on our behalf and the
+    /// remote stays in `rz`/`sz` until it times out — which is what left the
+    /// pane wedged. This writes the CAN burst straight to the pty.
+    ///
+    /// Returns whether the write happened.
+    pub fn cancel_pending(&self, pty_master_fd: std::os::fd::RawFd) -> bool {
+        let mut guard = self.inner.lock().unwrap();
+        let took = guard.take();
+        let Some(t) = took else {
+            return false;
+        };
+        // Nothing was started, so this is a pure abort: no buffered replay.
+        drop(t);
+        drop(guard);
+        match crate::zmodem::transfer::write_all(pty_master_fd, &CANCEL_SEQUENCE) {
+            Ok(_) => {
+                *self.last_finished.lock().unwrap() = Some(std::time::Instant::now());
+                true
+            }
+            Err(err) => {
+                log::warn!("zmodem: could not send cancel to the remote: {err:#}");
+                false
+            }
+        }
+    }
+
     /// Ask an in-flight transfer to abort. Sends nothing itself; the transfer
     /// thread owns the CAN burst so it travels the same path as the payload.
     pub fn cancel(&self) {
@@ -191,6 +233,7 @@ impl std::fmt::Debug for ZmodemState {
 mod tests {
     use super::*;
     use crate::zmodem::transfer::make_socketpair;
+    use std::os::fd::AsRawFd;
 
     #[test]
     fn idle_state_has_no_sink() {
@@ -301,6 +344,35 @@ mod tests {
         state.begin(relay_end);
         assert!(state.buffer_incoming(b"ignored"));
         assert!(state.buffered().is_empty());
+    }
+
+    #[test]
+    fn cancelling_a_pending_session_writes_the_can_burst() {
+        // No child exists, so nothing else would tell the remote to stop. The
+        // write goes straight to the pty; a socketpair stands in for it here.
+        let (pty_side, remote_side) = crate::zmodem::transfer::make_socketpair().expect("pair");
+        let state = ZmodemState::new();
+        state.begin_buffering();
+        state.buffer_incoming(b"**\x18B01");
+
+        let wrote = state.cancel_pending(pty_side.as_raw_fd());
+        assert!(wrote, "cancel must reach the pty");
+
+        let mut buf = [0u8; 64];
+        let n = nix::unistd::read(remote_side.as_raw_fd(), &mut buf).expect("read");
+        assert!(n >= 5, "lrzsz aborts after 5 CANs, got {n}");
+        assert!(buf[..n].iter().all(|b| *b == 0x18));
+
+        assert!(!state.is_buffering(), "session is over");
+        assert!(state.buffered().is_empty(), "nothing replays later");
+        assert!(state.in_cooldown(), "retransmits are ignored for a while");
+    }
+
+    #[test]
+    fn cancelling_without_a_session_is_a_no_op() {
+        let (pty_side, _remote) = crate::zmodem::transfer::make_socketpair().expect("pair");
+        let state = ZmodemState::new();
+        assert!(!state.cancel_pending(pty_side.as_raw_fd()));
     }
 
     #[test]
