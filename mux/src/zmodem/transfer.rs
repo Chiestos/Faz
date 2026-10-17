@@ -282,6 +282,8 @@ fn relay_loop(
         }
     }
 
+    let mut child_to_pty: u64 = 0;
+    let mut pty_to_child: u64 = 0;
     let mut buf = [0u8; 64 * 1024];
     while !stop.load(Ordering::SeqCst) {
         let mut fds = [
@@ -297,26 +299,35 @@ fn relay_loop(
 
         // socketpair -> pty master (what the local child sends to the remote)
         if revents_readable(&fds[0]) {
-            match relay_copy(sock, pty_master_fd, &mut buf) {
-                CopyResult::Eof | CopyResult::Error => break,
-                CopyResult::Ok => {}
-            }
+            child_to_pty += relay_copy(sock, pty_master_fd, &mut buf).bytes();
         }
         // pty master -> socketpair (what the remote sends to the local child).
         // Skipped when the pane's parser owns the pty's read side.
         if mode == RelayMode::Bidirectional && revents_readable(&fds[1]) {
-            match relay_copy(pty_master_fd, sock, &mut buf) {
-                CopyResult::Eof | CopyResult::Error => break,
-                CopyResult::Ok => {}
-            }
+            pty_to_child += relay_copy(pty_master_fd, sock, &mut buf).bytes();
         }
     }
+
+    log::info!(
+        "zmodem: relay ended ({mode:?}): child->pty {child_to_pty} byte(s), \
+         pty->child {pty_to_child} byte(s)"
+    );
 }
 
 enum CopyResult {
-    Ok,
+    Ok(usize),
     Eof,
     Error,
+}
+
+impl CopyResult {
+    /// Bytes moved by this call, for the relay's closing tally.
+    fn bytes(&self) -> u64 {
+        match self {
+            CopyResult::Ok(n) => *n as u64,
+            CopyResult::Eof | CopyResult::Error => 0,
+        }
+    }
 }
 
 /// Read once from `from` and write it all to `to`, handling non-blocking
@@ -339,9 +350,9 @@ fn relay_copy(from: RawFd, to: RawFd, buf: &mut [u8]) -> CopyResult {
                     Err(_) => return CopyResult::Error,
                 }
             }
-            CopyResult::Ok
+            CopyResult::Ok(n)
         }
-        Err(nix::errno::Errno::EINTR) | Err(nix::errno::Errno::EAGAIN) => CopyResult::Ok,
+        Err(nix::errno::Errno::EINTR) | Err(nix::errno::Errno::EAGAIN) => CopyResult::Ok(0),
         Err(_) => CopyResult::Error,
     }
 }
