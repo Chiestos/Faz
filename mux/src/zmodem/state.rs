@@ -44,6 +44,10 @@ struct ActiveTransfer {
 #[derive(Default)]
 pub struct ZmodemState {
     inner: Mutex<Option<ActiveTransfer>>,
+    /// When the last session ended. Used to ignore protocol frames a peer keeps
+    /// retransmitting after a transfer, which would otherwise be detected as a
+    /// new incoming session and prompt the user again.
+    last_finished: Mutex<Option<std::time::Instant>>,
 }
 
 impl ZmodemState {
@@ -131,6 +135,23 @@ impl ZmodemState {
         }
     }
 
+    /// Is a session too recent for a new detection to be plausible?
+    ///
+    /// A peer that did not see the final frame keeps retransmitting its header
+    /// for a while. Those frames look exactly like a new session starting, and
+    /// prompting the user for a transfer they did not ask for is worse than
+    /// missing one they did: they can start it from the menu.
+    pub fn in_cooldown(&self) -> bool {
+        /// Long enough to cover lrzsz's retry interval, short enough that a
+        /// user who starts a real transfer right after one finishes is not
+        /// blocked for long.
+        const COOLDOWN: std::time::Duration = std::time::Duration::from_secs(3);
+        self.last_finished
+            .lock()
+            .unwrap()
+            .is_some_and(|t| t.elapsed() < COOLDOWN)
+    }
+
     /// End the transfer and put the parser back into normal parsing.
     ///
     /// Dropping the sink closes the relay end, which makes the relay thread
@@ -141,6 +162,8 @@ impl ZmodemState {
             t.sink = None;
             t.buffered.clear();
         }
+        drop(guard);
+        *self.last_finished.lock().unwrap() = Some(std::time::Instant::now());
     }
 
     /// Ask an in-flight transfer to abort. Sends nothing itself; the transfer
@@ -288,6 +311,22 @@ mod tests {
         state.finish();
         assert!(!state.is_buffering());
         assert!(state.buffered().is_empty());
+    }
+
+    #[test]
+    fn a_finished_session_puts_the_pane_in_cooldown() {
+        let state = ZmodemState::new();
+        assert!(!state.in_cooldown(), "nothing finished yet");
+
+        let (relay_end, _child) = make_socketpair().expect("socketpair");
+        state.begin(relay_end);
+        assert!(!state.in_cooldown(), "an active transfer is not a cooldown");
+
+        state.finish();
+        assert!(
+            state.in_cooldown(),
+            "a peer retransmitting after the transfer ends must not be detected"
+        );
     }
 
     #[test]

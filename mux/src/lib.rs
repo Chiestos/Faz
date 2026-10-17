@@ -383,6 +383,13 @@ fn notify_zmodem_detected(
     }
 }
 
+/// Is this pane too soon after a finished session to trust a detection?
+fn pane_in_zmodem_cooldown(pane: &Weak<dyn Pane>) -> bool {
+    pane.upgrade()
+        .and_then(|p| p.zmodem_state())
+        .is_some_and(|state| state.in_cooldown())
+}
+
 /// Is this pane holding a detected session that has no sink yet?
 fn pane_is_buffering_zmodem(pane: &Weak<dyn Pane>) -> bool {
     pane.upgrade()
@@ -541,6 +548,14 @@ fn parse_buffered_data(
                 // would treat protocol bytes as terminal output.
                 if pane_is_buffering_zmodem(&pane) {
                     buffer_detected_zmodem(&pane, &buf[..size]);
+                    continue;
+                }
+
+                // A peer that missed the closing frame retransmits its header,
+                // which looks exactly like a new session. Drop those bytes
+                // rather than detecting, and rather than parsing: they are
+                // protocol data, not terminal output.
+                if pane_in_zmodem_cooldown(&pane) {
                     continue;
                 }
 

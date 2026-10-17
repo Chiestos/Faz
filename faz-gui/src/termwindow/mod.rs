@@ -7004,18 +7004,13 @@ impl TermWindow {
             }
         };
 
-        // A send needs the remote to be running `rz` first. Typing it into the
-        // pane is what makes the send a one-step action for the user instead of
-        // asking them to run `rz` by hand and then pick a file.
-        if direction == mux::zmodem::Direction::Upload {
-            let mut writer = pane.writer();
-            if let Err(err) = writer.write_all(b"rz\n") {
-                log::error!("zmodem: could not start the remote receiver: {err:#}");
-                drop(writer);
-                TermWindow::abandon_zmodem(&window, pane_id);
-                return;
-            }
-        }
+        // No `rz` is injected here on purpose. lrzsz's `sz` emits a literal
+        // `rz\r` on its own before the first protocol frame; forwarded to the
+        // remote shell, that *is* how the receiver gets started, and it is how
+        // zssh does it. Typing `rz` as well started a second receiver that
+        // fought the first one over the same pty: the transfer appeared to
+        // succeed while the remote `rz` never exited, and its retried frames
+        // were later mistaken for a new incoming session.
 
         std::thread::Builder::new()
             .name("zmodem-transfer".into())

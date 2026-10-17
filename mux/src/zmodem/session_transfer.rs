@@ -21,9 +21,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::transfer::{
-    drain, make_socketpair, prepare_transfer_tty, write_all, Relay, CANCEL_SEQUENCE,
-};
+use super::transfer::{make_socketpair, prepare_transfer_tty, write_all, Relay, CANCEL_SEQUENCE};
 
 /// Which direction a transfer runs in, which decides the local child.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +49,13 @@ impl Direction {
         }
     }
 }
+
+/// How long the relay keeps forwarding after the child exits.
+///
+/// Covers the child's final frame travelling through the socketpair, the relay,
+/// and the pty's output buffer. Long enough for a slow link to accept the last
+/// block; short enough that a dead peer does not pin the thread.
+pub const RELAY_GRACE: Duration = Duration::from_secs(1);
 
 /// How long to wait for the child after the relay stops before declaring the
 /// transfer stuck. Generous: a large transfer over a slow link can take a
@@ -359,16 +364,21 @@ impl Transfer {
 
         let outcome = self.supervise();
 
-        // Tear down the relay: signal stop, then join.
+        // Let the relay run a little longer after the child exits.
+        //
+        // `sz` writes its terminating ZFIN just before exiting, and the remote
+        // `rz` will not finish until it sees that frame. Stopping the relay the
+        // instant the child is reaped races that write: the frame can still be
+        // in the socketpair, or in the pty's buffer, or in flight to the peer.
+        // A short grace period lets the relay forward it and lets the pty flush.
+        //
+        // Not unbounded: a peer that never reads would otherwise hold the
+        // thread, and the pane with it.
+        if !self.is_cancelled() {
+            std::thread::sleep(RELAY_GRACE);
+        }
         self.stop.store(true, Ordering::SeqCst);
         relay.join();
-
-        // Purge leftover protocol bytes so they don't reach the terminal as
-        // invalid UTF-8.
-        drain(self.pty_master_fd);
-        if let Some(fd) = self.pty_slave_fd {
-            drain(fd);
-        }
         self.cancel_fd = None;
 
         self.restore();
