@@ -438,6 +438,10 @@ impl Pane for LocalPane {
         Some(Arc::clone(&self.zmodem))
     }
 
+    fn zmodem_pty_slave_path(&self) -> Option<std::path::PathBuf> {
+        self.pty.lock().tty_name()
+    }
+
     fn zmodem_pty_fd(&self) -> Option<std::os::fd::RawFd> {
         // portable-pty returns `None` on platforms or backends without a raw
         // descriptor; those panes simply cannot carry a transfer.

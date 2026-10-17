@@ -350,6 +350,16 @@ pub trait Pane: Downcast + Send + Sync {
         None
     }
 
+    /// Path to the pane's pty slave, e.g. `/dev/ttys004`.
+    ///
+    /// A ZMODEM transfer has to put the *slave* into a byte-transparent mode:
+    /// termios belongs to the slave, so setting it on the master does nothing.
+    /// Without this the remote shell's line discipline mangles the binary
+    /// payload and the transfer dies partway through.
+    fn zmodem_pty_slave_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+
     /// The pane's pty master fd, used to write a ZMODEM child's output back to
     /// the remote and to switch the tty into a byte-transparent mode.
     ///

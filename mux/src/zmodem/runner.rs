@@ -68,6 +68,24 @@ pub fn run_transfer(
         return Err(StartError::NoPty);
     };
 
+    // The transfer needs the *slave* to be byte-transparent, not the master:
+    // termios is a slave property, and the remote shell's line discipline
+    // (ICRNL, IXON, ISTRIP) corrupts an 8-bit payload. Opening the slave by
+    // path is how this process gets at it — portable-pty only hands out the
+    // master fd.
+    let slave = pane.zmodem_pty_slave_path().and_then(|path| {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .map(std::os::fd::OwnedFd::from)
+            .map_err(|err| {
+                log::warn!("zmodem: cannot open pty slave {}: {err}", path.display());
+                err
+            })
+            .ok()
+    });
+
     // The pane may have started buffering before this transfer existed, in
     // which case `begin` carries those bytes over. Drain them into the child
     // once the sink is live, or the remote's opening frames are lost.
@@ -75,7 +93,16 @@ pub fn run_transfer(
     // transfer is happening rather than in a separate window. It is text, not
     // protocol data, so it takes the normal parsing path.
     let progress_pane = Arc::clone(pane);
-    let transfer = Transfer::start(direction, pty_fd, command)
+    let transfer = match slave {
+        Some(slave) => {
+            use std::os::fd::AsRawFd;
+            Transfer::start_with_slave(direction, pty_fd, slave.as_raw_fd(), command)
+                // Keep the slave open for the transfer's lifetime: closing it
+                // would let the pty revert to the shell's termios mid-session.
+                .on_slave_keepalive(slave)
+        }
+        None => Transfer::start(direction, pty_fd, command),
+    }
         .on_progress(move |bytes: &[u8]| {
             let mut parser = termwiz::escape::parser::Parser::new();
             let mut actions = Vec::new();

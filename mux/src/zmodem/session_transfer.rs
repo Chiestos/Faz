@@ -171,6 +171,10 @@ pub struct Transfer {
     progress_sink: Box<dyn FnMut(&[u8]) + Send>,
     /// Stops the progress reader thread.
     progress_stop: Arc<AtomicBool>,
+    /// The pty slave, kept open for the transfer's lifetime so its termios
+    /// stays under our control. Dropping it would let the shell's settings
+    /// come back mid-session.
+    slave_keepalive: Option<std::os::fd::OwnedFd>,
 }
 
 /// How to launch the local child. Production uses [`Spawner::Real`]; tests
@@ -274,7 +278,17 @@ impl Transfer {
             on_sink_ready: None,
             progress_sink: Box::new(|_: &[u8]| {}),
             progress_stop: Arc::new(AtomicBool::new(false)),
+            slave_keepalive: None,
         }
+    }
+
+    /// Hold `slave` open for the transfer's lifetime.
+    ///
+    /// The caller opens the pty slave by path to change its termios; keeping
+    /// the handle here means it cannot be closed underneath the transfer.
+    pub fn on_slave_keepalive(mut self, slave: std::os::fd::OwnedFd) -> Self {
+        self.slave_keepalive = Some(slave);
+        self
     }
 
     /// Route the child's progress text to `sink`.
