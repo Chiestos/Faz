@@ -104,6 +104,23 @@ pub fn run_transfer(
         None => Transfer::start(direction, pty_fd, command),
     }
         .on_progress(move |bytes: &[u8]| {
+            // lrzsz explains itself only on stderr, and the pane shows the
+            // bytes but not the verdict. Keep the diagnostic lines in the log
+            // so a failed transfer says *why* instead of just a byte count.
+            if let Ok(text) = std::str::from_utf8(bytes) {
+                for line in text.lines() {
+                    let line = line.trim();
+                    if !line.is_empty()
+                        && (line.contains("Retry")
+                            || line.contains("rror")
+                            || line.contains("incomplete")
+                            || line.contains("Timeout")
+                            || line.contains("ZCAN"))
+                    {
+                        log::warn!("zmodem: peer said: {line}");
+                    }
+                }
+            }
             let mut parser = termwiz::escape::parser::Parser::new();
             let mut actions = Vec::new();
             parser.parse(bytes, |action| actions.push(action));
