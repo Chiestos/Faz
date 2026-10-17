@@ -461,7 +461,11 @@ impl Pane for LocalPane {
             // aborts with ZCAN, and the whole transfer dies. zssh dodges this
             // because the user is at its local prompt while sz/rz runs; Faz
             // keeps the pane live, so the input has to be refused here.
-            log::debug!("zmodem: dropping key {key:?} pressed during a transfer");
+            //
+            // Refused, not swallowed: a key that vanishes looks like a frozen
+            // terminal, and the user types harder. Echo it back so the keystroke
+            // is visibly absorbed rather than lost.
+            self.echo_during_zmodem(&key_echo(&key, mods));
             return Ok(());
         }
         if self.tmux_domain.lock().is_some() {
@@ -519,8 +523,9 @@ impl Pane for LocalPane {
     fn send_paste(&self, text: &str) -> Result<(), Error> {
         Mux::get().record_input_for_current_identity();
         if self.zmodem.is_active() {
-            // See `key_down`: pasted text would corrupt the frame stream.
-            log::debug!("zmodem: dropping {} pasted byte(s) during a transfer", text.len());
+            // See `key_down`: pasted text would corrupt the frame stream, and
+            // silently ignoring a paste is worse than showing it happened.
+            self.echo_during_zmodem(text);
             return Ok(());
         }
         if self.tmux_domain.lock().is_some() {
@@ -1095,6 +1100,40 @@ impl AlertHandler for LocalPaneNotifHandler {
     }
 }
 
+/// What a refused keystroke should look like on screen.
+///
+/// Printed only when a transfer is running, so it stays small and literal:
+/// printable characters as themselves, control keys as a caret marker the user
+/// can recognise. Returning an empty string for a plain modifier keeps a bare
+/// Shift press from drawing anything.
+fn key_echo(key: &KeyCode, mods: KeyModifiers) -> String {
+    match key {
+        KeyCode::Char(c) => {
+            if mods.contains(KeyModifiers::CTRL) {
+                // Ctrl+letter arrives as a C0 control character (Ctrl+A is
+                // U+0001), so the letter is recovered by adding 0x40.
+                let code = *c as u32;
+                if (1..=26).contains(&code) {
+                    if let Some(letter) = char::from_u32(code + 0x40) {
+                        return format!("^{letter}");
+                    }
+                }
+            }
+            c.to_string()
+        }
+        KeyCode::Enter => "^M".to_string(),
+        KeyCode::Tab => "^I".to_string(),
+        KeyCode::Escape => "^[".to_string(),
+        KeyCode::Backspace => "^?".to_string(),
+        KeyCode::Delete => "~DEL~".to_string(),
+        KeyCode::LeftArrow => "<- ".to_string(),
+        KeyCode::RightArrow => " ->".to_string(),
+        KeyCode::UpArrow => "^^ ".to_string(),
+        KeyCode::DownArrow => "vv ".to_string(),
+        _ => String::new(),
+    }
+}
+
 /// This is a little gross; on some systems, our pipe reader will continue
 /// to be blocked in read even after the child process has died.
 /// We need to wake up and notice that the child terminated in order
@@ -1129,6 +1168,36 @@ fn split_child(
 }
 
 impl LocalPane {
+    /// Show input that a running transfer refused, without sending it to the
+    /// pty.
+    ///
+    /// The bytes go into this pane's screen model only, so the user sees their
+    /// keystroke land while the protocol stream stays pristine. A bare `\r` is
+    /// deliberately not echoed: it would scroll the pane and disturb the
+    /// progress display the transfer is writing there.
+    fn echo_during_zmodem(&self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        let visible: String = text
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect();
+        if visible.is_empty() {
+            // A control key (Enter, Tab, Escape) has no printable form. Say so
+            // rather than leaving the user wondering whether it registered.
+            self.terminal
+                .lock()
+                .perform_actions(vec![termwiz::escape::Action::PrintString(
+                    "^G".to_string(),
+                )]);
+            return;
+        }
+        self.terminal
+            .lock()
+            .perform_actions(vec![termwiz::escape::Action::PrintString(visible)]);
+    }
+
     pub fn new(
         pane_id: PaneId,
         mut terminal: Terminal,
@@ -1286,5 +1355,40 @@ impl Drop for LocalPane {
         if let ProcessState::Running { signaller, .. } = &mut *self.process.lock() {
             let _ = signaller.kill();
         }
+    }
+}
+
+#[cfg(test)]
+mod zmodem_input_tests {
+    use super::key_echo;
+    use termwiz::input::{KeyCode, Modifiers};
+
+    #[test]
+    fn printable_characters_echo_as_themselves() {
+        assert_eq!(key_echo(&KeyCode::Char('a'), Modifiers::NONE), "a");
+        assert_eq!(key_echo(&KeyCode::Char('中'), Modifiers::NONE), "中");
+    }
+
+    #[test]
+    fn control_chords_echo_in_caret_form() {
+        // Ctrl+A arrives as U+0001; showing it as "^A" is what a terminal does
+        // for every other control key, so the user recognises it instantly.
+        assert_eq!(key_echo(&KeyCode::Char('\u{1}'), Modifiers::CTRL), "^A");
+        assert_eq!(key_echo(&KeyCode::Char('\u{3}'), Modifiers::CTRL), "^C");
+    }
+
+    #[test]
+    fn named_keys_echo_their_marker() {
+        assert_eq!(key_echo(&KeyCode::Enter, Modifiers::NONE), "^M");
+        assert_eq!(key_echo(&KeyCode::Tab, Modifiers::NONE), "^I");
+        assert_eq!(key_echo(&KeyCode::Escape, Modifiers::NONE), "^[");
+        assert_eq!(key_echo(&KeyCode::Backspace, Modifiers::NONE), "^?");
+    }
+
+    #[test]
+    fn plain_modifiers_echo_nothing() {
+        // A bare Shift press must not draw a glyph into the pane.
+        assert_eq!(key_echo(&KeyCode::LeftShift, Modifiers::SHIFT), "");
+        assert_eq!(key_echo(&KeyCode::RightShift, Modifiers::SHIFT), "");
     }
 }
