@@ -407,6 +407,12 @@ impl Transfer {
             )
         });
 
+        log::info!(
+            "zmodem: spawning {:?} args={:?} cwd={:?}",
+            program.program,
+            program.args,
+            program.cwd
+        );
         let child = match spawner.spawn(&program, child_end.as_raw_fd(), stderr_fd) {
             Ok(c) => c,
             Err(e) => {
@@ -464,6 +470,7 @@ impl Transfer {
                     if cancel_requested.load(Ordering::SeqCst) {
                         return Outcome::Cancelled;
                     }
+                    log::info!("zmodem: child exited with {status:?} (code {:?})", status.code());
                     return Outcome::Finished(status);
                 }
                 Ok(None) => {}

@@ -6990,8 +6990,26 @@ impl TermWindow {
 
         let command = match direction {
             mux::zmodem::Direction::Upload => {
-                let name = picked.display().to_string();
-                mux::zmodem::local_command(mux::zmodem::Direction::Upload, &[name], None)
+                // `sz` opens its arguments relative to its own cwd. The picker
+                // returns an absolute path, but passing the parent as cwd as
+                // well means a path the shell would resolve differently (a
+                // symlinked Home, a volume mount) still opens the file the user
+                // actually clicked.
+                let parent = picked.parent().map(|p| p.to_path_buf());
+                let name = picked
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| picked.display().to_string());
+                log::info!(
+                    "zmodem: upload source {} (cwd {:?})",
+                    picked.display(),
+                    parent
+                );
+                mux::zmodem::local_command(
+                    mux::zmodem::Direction::Upload,
+                    &[name],
+                    parent.as_deref(),
+                )
             }
             mux::zmodem::Direction::Download => {
                 // `rz` writes into its working directory, so point it at the
