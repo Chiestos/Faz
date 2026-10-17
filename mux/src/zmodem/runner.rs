@@ -71,7 +71,20 @@ pub fn run_transfer(
     // The pane may have started buffering before this transfer existed, in
     // which case `begin` carries those bytes over. Drain them into the child
     // once the sink is live, or the remote's opening frames are lost.
-    let transfer = Transfer::start(direction, pty_fd, command).on_sink_ready({
+    // Progress goes into the pane's own terminal state, so it appears where the
+    // transfer is happening rather than in a separate window. It is text, not
+    // protocol data, so it takes the normal parsing path.
+    let progress_pane = Arc::clone(pane);
+    let transfer = Transfer::start(direction, pty_fd, command)
+        .on_progress(move |bytes: &[u8]| {
+            let mut parser = termwiz::escape::parser::Parser::new();
+            let mut actions = Vec::new();
+            parser.parse(bytes, |action| actions.push(action));
+            if !actions.is_empty() {
+                progress_pane.perform_actions(actions);
+            }
+        })
+        .on_sink_ready({
         // The parser's side of the switch: while this fd is installed, the
         // pane's output goes here instead of to the VT parser.
         let state = Arc::clone(state);

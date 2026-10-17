@@ -166,6 +166,11 @@ pub struct Transfer {
     /// what makes the parser divert output here instead of feeding it to the
     /// VT parser.
     on_sink_ready: Option<Box<dyn FnOnce(RawFd) + Send>>,
+    /// Receives the child's progress text, already stripped of lrzsz's banner.
+    /// The caller decides where it appears; a no-op means "do not show it".
+    progress_sink: Box<dyn FnMut(&[u8]) + Send>,
+    /// Stops the progress reader thread.
+    progress_stop: Arc<AtomicBool>,
 }
 
 /// How to launch the local child. Production uses [`Spawner::Real`]; tests
@@ -178,10 +183,15 @@ pub enum Spawner {
 }
 
 impl Spawner {
-    fn spawn(&self, command: &LocalCommand, child_end_fd: RawFd) -> io::Result<Child> {
+    fn spawn(
+        &self,
+        command: &LocalCommand,
+        child_end_fd: RawFd,
+        stderr_fd: Option<RawFd>,
+    ) -> io::Result<Child> {
         match self {
-            Spawner::Real => spawn_command(command, child_end_fd),
-            Spawner::Substitute(sub) => spawn_command(sub, child_end_fd),
+            Spawner::Real => spawn_command(command, child_end_fd, stderr_fd),
+            Spawner::Substitute(sub) => spawn_command(sub, child_end_fd, stderr_fd),
         }
     }
 }
@@ -262,7 +272,19 @@ impl Transfer {
             restored: false,
             spawner,
             on_sink_ready: None,
+            progress_sink: Box::new(|_: &[u8]| {}),
+            progress_stop: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Route the child's progress text to `sink`.
+    ///
+    /// The bytes are lrzsz's own display, with the banner stripped: a counter
+    /// line rewritten in place with `\r`. Writing them to a terminal is what
+    /// makes the display animate.
+    pub fn on_progress(mut self, sink: impl FnMut(&[u8]) + Send + 'static) -> Self {
+        self.progress_sink = Box::new(sink);
+        self
     }
 
     /// Install a callback that receives the sink fd once the transfer's
@@ -348,7 +370,44 @@ impl Transfer {
             sub @ Spawner::Substitute(_) => (self.command.clone(), sub),
         };
 
-        let child = match spawner.spawn(&program, child_end.as_raw_fd()) {
+        // A private pty on the child's stderr so lrzsz prints its progress at
+        // all, plus a reader for it. Failure here is not fatal: the transfer
+        // works without a progress display.
+        let progress_capture = match super::progress::ProgressCapture::open() {
+            Ok(c) => Some(c),
+            Err(err) => {
+                log::warn!("zmodem: no progress display available: {err}");
+                None
+            }
+        };
+        let stderr_fd = progress_capture.as_ref().map(|c| c.slave_fd());
+        let progress_relay = progress_capture.map(|capture| {
+            let stop = self.progress_stop.clone();
+            let forward = std::mem::replace(
+                &mut self.progress_sink,
+                Box::new(|_: &[u8]| {}) as Box<dyn FnMut(&[u8]) + Send>,
+            );
+            let mut forward = forward;
+            // The banner line lrzsz prints before the counter is dropped, so
+            // the counter can update in place on one line.
+            let mut first = true;
+            capture.forward(
+                move |bytes| {
+                    let chunk = if first {
+                        first = false;
+                        super::progress::strip_progress_prefix(bytes)
+                    } else {
+                        bytes
+                    };
+                    if !chunk.is_empty() {
+                        forward(chunk);
+                    }
+                },
+                stop,
+            )
+        });
+
+        let child = match spawner.spawn(&program, child_end.as_raw_fd(), stderr_fd) {
             Ok(c) => c,
             Err(e) => {
                 self.stop.store(true, Ordering::SeqCst);
@@ -379,6 +438,11 @@ impl Transfer {
         }
         self.stop.store(true, Ordering::SeqCst);
         relay.join();
+        // Stop the progress thread: its last read happens under the stop flag.
+        self.progress_stop.store(true, Ordering::SeqCst);
+        if let Some(p) = progress_relay {
+            p.join();
+        }
         self.cancel_fd = None;
 
         self.restore();
@@ -454,7 +518,7 @@ impl Drop for Transfer {
     }
 }
 
-fn spawn_command(command: &LocalCommand, child_end_fd: RawFd) -> io::Result<Child> {
+fn spawn_command(command: &LocalCommand, child_end_fd: RawFd, stderr_fd: Option<RawFd>) -> io::Result<Child> {
     use std::os::unix::process::CommandExt;
 
     let mut cmd = Command::new(&command.program);
@@ -466,6 +530,14 @@ fn spawn_command(command: &LocalCommand, child_end_fd: RawFd) -> io::Result<Chil
         cmd.pre_exec(move || {
             if libc::dup2(child_end_fd, 0) < 0 || libc::dup2(child_end_fd, 1) < 0 {
                 return Err(io::Error::last_os_error());
+            }
+            // stderr carries lrzsz's progress display. A private pty keeps it
+            // a terminal so the display is produced at all, and gives us a
+            // reader for it.
+            if let Some(fd) = stderr_fd {
+                if libc::dup2(fd, 2) < 0 {
+                    return Err(io::Error::last_os_error());
+                }
             }
             // Ignore the tty's SIGINT in the child. Its life is controlled by
             // our cancel path, so we can reliably send the CAN sequence first.

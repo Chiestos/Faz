@@ -19,6 +19,7 @@
 
 pub mod detect;
 pub mod session_transfer;
+pub mod progress;
 pub mod runner;
 pub mod state;
 pub mod transfer;
