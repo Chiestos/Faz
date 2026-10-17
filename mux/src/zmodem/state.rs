@@ -186,24 +186,30 @@ impl ZmodemState {
     /// remote stays in `rz`/`sz` until it times out — which is what left the
     /// pane wedged. This writes the CAN burst straight to the pty.
     ///
+    /// The burst goes out whether or not a session is still recorded. The
+    /// remote is the authority on whether it is waiting: it entered `rz`/`sz`
+    /// on its own, and a cancel is only meaningful because of that. Gating the
+    /// write on our own slot means a slot cleared anywhere else (a buffer
+    /// overflow, a re-entry) silently turns "cancel" into "restore parsing",
+    /// leaving the remote wedged with nothing left to time out cleanly.
+    ///
     /// Returns whether the write happened.
     pub fn cancel_pending(&self, pty_master_fd: std::os::fd::RawFd) -> bool {
-        let mut guard = self.inner.lock().unwrap();
-        let took = guard.take();
-        let Some(t) = took else {
-            log::info!(
-                "zmodem: cancel_pending on fd {pty_master_fd} found no pending session; \
-                 nothing to abort"
-            );
-            return false;
+        let (took, buffered) = {
+            let mut guard = self.inner.lock().unwrap();
+            match guard.take() {
+                Some(t) => {
+                    let len = t.buffered.len();
+                    (true, len)
+                }
+                None => (false, 0),
+            }
         };
-        let buffered = t.buffered.len();
-        // Nothing was started, so this is a pure abort: no buffered replay.
-        drop(t);
-        drop(guard);
-        // Two bursts: lrzsz aborts after five CANs, and repeating the burst
-        // hedges against the first landing while the remote was between
-        // frames.
+        if !took {
+            log::info!(
+                "zmodem: no pending session on fd {pty_master_fd}; cancelling the remote anyway"
+            );
+        }
         let bytes = CANCEL_SEQUENCE;
         match crate::zmodem::transfer::write_all(pty_master_fd, &bytes) {
             Ok(n) => {
@@ -384,10 +390,19 @@ mod tests {
     }
 
     #[test]
-    fn cancelling_without_a_session_is_a_no_op() {
-        let (pty_side, _remote) = crate::zmodem::transfer::make_socketpair().expect("pair");
+    fn cancelling_without_a_session_still_reaches_the_remote() {
+        // The remote is what is waiting, not this slot. A cancel whose slot was
+        // cleared elsewhere must still stop the peer, or the pane is wedged
+        // with no session left to time out.
+        let (pty_side, remote_side) = crate::zmodem::transfer::make_socketpair().expect("pair");
         let state = ZmodemState::new();
-        assert!(!state.cancel_pending(pty_side.as_raw_fd()));
+        assert!(state.cancel_pending(pty_side.as_raw_fd()));
+
+        let mut buf = [0u8; 64];
+        let n = nix::unistd::read(remote_side.as_raw_fd(), &mut buf).expect("read");
+        assert!(n >= 5, "lrzsz aborts after 5 CANs, got {n}");
+        assert!(buf[..n].iter().all(|b| *b == 0x18));
+        assert!(state.in_cooldown(), "the peer's replies are ignored");
     }
 
     #[test]
