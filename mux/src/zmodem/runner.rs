@@ -68,6 +68,9 @@ pub fn run_transfer(
         return Err(StartError::NoPty);
     };
 
+    // The pane may have started buffering before this transfer existed, in
+    // which case `begin` carries those bytes over. Drain them into the child
+    // once the sink is live, or the remote's opening frames are lost.
     let transfer = Transfer::start(direction, pty_fd, command).on_sink_ready({
         // The parser's side of the switch: while this fd is installed, the
         // pane's output goes here instead of to the VT parser.
@@ -75,12 +78,26 @@ pub fn run_transfer(
         move |sink| {
             // `begin` takes ownership of the fd, so dup it first: the relay
             // thread keeps the original.
-            match dup_fd(sink) {
-                Ok(owned) => {
-                    state.begin(owned);
-                }
+            let owned = match dup_fd(sink) {
+                Ok(owned) => owned,
                 Err(err) => {
                     log::error!("zmodem: could not install transfer sink: {err}");
+                    return;
+                }
+            };
+            let cancel = state.begin(owned);
+            let _ = cancel;
+
+            let buffered = state.buffered();
+            if !buffered.is_empty() {
+                match crate::zmodem::transfer::write_all(sink, &buffered) {
+                    Ok(_) => log::info!(
+                        "zmodem: replayed {} buffered byte(s) into the transfer",
+                        buffered.len()
+                    ),
+                    Err(err) => {
+                        log::warn!("zmodem: replaying buffered bytes failed: {err:#}");
+                    }
                 }
             }
         }

@@ -383,6 +383,37 @@ fn notify_zmodem_detected(
     }
 }
 
+/// Is this pane holding a detected session that has no sink yet?
+fn pane_is_buffering_zmodem(pane: &Weak<dyn Pane>) -> bool {
+    pane.upgrade()
+        .and_then(|p| p.zmodem_state())
+        .is_some_and(|state| state.is_buffering())
+}
+
+/// Hold a detected session's opening bytes until a sink exists.
+///
+/// Opens the pane's session slot so later chunks are diverted here too, then
+/// appends what has already arrived. When the buffer overflows the session is
+/// abandoned: the peer has sent more than [`mux::zmodem::state::PENDING_CAPACITY`]
+/// with nobody listening, so the handshake has already failed and holding the
+/// pane in a diverted state would only freeze it.
+fn buffer_detected_zmodem(pane: &Weak<dyn Pane>, bytes: &[u8]) {
+    let Some(pane) = pane.upgrade() else {
+        return;
+    };
+    let Some(state) = pane.zmodem_state() else {
+        return;
+    };
+    state.begin_buffering();
+    if !state.buffer_incoming(bytes) {
+        log::warn!(
+            "zmodem: buffer overflow on pane {}; abandoning the session",
+            pane.pane_id()
+        );
+        state.finish();
+    }
+}
+
 fn parse_buffered_data(
     pane: Weak<dyn Pane>,
     pane_id: PaneId,
@@ -505,11 +536,24 @@ fn parse_buffered_data(
                     }
                     continue;
                 }
+                // No sink yet, but a session is open: the destination is still
+                // being chosen. Keep buffering rather than re-scanning, which
+                // would treat protocol bytes as terminal output.
+                if pane_is_buffering_zmodem(&pane) {
+                    buffer_detected_zmodem(&pane, &buf[..size]);
+                    continue;
+                }
 
                 let chunk = &buf[..size];
                 let (parse_upto, diverted) = match zmodem.scan(chunk) {
                     crate::zmodem::ScanResult::NotStarted => (size, false),
                     crate::zmodem::ScanResult::Started { offset, initiator } => {
+                        // The session's bytes start at `offset`. There is no
+                        // sink yet — the destination has to be chosen first —
+                        // so they are buffered rather than dropped. ZMODEM can
+                        // retransmit, but discarding the opening frames is how
+                        // the handshake fails.
+                        buffer_detected_zmodem(&pane, &chunk[offset..]);
                         notify_zmodem_detected(&pane, pane_id, initiator);
                         (offset, true)
                     }
