@@ -390,6 +390,64 @@ fn pane_in_zmodem_cooldown(pane: &Weak<dyn Pane>) -> bool {
         .is_some_and(|state| state.in_cooldown())
 }
 
+/// Strip ZMODEM protocol leftovers out of a post-session chunk.
+///
+/// A peer that missed the closing frame keeps retransmitting headers and CAN
+/// bytes for a moment after a session ends. Those look exactly like a new
+/// session, so they must not reach the VT parser — but the same chunk also
+/// carries the shell's prompt redraw and the echo of whatever the user typed
+/// while the transfer was unwinding. Dropping the whole chunk, which is what
+/// this used to do, leaves the screen frozen until the cooldown expires: the
+/// user types into a dead-looking pane and only sees the backlog land several
+/// keystrokes later.
+///
+/// Only the protocol shapes are removed: a `**` + ZDLE header (and the ZHEX
+/// body when present) and runs of CAN. Everything else is real output.
+fn strip_zmodem_residue(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let header = bytes.get(i) == Some(&b'*')
+            && bytes.get(i + 1) == Some(&b'*')
+            && bytes.get(i + 2) == Some(&crate::zmodem::detect::ZDLE);
+        if header {
+            // A ZHEX control frame is `**` ZDLE `B`, a run of hex digits, then
+            // a carriage return and a frame terminator. Skipping the body
+            // matters because those bytes would otherwise render as text: the
+            // digits as a literal string, the terminator as a stray glyph.
+            i += 3;
+            if bytes.get(i) == Some(&b'B') {
+                i += 1;
+                while bytes
+                    .get(i)
+                    .is_some_and(|b| b.is_ascii_hexdigit())
+                {
+                    i += 1;
+                }
+                // `\r`, then `\n` or `\x8a`, then optionally `\x11`.
+                if bytes.get(i) == Some(&b'\r') {
+                    i += 1;
+                }
+                if matches!(bytes.get(i), Some(b'\n') | Some(0x8a)) {
+                    i += 1;
+                }
+                if bytes.get(i) == Some(&0x11) {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        if bytes[i] == crate::zmodem::detect::ZDLE {
+            // CAN runs: the peer's abort burst, and our own echo of it.
+            i += 1;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    out
+}
+
 /// Is this pane holding a detected session that has no sink yet?
 fn pane_is_buffering_zmodem(pane: &Weak<dyn Pane>) -> bool {
     pane.upgrade()
@@ -552,10 +610,23 @@ fn parse_buffered_data(
                 }
 
                 // A peer that missed the closing frame retransmits its header,
-                // which looks exactly like a new session. Drop those bytes
-                // rather than detecting, and rather than parsing: they are
-                // protocol data, not terminal output.
+                // which looks exactly like a new session. Strip those bytes
+                // rather than detecting them — but keep the ordinary output
+                // travelling in the same chunk, or the prompt and the user's
+                // echoed keystrokes vanish until the cooldown expires.
                 if pane_in_zmodem_cooldown(&pane) {
+                    let residue = strip_zmodem_residue(&buf[..size]);
+                    if residue.is_empty() {
+                        continue;
+                    }
+                    let chunk = &residue[..];
+                    parser.parse(chunk, |action| {
+                        actions.push(action);
+                    });
+                    if !actions.is_empty() {
+                        send_actions_to_mux(&pane, pane_id, &dead, std::mem::take(&mut actions));
+                        notify_state.maybe_notify(pane_id);
+                    }
                     continue;
                 }
 
@@ -2123,8 +2194,55 @@ impl wezterm_term::DownloadHandler for MuxDownloader {
 
 #[cfg(test)]
 mod tests {
+    use super::strip_zmodem_residue;
     use super::SynchronizedOutputState;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn residue_strips_retransmitted_zhex_headers() {
+        // `rz` retransmits ZRINIT as `**` ZDLE `B0100000023be50`; none of it is
+        // terminal output and the hex digits would render as literal text.
+        let chunk = b"**\x18B0100000023be50\r\x8a\x11";
+        assert!(strip_zmodem_residue(chunk).is_empty());
+    }
+
+    #[test]
+    fn residue_strips_can_runs() {
+        let chunk = [0x18u8; 32];
+        assert!(strip_zmodem_residue(&chunk).is_empty());
+    }
+
+    #[test]
+    fn residue_keeps_shell_output_sharing_the_chunk() {
+        // The cooldown window is exactly when the user is typing into a
+        // transfer that just ended. Dropping the whole chunk froze the screen;
+        // only the protocol bytes may go.
+        let mut chunk = b"root@host:~# ".to_vec();
+        chunk.extend_from_slice(b"**\x18B0100000023be50");
+        chunk.extend_from_slice(b"ls -l\r\n");
+        chunk.extend_from_slice(&[0x18u8; 6]);
+        chunk.extend_from_slice(b"file.txt\r\n");
+
+        let kept = strip_zmodem_residue(&chunk);
+        assert_eq!(kept, b"root@host:~# ls -l\r\nfile.txt\r\n");
+    }
+
+    #[test]
+    fn residue_leaves_ordinary_output_untouched() {
+        let chunk = b"plain text, no protocol here\r\n";
+        assert_eq!(strip_zmodem_residue(chunk), chunk);
+    }
+
+    #[test]
+    fn residue_handles_a_header_truncated_at_the_boundary() {
+        // A frame split across reads must not panic, and whatever is left of
+        // the protocol bytes goes away. A stray ZDLE is a CAN, so it never
+        // survives; a header prefix that did not complete leaves nothing.
+        assert!(strip_zmodem_residue(b"**\x18B").is_empty());
+        assert!(strip_zmodem_residue(b"**\x18").is_empty());
+        // A bare ZDLE without the `**` marker is still a CAN byte.
+        assert_eq!(strip_zmodem_residue(b"\x18B01"), b"B01");
+    }
 
     #[test]
     fn synchronized_output_timeout_tracks_idle_time_not_total_frame_time() {
