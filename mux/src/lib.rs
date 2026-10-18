@@ -479,6 +479,20 @@ fn buffer_detected_zmodem(pane: &Weak<dyn Pane>, bytes: &[u8]) {
     }
 }
 
+/// Is this read error a transient condition rather than a dead source?
+///
+/// `EAGAIN`/`EWOULDBLOCK` mean "nothing yet", and `EINTR` means a signal
+/// arrived mid-call — the fd is still good. Treating either as fatal kills the
+/// parser thread, and a killed parser resets the pane's output.
+fn is_retryable_read(err: &std::io::Error) -> bool {
+    matches!(
+        err.kind(),
+        std::io::ErrorKind::WouldBlock
+            | std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::TimedOut
+    )
+}
+
 fn parse_buffered_data(
     pane: Weak<dyn Pane>,
     pane_id: PaneId,
@@ -573,6 +587,12 @@ fn parse_buffered_data(
                 dead.store(true, Ordering::Release);
                 break;
             }
+            // A non-blocking read that finds nothing yet is not a dead pane.
+            // Treating it as one tears down the parser thread, and with it the
+            // pane's output: the window resets. The fd can legitimately be in
+            // this state (the zmodem relay leaves the pty non-blocking), so the
+            // condition has to be tolerated rather than diagnosed as failure.
+            Err(err) if is_retryable_read(&err) => continue,
             Err(_) => {
                 dead.store(true, Ordering::Release);
                 break;
@@ -591,12 +611,34 @@ fn parse_buffered_data(
                 //    session, so they are diverted rather than parsed.
                 if let Some(sink) = pane_zmodem_sink(&pane) {
                     let chunk = &buf[..size];
-                    if let Err(err) = crate::zmodem::transfer::write_all(sink, chunk) {
-                        log::warn!("zmodem: diverting pane {pane_id} bytes failed: {err:#}");
-                        // Drop the transfer; the pane returns to normal parsing
-                        // so the user is not left with a frozen terminal.
-                        if let Some(pane) = pane.upgrade() {
-                            pane.zmodem_finish();
+                    match crate::zmodem::transfer::write_all(sink, chunk) {
+                        Ok(n) => {
+                            if let Some(pane) = pane.upgrade() {
+                                if let Some(state) = pane.zmodem_state() {
+                                    let before = state.peer_bytes_to_child();
+                                    state.note_peer_bytes(n);
+                                    // The first kilobytes of the peer's replies
+                                    // decide whether the child sees a clean
+                                    // handshake or junk; record them verbatim
+                                    // instead of guessing from a byte total.
+                                    if before < 4096 {
+                                        let shown = n.min(96);
+                                        log::info!(
+                                            "zmodem: peer bytes (+{n}) after {before}: {:02x?}",
+                                            &chunk[..shown]
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("zmodem: diverting pane {pane_id} bytes failed: {err:#}");
+                            // Drop the transfer; the pane returns to normal
+                            // parsing so the user is not left with a frozen
+                            // terminal.
+                            if let Some(pane) = pane.upgrade() {
+                                pane.zmodem_finish();
+                            }
                         }
                     }
                     continue;
@@ -876,7 +918,9 @@ fn read_from_pane_pty(
 
     // Poll timeout in milliseconds. Using 200ms as a balance between
     // responsiveness when closing panes and CPU overhead.
-    const POLL_TIMEOUT_MS: u64 = 200;
+    // Short because the pty's read gate is held across this wait: a transfer
+    // that wants the pty waits up to this long for the pane to step aside.
+    const POLL_TIMEOUT_MS: u64 = 50;
 
     // Tracks whether the pty fd became unrecoverable (EBADF/EIO). Used after
     // the loop to force-close the pane instead of obeying exit_behavior, since
@@ -900,7 +944,7 @@ fn read_from_pane_pty(
                 revents: 0,
             }];
             match poll(&mut pfd, Some(Duration::from_millis(POLL_TIMEOUT_MS))) {
-                Ok(0) => continue, // Timeout, check dead flag
+                Ok(0) => continue, // Timeout; the guard drops and a claim may take over
                 Ok(_) if pfd[0].revents & POLLIN != 0 => {
                     // Data available (possibly with POLLHUP), read it first
                 }
@@ -924,11 +968,53 @@ fn read_from_pane_pty(
             }
         }
 
-        match reader.read(&mut buf) {
+        // The gate covers the read and nothing else.
+        //
+        // Holding it across the poll was wrong: the pane parks the read side
+        // for as long as it waits for data, so a transfer trying to claim the
+        // gate could sit behind one poll timeout after another. That is a
+        // hand-off that looks like a hang — the picker closes and \`sz\` does not
+        // start for seventeen seconds.
+        //
+        // Reading only after the poll confirmed data is what makes the narrow
+        // window safe: the read returns immediately, so the gate is held
+        // briefly and the claim lands promptly.
+        //
+        // Re-check readability while holding the gate. Nothing else can consume
+        // the pty now, so a zero-timeout poll that still reports data means the
+        // read below returns without blocking — which is what keeps the gate
+        // from being held indefinitely by a read that has nothing to fetch.
+        let read_gate = pane.upgrade().and_then(|p| p.zmodem_state());
+        let _pane_read = read_gate.as_ref().map(|state| state.enter_pane_read());
+        #[cfg(unix)]
+        if let Some(fd) = reader_fd {
+            let mut pfd = [pollfd { fd, events: POLLIN, revents: 0 }];
+            match poll(&mut pfd, Some(Duration::ZERO)) {
+                Ok(0) => {
+                    // Nothing after all: the gate must drop so a waiting claim
+                    // can proceed, and the loop must not spin.
+                    std::thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                Ok(_) if pfd[0].revents & POLLIN == 0 => {
+                    std::thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        let outcome = reader.read(&mut buf);
+        drop(_pane_read);
+
+        match outcome {
             Ok(size) if size == 0 => {
                 log::trace!("read_pty EOF: pane_id {}", pane_id);
                 break;
             }
+            // Nothing to read yet is not a failure. This thread shares the pty
+            // with the zmodem relay, which leaves the fd non-blocking; without
+            // this a single empty read tore down the pane's output.
+            Err(err) if is_retryable_read(&err) => continue,
             Err(err) => {
                 error!("read_pty failed: pane {} {:?}", pane_id, err);
                 // EBADF/EIO means the pty fd is gone; show a message and force-close.
