@@ -729,7 +729,6 @@ impl CommandDef {
                     SpawnTab(_) | SpawnCommandInNewTab(_) => 20,
                     EmitEvent(name) if name == "faz-launch-lazygit" => 20,
                     EmitEvent(name) if name == "faz-launch-yazi" => 21,
-                    EmitEvent(name) if name == "faz-open-remote-files" => 22,
                     EmitEvent(name) if name == "faz-zmodem-send" => 23,
                     EmitEvent(name) if name == "faz-zmodem-receive" => 24,
                     SplitVertical(_) | SplitHorizontal(_) | SplitPane(_) => 30,
@@ -799,7 +798,7 @@ impl CommandDef {
             match title {
                 "Shell" => match rank {
                     0..=20 => 1,  // New Window, New Tab
-                    21..=29 => 2, // Lazygit, Yazi, Remote Files, Command Palette
+                    21..=29 => 2, // Lazygit, Yazi, Command Palette
                     30..=35 => 3, // Split
                     36..=45 => 4, // Close
                     46..=55 => 5, // Launcher
@@ -1553,15 +1552,6 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                     brief: "Yazi File Manager".into(),
                     doc: "Open Yazi file manager".into(),
                     keys: vec![(Modifiers::SUPER.union(Modifiers::SHIFT), "y".into())],
-                    args: &[ArgType::ActiveWindow],
-                    menubar: &["Shell"],
-                    icon: None,
-                }
-            } else if name == "faz-open-remote-files" {
-                CommandDef {
-                    brief: "Remote Files".into(),
-                    doc: "Open the current SSH domain in a local Yazi tab".into(),
-                    keys: vec![(Modifiers::SUPER.union(Modifiers::SHIFT), "r".into())],
                     args: &[ArgType::ActiveWindow],
                     menubar: &["Shell"],
                     icon: None,
@@ -2563,7 +2553,6 @@ fn compute_default_actions() -> Vec<KeyAssignment> {
         SpawnWindow,
         EmitEvent("faz-launch-lazygit".to_string()),
         EmitEvent("faz-launch-yazi".to_string()),
-        EmitEvent("faz-open-remote-files".to_string()),
         EmitEvent("faz-zmodem-send".to_string()),
         EmitEvent("faz-zmodem-receive".to_string()),
         SplitVertical(SpawnCommand {

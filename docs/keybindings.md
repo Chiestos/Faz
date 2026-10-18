@@ -73,7 +73,6 @@ All keybindings use macOS-native modifier keys. `Opt` = Option/Alt, `Ctrl` = Con
 | Restore previous window snapshot | `Cmd + Opt + Shift + T` |
 | Open lazygit | `Cmd + Shift + G` |
 | Open yazi file manager | `Cmd + Shift + Y` |
-| Browse remote files (SSH) | `Cmd + Shift + R` |
 | Open Doctor panel | `Ctrl + Shift + L` |
 
 > The Command Palette is the quickest way to find built-in commands when you do not remember a shortcut.

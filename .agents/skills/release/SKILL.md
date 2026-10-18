@@ -1,7 +1,7 @@
 ---
 name: release
-description: "Run the Faz macOS release flow end-to-end: preflight, build, notarize, tag, upload to GitHub Releases, dispatch the Homebrew tap, or publish the rolling Nightly preview package. Source of truth is scripts/release.sh and scripts/nightly.sh; this skill is a runbook with one-time setup commands and recovery hints."
-when_to_use: "发布, 出版本, 打 tag, release Faz, ship Faz, V0.x.x, release, prepare release, dry-run release, resume release, notarize, homebrew tap, nightly, Nightly 包, 更新 nightly, 预览包"
+description: "Run the Faz macOS release flow end-to-end: preflight, build, notarize, tag, upload to GitHub Releases, or publish the rolling Nightly preview package. Source of truth is scripts/release.sh and scripts/nightly.sh; this skill is a runbook with one-time setup commands and recovery hints."
+when_to_use: "发布, 出版本, 打 tag, release Faz, ship Faz, V0.x.x, release, prepare release, dry-run release, resume release, notarize, nightly, Nightly 包, 更新 nightly, 预览包"
 ---
 
 # Faz Release Runbook
@@ -23,7 +23,7 @@ The `FAZ_ASC_API_KEY_PATH=/dev/null` prefix skips rcodesign and forces the notar
 
 ## Nightly preview package
 
-`scripts/nightly.sh` is authoritative for the rolling `nightly` GitHub prerelease. It builds a release-grade universal app, signs, notarizes, staples, copies `dist/Faz.dmg` to `dist/Faz-nightly.dmg`, and recreates the `nightly` release. It does not bump versions, create a `V*` tag, update Homebrew, or refresh any stable release surface.
+`scripts/nightly.sh` is authoritative for the rolling `nightly` GitHub prerelease. It builds a release-grade universal app, signs, notarizes, staples, copies `dist/Faz.dmg` to `dist/Faz-nightly.dmg`, and recreates the `nightly` release. It does not bump versions, create a `V*` tag, or refresh any stable release surface.
 
 Rules:
 
@@ -116,7 +116,6 @@ When a release fixes a bug outside this list, add the reproduction here so the n
 4. **stage:notarize** — `./scripts/notarize.sh`. Tries rcodesign first; falls back to notarytool if rcodesign fails and a notarytool profile exists.
 5. **stage:tag** — `git tag -a V<version> -m 'Release V<version>'` then `git push origin V<version>`. Idempotent: reuses an existing tag at HEAD instead of dying.
 6. **stage:upload** — `gh release create V<version>` (or `gh release edit` if it already exists) with the dmg, zip, and sha256. Title is taken from the first `# ` line of `RELEASE_NOTES.md`.
-7. **stage:homebrew-tap** — `repository_dispatch` to `tw93/homebrew-tap` triggering `bump.yml`. Polls the cask file in `Casks/kakuku.rb` for the new version (default 12 attempts × 15s).
 
 ## Resume after failure
 
@@ -125,8 +124,7 @@ When a release fixes a bug outside this list, add the reproduction here so the n
 | Flag | Skips | Use when |
 |---|---|---|
 | `--notarize-only` | build | Build succeeded; notarization failed or was interrupted. |
-| `--upload-only` | build, notarize | Notarized `dist/Faz.app` and `Faz.dmg` exist on disk; only need to tag + upload + tap. |
-| `--tap-only` | build, notarize, upload | GitHub release exists; only the Homebrew tap dispatch needs to rerun. |
+| `--upload-only` | build, notarize | Notarized `dist/Faz.app` and `Faz.dmg` exist on disk; only need to tag + upload. |
 
 Resume flags require the corresponding artifacts in `dist/` to still be present.
 
@@ -137,7 +135,6 @@ Resume flags require the corresponding artifacts in `dist/` to still be present.
 - **`No Developer ID Application certificate found`**: re-import `~/save/AppleCertificates/Kaku_DevID.p12` (password in `p12_password.txt`) into the login keychain.
 - **`Notarization credentials not found`**: re-run the keychain commands in the setup section above. The script will otherwise prompt interactively, which fails in non-interactive shells.
 - **rcodesign S3 connect timeout (3.1s)**: rcodesign uploads the dmg to `notary-submissions-prod.s3.amazonaws.com` via the AWS SDK for Rust, which has a hardcoded 3.1s connect timeout and does not honor `*_proxy` env vars. On networks where direct connect to AWS S3 is slow or proxied (typical for mainland China), it fails consistently with `s3 upload error: HTTP connect timeout occurred after 3.1s`. The error is independent of credentials. Fix: prefix the run with `FAZ_ASC_API_KEY_PATH=/dev/null` to make `notarize.sh` skip rcodesign and use notarytool directly. Both keychain entries should remain set.
-- **Homebrew tap verifier timed out at 12/12**: the tap workflow commits `kakuku <version>` to `tw93/homebrew-tap` main on success; verify with `gh api repos/tw93/homebrew-tap/commits/main --jq .commit.message`. The verifier reads the cask through the GitHub contents API (`Accept: application/vnd.github.raw`), not the Fastly-cached `download_url`, so a timeout means the `bump.yml` run is slow or failed: open the run URL the script printed. If the tap commit is present the release is complete. Widen the window with `HOMEBREW_TAP_VERIFY_ATTEMPTS` / `HOMEBREW_TAP_VERIFY_SLEEP_SECONDS`, or rerun `./scripts/release.sh --tap-only`; `REQUIRE_HOMEBREW_TAP_UPDATE=0` only downgrades the failure to a warning.
 - **`rcodesign notarization failed` right after the log shows `"status": "Accepted"`**: Apple accepted; the step died stapling. rcodesign cannot staple an unsigned DMG, which is what `build.sh` produces, and the script used to pass `--staple` (removed 2026-09-10). Do not touch credentials. Recover with `./scripts/notarize.sh --staple-only` then `./scripts/nightly.sh --upload-only`.
 - **`codesign: A timestamp was expected but was not found`** (or `timestamp service is not available`): the Apple timestamp round trip failed through the proxy while signing; the certificate is fine. `build.sh` retries three times since 2026-09-10 and now aborts the build if signing still fails, so an unsigned app can no longer reach the DMG. Rerun the build.
 - **`stapler` fails with CloudKit timeout, exit code 68**: the log reads `The staple and validate action failed! Error 68` right after `Notarization accepted`. Notarization already succeeded; only ticket retrieval from `api.apple-cloudkit.com` timed out. Same family as the rcodesign S3 timeout, but intermittent rather than systematic, so do NOT re-notarize. Check reachability (`curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://api.apple-cloudkit.com/`; a 400 means reachable), then run `./scripts/notarize.sh --staple-only` and resume with `./scripts/release.sh --upload-only`. The staple-only path regenerates `faz_for_update.zip` and its sha256 on purpose: attaching the ticket changes the app, so the Sparkle archive must be rebuilt after stapling, never before.
@@ -150,8 +147,7 @@ Resume flags require the corresponding artifacts in `dist/` to still be present.
 | `FAZ_SIGNING_IDENTITY` | auto-detect | Override the Developer ID Application identity. |
 | `FAZ_ASC_API_KEY_PATH` | keychain item `faz-asc-api-key-path` | Path to rcodesign ASC API key JSON. |
 | `FAZ_NOTARYTOOL_PROFILE` | keychain item `faz-notarytool-profile` | notarytool keychain profile name. |
-| `HOMEBREW_TAP_TOKEN` | `gh auth token` | GitHub token for tap dispatch. |
-| `REQUIRE_HOMEBREW_TAP_UPDATE` | `1` | Set to `0` to allow release to succeed when tap dispatch fails. |
+
 | `RUN_CLIPPY` | `0` | Set to `1` to run `cargo clippy` during stage:checks. |
 | `SKIP_TESTS` | `0` | Set to `1` to skip `make test` during stage:checks. |
 | `OUT_DIR` | `<repo>/dist` | Override artifact output directory. |
@@ -161,7 +157,6 @@ Resume flags require the corresponding artifacts in `dist/` to still be present.
 ## After release
 
 - GitHub Release URL: `https://github.com/tw93/Faz/releases/tag/V<version>`.
-- Homebrew users get the new version once the tap workflow finishes; verify with `brew update && brew info --cask kakuku`.
 - Sparkle in-app updates are served from the GitHub Release assets (`faz_for_update.zip` + `.sha256`).
 
 For the announcement post (X / WeChat): community first, 2-4 highlights, user-experience framing, one opinionated sentence. The release notes file is a different artifact; do not paste it as the announcement.

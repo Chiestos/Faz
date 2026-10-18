@@ -281,9 +281,8 @@ config.send_composed_key_when_right_alt_is_pressed = true  -- default: right = C
 ## Updates
 
 Faz has no in-app update surface: no background check, no menu item, and
-no `faz update` subcommand. Update the application through the same
-channel you installed it with — the Homebrew cask, or a fresh build from
-source.
+no `faz update` subcommand. To update, download the current DMG, or build
+from source.
 
 The old `check_for_updates`, `check_for_updates_interval_seconds`, and
 `show_update_window` fields are still accepted so existing configs keep

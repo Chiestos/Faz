@@ -120,7 +120,7 @@ This is a known interaction between trackpad scroll and Claude Code's streaming 
 
 ## Cmd+Shift+Y sends a local path when inside an SSH session.
 
-The yazi remote-files feature (`Cmd+Shift+R`) is designed for SSH sessions and mounts the remote filesystem via sshfs. `Cmd+Shift+Y` is for local yazi. Use `Cmd+Shift+R` when you are inside an SSH pane.
+Yazi (`Cmd+Shift+Y`) opens the file manager for the active pane's directory. Inside an SSH pane it runs the remote `y`, so it browses the remote filesystem directly.
 
 ## Faz's prompt shows up in other terminals, or is missing from them.
 
@@ -137,16 +137,6 @@ Smart Tab stays Faz-only; `FAZ_SMART_TAB_DISABLE=1` turns it off.
 ## The `y` shell wrapper doesn't sync my directory on exit.
 
 Make sure the Faz fish/zsh shell integration is sourced. Check with `faz doctor`. The `y` wrapper requires the shell init to be loaded. A bare `yazi` call will not sync the directory.
-
-## Homebrew can't find the binary / wrong Faz gets updated.
-
-There is an older unrelated package named `faz` on Homebrew. Install Faz with the tap to avoid conflicts:
-
-```bash
-brew install tw93/tap/kakuku
-```
-
-To upgrade, run `brew upgrade tw93/tap/kakuku` directly. Faz has no in-app update command.
 
 ## Claude Code notifications don't appear.
 

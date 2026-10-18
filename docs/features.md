@@ -60,16 +60,6 @@ Install yazi with `brew install yazi` or via `faz init`.
 
 ---
 
-## Remote Files
-
-Press `Cmd + Shift + R` to mount the current SSH session's remote filesystem locally via `sshfs` and open it in yazi.
-
-Faz auto-detects the SSH target from the active pane. The mount lives at `~/Library/Caches/dev.faz/sshfs/<host>`.
-
-Requirements: `sshfs` installed (`brew install macfuse sshfs`) and passwordless SSH auth (key-based) for the remote host.
-
----
-
 ## Shell Suite
 
 Faz ships a curated set of shell plugins that load automatically inside Faz sessions.

@@ -14,15 +14,12 @@ set -euo pipefail
 #   FAZ_SIGNING_IDENTITY    - Signing identity (auto-detected from Keychain if not set)
 #   FAZ_ASC_API_KEY_PATH    - rcodesign App Store Connect API key JSON path
 #   FAZ_NOTARYTOOL_PROFILE  - notarytool Keychain profile name
-#   HOMEBREW_TAP_TOKEN       - Optional: GitHub token for Homebrew tap (defaults to gh auth token)
-#   REQUIRE_HOMEBREW_TAP_UPDATE - Set to 0 to allow release to continue when tap update fails (default: 1)
 #   RUN_CLIPPY               - Set to 1 to also run clippy (default: 0)
 #   SKIP_TESTS               - Set to 1 to skip tests (default: 0)
 #
 # Resume flags (skip earlier stages after a mid-release failure):
-#   --notarize-only  Skip build; notarize existing dist/Faz.app, upload, tap.
-#   --upload-only    Skip build + notarize; upload existing dist/Faz.dmg + tap.
-#   --tap-only       Only re-dispatch the Homebrew tap update.
+#   --notarize-only  Skip build; notarize existing dist/Faz.app, then upload.
+#   --upload-only    Skip build + notarize; upload existing dist/Faz.dmg.
 #
 # Dry-run flag (validates pre-flight, then exits without building or publishing):
 #   --dry-run        Run all pre-flight checks (git, version, gh auth, signing
@@ -43,8 +40,6 @@ BUILD_ARCH="${BUILD_ARCH:-arm64}"
 RUN_CLIPPY="${RUN_CLIPPY:-0}"
 SKIP_TESTS="${SKIP_TESTS:-0}"
 GITHUB_REPO="${GITHUB_REPO:-tw93/Faz}"
-HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-tw93/homebrew-tap}"
-REQUIRE_HOMEBREW_TAP_UPDATE="${REQUIRE_HOMEBREW_TAP_UPDATE:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 
 # Resume stage flags.
@@ -56,7 +51,6 @@ for arg in "$@"; do
     case "$arg" in
         --notarize-only) SKIP_BUILD=1 ;;
         --upload-only)   SKIP_BUILD=1; SKIP_NOTARIZE=1 ;;
-        --tap-only)      SKIP_BUILD=1; SKIP_NOTARIZE=1; SKIP_UPLOAD=1 ;;
         --dry-run)       DRY_RUN=1 ;;
     esac
 done
@@ -429,105 +423,6 @@ create_github_release() {
     log_info "GitHub Release created: https://github.com/${GITHUB_REPO}/releases/tag/$tag"
 }
 
-# Optional: Update Homebrew tap
-update_homebrew_tap() {
-    local version="$1"
-    local token=""
-    local dmg_sha256
-    local dispatch_output
-    local workflow_url="https://github.com/${HOMEBREW_TAP_REPO}/actions/workflows/bump.yml"
-    local latest_run_url=""
-
-    # Try to get token: env var > gh auth token
-    if [[ -n "${HOMEBREW_TAP_TOKEN:-}" ]]; then
-        token="$HOMEBREW_TAP_TOKEN"
-        log_info "Using HOMEBREW_TAP_TOKEN from environment"
-    else
-        # Try to get token from gh CLI
-        token=$(gh auth token 2>/dev/null || true)
-        if [[ -n "$token" ]]; then
-            log_info "Using GitHub token from 'gh auth token'"
-        fi
-    fi
-
-    if [[ -z "$token" ]]; then
-        if [[ "$REQUIRE_HOMEBREW_TAP_UPDATE" == "1" ]]; then
-            die "No GitHub token available for Homebrew tap update"
-        fi
-        log_warn "No GitHub token available, skipping Homebrew tap update"
-        return 0
-    fi
-
-    dmg_sha256=$(shasum -a 256 "$OUT_DIR/Faz.dmg" | awk '{print $1}')
-
-    log_info "Dispatching Homebrew tap update..."
-
-    # Dispatch workflow to update Homebrew tap
-    if ! dispatch_output=$(
-        GH_TOKEN="$token" gh api \
-        --method POST \
-        -H "Accept: application/vnd.github+json" \
-        -H "X-GitHub-Api-Version: 2022-11-28" \
-        "/repos/${HOMEBREW_TAP_REPO}/dispatches" \
-        -f "event_type=kaku_release_published" \
-        -f "client_payload[version]=$version" \
-        -f "client_payload[sha256]=$dmg_sha256" 2>&1
-    ); then
-        log_warn "Failed to dispatch Homebrew tap update for ${HOMEBREW_TAP_REPO}"
-        log_warn "$dispatch_output"
-        if [[ "$REQUIRE_HOMEBREW_TAP_UPDATE" == "1" ]]; then
-            die "Homebrew tap update dispatch failed. Track the workflow here: $workflow_url"
-        fi
-        log_warn "Track the workflow here: $workflow_url"
-        return 0
-    fi
-
-    log_info "Homebrew tap update dispatched"
-    log_info "Track the workflow here: $workflow_url"
-
-    latest_run_url=$(gh run list \
-        -R "$HOMEBREW_TAP_REPO" \
-        --workflow bump.yml \
-        --limit 1 \
-        --json url,status,displayTitle,event \
-        --jq '.[] | select(.displayTitle=="kaku_release_published" and .event=="repository_dispatch") | .url' 2>/dev/null || true)
-    if [[ -n "$latest_run_url" ]]; then
-        log_info "Latest Homebrew tap run: $latest_run_url"
-    fi
-
-    if [[ "$REQUIRE_HOMEBREW_TAP_UPDATE" == "1" ]]; then
-        local expected_version="$version"
-        local remote_version=""
-        local attempt=0
-        local max_attempts="${HOMEBREW_TAP_VERIFY_ATTEMPTS:-12}"
-        local sleep_seconds="${HOMEBREW_TAP_VERIFY_SLEEP_SECONDS:-15}"
-        while (( attempt < max_attempts )); do
-            attempt=$((attempt + 1))
-            # Read the cask via the API's raw content, not its download_url:
-            # download_url points at raw.githubusercontent.com behind Fastly
-            # (cache-control max-age=300), which serves the previous version for
-            # the whole polling window and causes false-negative timeouts.
-            remote_version=$(gh api "repos/${HOMEBREW_TAP_REPO}/contents/Casks/kakuku.rb?ref=main" \
-                -H "Accept: application/vnd.github.raw" 2>/dev/null \
-                | sed -n 's/^  version "\([^"]*\)"$/\1/p' | head -n1 || true)
-            if [[ "$remote_version" == "$expected_version" ]]; then
-                log_info "Homebrew tap verified at version ${remote_version}"
-                break
-            fi
-            if [[ -z "$remote_version" ]]; then
-                log_warn "Homebrew tap version check attempt ${attempt}/${max_attempts} returned empty result; waiting..."
-            else
-                log_info "Homebrew tap version check attempt ${attempt}/${max_attempts}: current=${remote_version}, expected=${expected_version}; waiting..."
-            fi
-            if (( attempt < max_attempts )); then
-                sleep "$sleep_seconds"
-            fi
-        done
-        if [[ "$remote_version" != "$expected_version" ]]; then
-            die "Homebrew tap version verification timed out: expected ${expected_version}, got ${remote_version:-<empty>}"
-        fi
-    fi
-}
 
 # Main release flow
 main() {
@@ -555,10 +450,9 @@ main() {
 
     if [[ "$DRY_RUN" == "1" ]]; then
         log_warn "[DRY-RUN] All pre-flight checks passed."
-        log_warn "[DRY-RUN] Would build → notarize → tag V${version} → upload → tap dispatch"
+        log_warn "[DRY-RUN] Would build → notarize → tag V${version} → upload"
         log_warn "[DRY-RUN] Expected artifacts: $OUT_DIR/Faz.dmg, $OUT_DIR/faz_for_update.zip, $OUT_DIR/faz_for_update.zip.sha256"
         log_warn "[DRY-RUN] GitHub repo: $GITHUB_REPO"
-        log_warn "[DRY-RUN] Homebrew tap: $HOMEBREW_TAP_REPO"
         log_warn "[DRY-RUN] Unset DRY_RUN (or drop --dry-run) to run for real."
         return 0
     fi
@@ -585,10 +479,8 @@ main() {
         time_stage "tag" create_tag "$version"
         time_stage "upload" create_github_release "$version"
     else
-        log_warn "Skipping upload (resume flag); tap dispatch only"
+        log_warn "Skipping upload (resume flag)"
     fi
-
-    time_stage "homebrew-tap" update_homebrew_tap "$version"
 
     log_info "Release $version complete!"
     log_info "Artifacts:"

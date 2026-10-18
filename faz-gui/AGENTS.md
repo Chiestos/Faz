@@ -26,7 +26,7 @@
 
 - Keep rendering decisions in rendering modules, not scattered across event code.
 - Keep initial window dimension math in `TermWindow::new_window()` consistent with `get_os_border()` behavior.
-- There is no in-app update surface. The Help menu, the Check/Restart menu items, the background checker, `faz-gui/src/update.rs`, and the `faz update` subcommand were all removed; do not reintroduce them without an explicit product decision. The Homebrew cask is the update path.
+- There is no in-app update surface. The Help menu, the Check/Restart menu items, the background checker, `faz-gui/src/update.rs`, and the `faz update` subcommand were all removed; do not reintroduce them without an explicit product decision. Updates come from downloading a new DMG.
 - Keep `FAZ_CONFIG_CHANGED` fast path in `emit_user_var_event()` before pane ownership checks.
 - Pass fullscreen state into `TabBarState::new()` and preserve fullscreen-specific title button spacing behavior.
 - Wrap macOS worker thread spawns in the existing autorelease-pool helper so shutdown does not reintroduce use-after-free crashes.

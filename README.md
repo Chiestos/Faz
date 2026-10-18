@@ -34,9 +34,8 @@ Part of a trilogy: [Faz](https://github.com/tw93/Faz) (書く) writes code, [Waz
 ## Quick Start
 
 1. [Download Faz DMG](https://github.com/tw93/Faz/releases/latest) & Drag to Applications
-2. Or install with Homebrew: `brew install tw93/tap/kakuku`
-3. Open Faz. The app is notarized by Apple, so it opens without security warnings
-4. On first launch, Faz will automatically set up your shell environment
+2. Open Faz. The app is notarized by Apple, so it opens without security warnings
+3. On first launch, Faz will automatically set up your shell environment
 
 ## Usage Guide
 
@@ -78,7 +77,7 @@ Full FAQ: [docs/faq.md](docs/faq.md)
 ## Docs
 
 - [Keybindings](docs/keybindings.md) - full shortcut reference
-- [Features](docs/features.md) - lazygit, yazi, remote files, shell suite
+- [Features](docs/features.md) - lazygit, yazi, shell suite
 - [Configuration](docs/configuration.md) - themes, fonts, custom keybindings, Lua API
 - [CLI Reference](docs/cli.md) - `faz config`, `faz doctor`, and more
 - [FAQ](docs/faq.md) - common questions and troubleshooting
