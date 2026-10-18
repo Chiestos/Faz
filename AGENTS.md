@@ -57,7 +57,7 @@ make app
 - Before commenting on or closing an item, confirm its title, state, and author with `gh issue view` or `gh pr view`.
 - Do not close issues or PRs on local green alone. For fixes pushed to `main`, wait for the new GitHub Actions run on `main` to pass before posting fixed/closed replies.
 - The rolling `nightly` release is not rebuilt by push. Before sending users to Nightly, run or verify `./scripts/nightly.sh` and confirm `gh release view nightly --json tagName,targetCommitish,publishedAt,assets,url` points at the fix commit and includes `Faz-nightly.dmg`.
-- Default issue-closure pipeline once a fix is verified: commit the fix, refresh the `nightly` release assets per the rule above, reply in the reporter's language with the Nightly download or in-app update path, then propose closure and wait for maintainer confirmation. Do not promise a specific packaged-release date in replies.
+- Default issue-closure pipeline once a fix is verified: commit the fix, refresh the `nightly` release assets per the rule above, reply in the reporter's language with the Nightly download link, then propose closure and wait for maintainer confirmation. Do not promise a specific packaged-release date in replies.
 - Before pushing `main`, run `git fetch origin main` and verify `origin/main` has not moved unexpectedly. If it moved, stop and review `origin/main..HEAD` before pushing.
 - If an accepted PR's equivalent fix lands on `main` outside the contributor branch, state the landed commit and co-author status in the PR before closing it.
 
@@ -111,8 +111,8 @@ For GUI or rendering issues, read `faz-gui/AGENTS.md` first and verify with `mak
 
 ## Current Risk Areas
 
-- In-app update replace/restart must confirm on every entry path (menu Check for Updates, menu Restart to Update, toast, CLI direct ZIP, brew cask). Do not set `FAZ_UPDATE_AUTO_CONFIRM` for exploratory menu check; only the overlay-confirmed path may auto-confirm. Sibling entry points tend to regress independently; after changing one path, sweep the matrix and keep the guards in `faz-gui` (`user_facing_update_events_route_through_confirm`) and `faz-cli` (`brew_and_direct_paths_confirm_before_replace`) green. Details: `faz-gui/AGENTS.md` and `.agents/skills/bugs/SKILL.md`.
-- Shell integration and the update paths are active product surfaces. Preserve proxy config and the shell user-var contract that user configs subscribe to.
+- There is no in-app update surface: no menu item, no background check, no `faz update`, and no Homebrew tap. Updates come from downloading a new DMG. Do not reintroduce an update path without an explicit product decision; details in `faz-gui/AGENTS.md`.
+- Shell integration is an active product surface. Preserve proxy config and the shell user-var contract that user configs subscribe to.
 - `config_version` bumps every release; the source of truth is `assets/shell-integration/config_version.txt` and the gate is `scripts/check_release_config.sh`. Config schema changes must update bundled defaults, docs, and release checks together. **There is no historical config migration**: a removed key is kept as a tolerated `deprecated` field or ignored, never rewritten in the user's file, so do not add version-gated branches. Per-version history lives in `docs/config-versions.md`. Do not hardcode the current version number in agent guides; it goes stale between releases.
 - GUI regressions can come from overlay resize, pane split/removal, macOS worker thread lifetime, WebGPU surface reconfigure, tab bar spacing, and alternate-screen wheel scroll behavior.
 - Startup performance depends on caching shell user vars, Lua bytecode, early appearance queries, GLSL version, and built-in fonts. Do not invalidate those caches without measurement.

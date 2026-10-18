@@ -37,8 +37,8 @@ gh issue list --repo tw93/Faz --state closed --label bug --limit 40
 
 Bugs recur by shape within a module. Two signals worth acting on:
 
-- A fix chain of two or more commits each "completing" the previous one means a sibling path is probably still open. Real chain here: toast confirm → menu confirm → brew confirm on the same update flow.
-- A commit body that says only one surface was fixed (toast / CLI / overlay / brew) means grep every other surface for the same action.
+- A fix chain of two or more commits each "completing" the previous one means a sibling path is probably still open. Look for the same action reachable from a menu, a key binding, a palette entry, or a Lua callback, and fix them in one pass.
+- A commit body that says only one surface was fixed (menu / key binding / palette / Lua) means grep every other surface for the same action.
 
 ## 3. Sweep the boundaries, in this order
 
@@ -70,7 +70,7 @@ Before flagging unwraps or panics, confirm production code: skip `#[test]`, fixt
 
 ## 5. Rank by blast radius
 
-1. Silent data loss or process kill (update/restart, close all, reset) without confirm on some entry path
+1. Silent data loss or process kill (close all, reset, quit with running tasks) without confirm on some entry path
 2. Crash loop or unrecoverable launch (session restore, paint)
 3. Stuck UI state (selection latch, frozen frame after sleep, window behind menu bar)
 4. Shell/environment pollution outside Faz (Starship, PATH, generated zsh)
@@ -102,7 +102,6 @@ Use these as default scopes when the maintainer says "scan for bugs" without a p
 
 | Area | Issue / fix examples | Probe |
 |---|---|---|
-| Update confirm matrix | toast + menu overlay, CLI/brew `confirm_apply_update`, guards in `update.rs` / `frontend.rs` tests | Trace every caller of `restart_to_update` / `spawn_update_helper` / `run_brew_upgrade`; run those unit tests |
 | Titlebar / tabs / DPI | #516, #504, #490, #483, #460 | External display + scaled resolution + tab top/bottom |
 | Window drag / menubar | #508, #456, #408, #414, #477 | Drag to menubar, lock screen, fill desktop |
 | Selection latch | #495, #487, #455 | Ctrl+L, cancel rename, mouse-reporting TUI |
