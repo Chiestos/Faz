@@ -93,15 +93,20 @@ pub fn run_transfer(
     // transfer is happening rather than in a separate window. It is text, not
     // protocol data, so it takes the normal parsing path.
     let progress_pane = Arc::clone(pane);
-    let transfer = match slave {
-        Some(slave) => {
-            use std::os::fd::AsRawFd;
-            Transfer::start_with_slave(direction, pty_fd, slave.as_raw_fd(), command)
-                // Keep the slave open for the transfer's lifetime: closing it
-                // would let the pty revert to the shell's termios mid-session.
-                .on_slave_keepalive(slave)
-        }
-        None => Transfer::start(direction, pty_fd, command),
+    let transfer = {
+        let t = match slave {
+            Some(slave) => {
+                use std::os::fd::AsRawFd;
+                Transfer::start_with_slave(direction, pty_fd, slave.as_raw_fd(), command)
+                    // Keep the slave open for the transfer's lifetime: closing it
+                    // would let the pty revert to the shell's termios mid-session.
+                    .on_slave_keepalive(slave)
+            }
+            None => Transfer::start(direction, pty_fd, command),
+        };
+        // The relay takes the pty's read side, so the pane's roundtrip thread
+        // stops reading while the transfer runs.
+        t.on_state(Arc::clone(state))
     }
         .on_progress(move |bytes: &[u8]| {
             // lrzsz explains itself only on stderr, and the pane shows the
@@ -142,36 +147,44 @@ pub fn run_transfer(
                     return;
                 }
             };
-            let cancel = state.begin(owned);
+            let cancel = state.begin(owned, direction);
             let _ = cancel;
 
+            // Report what the parser diverted once the transfer is over. The
+            // relay cannot answer this: with the parser owning the pty's read
+            // side, its peer-to-child counter is structurally zero.
+            {
+                let state = Arc::clone(&state);
+                std::thread::spawn(move || {
+                    while state.is_active() {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                    log::info!(
+                        "zmodem: parser diverted {} byte(s) from the peer to the local child",
+                        state.peer_bytes_to_child()
+                    );
+                });
+            }
+
+            // Do not replay the peer's opening frame.
+            //
+            // An earlier version handed the buffered ZRINIT/ZRQINIT to the
+            // child so the handshake could start from where it left off. That
+            // works when the peer is waiting passively, but the peer retransmits
+            // its opening frame on a timer: by the time the user has picked a
+            // destination the local child would receive a copy of a frame the
+            // remote already sent, answer it, and then answer the remote's real
+            // one — two handshakes for one session, which the peer aborts.
+            //
+            // The remote is still waiting on its side; the child re-opens the
+            // handshake itself with ZRQINIT, which is the sequence `rz` is
+            // already prepared for.
             let buffered = state.buffered();
             if !buffered.is_empty() {
-                // The peer retransmits its opening frame while the user picks a
-                // destination, so the buffer usually holds several copies of
-                // the same handshake. Replaying all of them makes the local
-                // child see a peer restarting mid-conversation, and lrzsz
-                // answers that with a CAN burst — the transfer dies on its
-                // first block. Only the newest copy describes where the peer
-                // actually is.
-                let replay_from = crate::zmodem::detect::last_control_frame_start(&buffered)
-                    .unwrap_or(0);
-                let replay = &buffered[replay_from..];
-                match crate::zmodem::transfer::write_all(sink, replay) {
-                    Ok(_) => log::info!(
-                        "zmodem: replayed {} of {} buffered byte(s) into the transfer{}",
-                        replay.len(),
-                        buffered.len(),
-                        if replay_from > 0 {
-                            format!(" (dropped {replay_from} superseded byte(s))")
-                        } else {
-                            String::new()
-                        }
-                    ),
-                    Err(err) => {
-                        log::warn!("zmodem: replaying buffered bytes failed: {err:#}");
-                    }
-                }
+                log::info!(
+                    "zmodem: discarding {} buffered peer byte(s); the child opens its own handshake",
+                    buffered.len()
+                );
             }
         }
     });
@@ -249,7 +262,9 @@ mod tests {
             None,
         );
         assert_eq!(cmd.program, "sz");
-        assert_eq!(cmd.args, vec!["/tmp/a.bin"]);
+        // `-e` escapes every control byte; without it the ssh client on the
+        // pty can mistake payload bytes for its own escape sequences.
+        assert_eq!(cmd.args, vec!["-e", "/tmp/a.bin"]);
     }
 
     #[test]
