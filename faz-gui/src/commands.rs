@@ -372,7 +372,6 @@ impl CommandDef {
                     if name == "faz-launch-lazygit"
                         || name == "faz-launch-yazi"
                         || name == "faz-zmodem-send"
-                        || name == "faz-zmodem-receive"
             )
         }
 
@@ -730,7 +729,6 @@ impl CommandDef {
                     EmitEvent(name) if name == "faz-launch-lazygit" => 20,
                     EmitEvent(name) if name == "faz-launch-yazi" => 21,
                     EmitEvent(name) if name == "faz-zmodem-send" => 23,
-                    EmitEvent(name) if name == "faz-zmodem-receive" => 24,
                     SplitVertical(_) | SplitHorizontal(_) | SplitPane(_) => 30,
                     CloseCurrentTab { .. } | CloseCurrentPane { .. } => 40,
                     RestorePreviousWindow => 42,
@@ -1563,15 +1561,6 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                     // No key binding on purpose: a transfer needs a file
                     // choice, so it belongs in the menu rather than on a
                     // shortcut that would have to guess.
-                    keys: vec![],
-                    args: &[ArgType::ActivePane],
-                    menubar: &["Shell"],
-                    icon: None,
-                }
-            } else if name == "faz-zmodem-receive" {
-                CommandDef {
-                    brief: "Receive File…".into(),
-                    doc: "Wait for the remote to send a file with ZMODEM, then choose where to save it".into(),
                     keys: vec![],
                     args: &[ArgType::ActivePane],
                     menubar: &["Shell"],
@@ -2554,7 +2543,6 @@ fn compute_default_actions() -> Vec<KeyAssignment> {
         EmitEvent("faz-launch-lazygit".to_string()),
         EmitEvent("faz-launch-yazi".to_string()),
         EmitEvent("faz-zmodem-send".to_string()),
-        EmitEvent("faz-zmodem-receive".to_string()),
         SplitVertical(SpawnCommand {
             domain: SpawnTabDomain::CurrentPaneDomain,
             ..Default::default()

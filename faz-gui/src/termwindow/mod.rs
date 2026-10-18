@@ -385,27 +385,6 @@ fn summarize_bell_tokens(tokens: &[&str]) -> Option<String> {
 pub struct ZmodemPending {
     pub pane_id: PaneId,
     pub direction: mux::zmodem::Direction,
-    /// Set when the user already chose a path via the menu, before the remote
-    /// started sending. A detection that finds this set skips the picker and
-    /// starts the transfer straight away, because asking twice for the same
-    /// answer would be hostile.
-    pub chosen: Option<PathBuf>,
-    /// Who started this session. Decides what happens after the picker closes,
-    /// and cannot be inferred from pane state: at detection time the sink is
-    /// not installed yet, so a "is a transfer running" check is false in both
-    /// cases.
-    pub origin: ZmodemOrigin,
-}
-
-/// Who initiated a ZMODEM session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ZmodemOrigin {
-    /// The remote ran `sz`/`rz` and we noticed the header. The peer is already
-    /// waiting, so a picker result starts the local side immediately.
-    Detected,
-    /// The user picked "Receive File…" before the remote sent anything. The
-    /// picker result is only half the answer; we wait for the header.
-    FromMenu,
 }
 
 fn bell_notification_message(
@@ -728,10 +707,6 @@ pub enum TermWindowNotif {
     /// pending record so the pane can start another transfer.
     ZmodemFinished(PaneId),
     /// The user chose where to save a file the remote has not sent yet.
-    ZmodemDestinationChosen {
-        pane_id: PaneId,
-        destination: PathBuf,
-    },
     CancelOverlayForTab {
         tab_id: TabId,
         pane_id: Option<PaneId>,
@@ -2419,22 +2394,6 @@ impl TermWindow {
                     // Defer the reload to avoid re-entrant borrow of WindowInner.
                     self.schedule_silent_config_reload(window);
                 }
-            }
-            TermWindowNotif::ZmodemDestinationChosen {
-                pane_id,
-                destination,
-            } => {
-                if let Some(pending) = self
-                    .zmodem_pending
-                    .as_mut()
-                    .filter(|p| p.pane_id == pane_id)
-                {
-                    pending.chosen = Some(destination.clone());
-                }
-                let dir = destination.display().to_string();
-                self.show_toast(format!(
-                    "收到远端发送的文件后会保存到 {dir}。请在远端执行 sz <文件> 开始发送。"
-                ));
             }
             TermWindowNotif::ZmodemFinished(pane_id) => {
                 if self
@@ -4897,8 +4856,6 @@ impl TermWindow {
                     crate::frontend::open_faz_config();
                 } else if name == "faz-zmodem-send" {
                     self.start_zmodem_send_from_menu(pane.pane_id());
-                } else if name == "faz-zmodem-receive" {
-                    self.start_zmodem_receive_from_menu(pane.pane_id());
                 } else if name == crate::frontend::SET_DEFAULT_TERMINAL_EVENT {
                     match Connection::get() {
                         Some(conn) => match conn.set_default_terminal() {
@@ -6763,34 +6720,8 @@ impl TermWindow {
         // so the picker has to be opened now or the transfer stalls with the
         // remote waiting. The result arrives on the overlay's own thread via
         // the promise below.
-        // A menu-initiated receive already knows where to save; the remote
-        // only had to be asked to send. Start immediately in that case.
-        if let Some(pending) = self
-            .zmodem_pending
-            .as_ref()
-            .filter(|p| p.pane_id == pane_id && p.direction == direction)
-            .cloned()
-        {
-            if pending.origin == ZmodemOrigin::FromMenu && pending.chosen.is_none() {
-                log::warn!(
-                    "zmodem: pane {pane_id} started sending before a destination was chosen"
-                );
-            }
-            if let Some(chosen) = pending.chosen {
-                if let Some(window) = self.window.clone() {
-                    TermWindow::start_zmodem_transfer(window, pane_id, direction, chosen);
-                    return;
-                }
-            }
-        }
-
-        self.zmodem_pending = Some(ZmodemPending {
-            pane_id,
-            direction,
-            chosen: None,
-            origin: ZmodemOrigin::Detected,
-        });
-        self.open_zmodem_picker(pane_id, direction, ZmodemOrigin::Detected);
+        self.zmodem_pending = Some(ZmodemPending { pane_id, direction });
+        self.open_zmodem_picker(pane_id, direction);
     }
 
     /// Open the directory browser for a pending ZMODEM session and start the
@@ -6803,7 +6734,6 @@ impl TermWindow {
         &mut self,
         pane_id: PaneId,
         direction: mux::zmodem::Direction,
-        origin: ZmodemOrigin,
     ) {
         let mux = Mux::get();
         let Some(window) = mux.get_window(self.mux_window_id) else {
@@ -6845,28 +6775,20 @@ impl TermWindow {
             log::warn!("zmodem: no window to attach the picker result to");
             return;
         };
-        let origin = origin;
         promise::spawn::spawn(async move {
             let picked = future.await;
             promise::spawn::spawn_into_main_thread(async move {
                 match picked {
                     Ok(crate::overlay::filebrowser::PickResult::Chosen(path)) => {
-                        // Only a menu-initiated receive is waiting on the
-                        // remote: the user asked to receive before anything was
-                        // sent, so there is nothing to attach `rz` to yet.
-                        // Every other case has a live peer and starts now.
-                        if origin == ZmodemOrigin::FromMenu
-                            && direction == mux::zmodem::Direction::Download
-                        {
-                            TermWindow::remember_zmodem_destination(window.clone(), pane_id, path);
-                        } else {
-                            TermWindow::start_zmodem_transfer(
-                                window.clone(),
-                                pane_id,
-                                direction,
-                                path,
-                            );
-                        }
+                        // Every picked path has a live peer behind it: a
+                        // detected session, or a menu-initiated send that
+                        // starts the remote receiver itself.
+                        TermWindow::start_zmodem_transfer(
+                            window.clone(),
+                            pane_id,
+                            direction,
+                            path,
+                        );
                     }
                     Ok(crate::overlay::filebrowser::PickResult::Cancelled) => {
                         log::info!("zmodem: picker cancelled for pane {pane_id}");
@@ -6899,34 +6821,7 @@ impl TermWindow {
             self.show_toast(message);
             return;
         }
-        self.open_zmodem_picker(pane_id, mux::zmodem::Direction::Upload, ZmodemOrigin::FromMenu);
-    }
-
-    /// Menu entry: wait for the remote to send a file.
-    ///
-    /// The remote has to be told to send, and only the user knows what to send,
-    /// so this picks the destination directory up front and then waits for the
-    /// header. The detection path takes over from there.
-    fn start_zmodem_receive_from_menu(&mut self, pane_id: PaneId) {
-        if let Some(missing) = mux::zmodem::missing_lrzsz() {
-            let message = format!(
-                "ZMODEM needs lrzsz ({missing} not found). Install it with: brew install lrzsz"
-            );
-            log::warn!("zmodem: {message}");
-            self.show_toast(message);
-            return;
-        }
-        self.zmodem_pending = Some(ZmodemPending {
-            pane_id,
-            direction: mux::zmodem::Direction::Download,
-            chosen: None,
-            origin: ZmodemOrigin::FromMenu,
-        });
-        self.open_zmodem_picker(
-            pane_id,
-            mux::zmodem::Direction::Download,
-            ZmodemOrigin::FromMenu,
-        );
+        self.open_zmodem_picker(pane_id, mux::zmodem::Direction::Upload);
     }
 
     /// Look up the working directory of a pane, for defaulting the picker.
@@ -6941,19 +6836,6 @@ impl TermWindow {
     ///
     /// Clears the diversion so the terminal keeps working, and drops the
     /// pending record so a later detection is not mistaken for this one.
-    /// Record the destination for a receive whose remote has not started
-    /// sending yet, and tell the user what to do next.
-    ///
-    /// Returns via a notification rather than touching `TermWindow` directly,
-    /// because the picker result arrives on a worker thread.
-    pub fn remember_zmodem_destination(
-        window: window::Window,
-        pane_id: PaneId,
-        destination: PathBuf,
-    ) {
-        window.notify(TermWindowNotif::ZmodemDestinationChosen { pane_id, destination });
-    }
-
     /// The user backed out, so tell the remote to stop waiting.
     ///
     /// A picker that closes without a choice is an abort, not a pause: the
