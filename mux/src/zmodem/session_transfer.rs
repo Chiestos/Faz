@@ -15,6 +15,7 @@
 //! substitute a program that behaves like `sz`/`rz` without installing lrzsz.
 
 use std::io;
+use std::path::{Path, PathBuf};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Child, Command, ExitStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -120,7 +121,13 @@ pub fn local_command(direction: Direction, paths: &[String], cwd: Option<&std::p
     // level, or drops, and the transfer dies with the receiver asking for
     // blocks it never got. Small files often survive because they may not
     // contain the sequence; a large one eventually does.
-    let mut cmd = LocalCommand::new(direction.local_program());
+    // Spawn the resolved path rather than the bare name: the app's PATH does
+    // not include Homebrew, so a bare "sz" fails to exec even though the
+    // availability check just succeeded.
+    let program = resolve_program(direction.local_program())
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|| direction.local_program().to_string());
+    let mut cmd = LocalCommand::new(program);
     if direction == Direction::Upload {
         cmd = cmd.arg("-e");
     }
@@ -696,19 +703,33 @@ fn spawn_command(command: &LocalCommand, child_end_fd: RawFd, stderr_fd: Option<
 /// Used by `faz doctor` and by the menu path to report a missing `lrzsz`
 /// rather than failing deep inside a transfer.
 pub fn program_available(program: &str) -> bool {
-    let Some(path) = std::env::var_os("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path).any(|dir| {
-        let candidate = dir.join(program);
-        candidate.is_file()
-            && std::fs::metadata(&candidate)
-                .map(|m| {
-                    use std::os::unix::fs::PermissionsExt;
-                    m.permissions().mode() & 0o111 != 0
-                })
-                .unwrap_or(false)
-    })
+    resolve_program(program).is_some()
+}
+
+/// Locate `program`, preferring PATH but falling back to the usual install
+/// locations.
+///
+/// A GUI app launched from Finder or the Dock does not inherit the shell's
+/// PATH; on a stock Mac it sees only `/usr/bin:/bin:/usr/sbin:/sbin`. Anything
+/// installed with Homebrew is therefore invisible to it, so `sz` and `rz`
+/// would be reported missing from an app bundle while working fine in a
+/// terminal on the same machine. zssh never meets this because it is launched
+/// from a shell and inherits the full PATH.
+pub fn resolve_program(program: &str) -> Option<PathBuf> {
+    let from_path = std::env::var_os("PATH").and_then(|path| {
+        std::env::split_paths(&path)
+            .map(|dir| dir.join(program))
+            .find(|candidate| config::is_executable_file(candidate))
+    });
+    if from_path.is_some() {
+        return from_path;
+    }
+
+    // Same fallbacks the CLI uses when resolving a shell or editor.
+    ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+        .iter()
+        .map(|dir| Path::new(dir).join(program))
+        .find(|candidate| config::is_executable_file(candidate))
 }
 
 /// Are the lrzsz programs present locally?
@@ -748,7 +769,11 @@ mod tests {
             &["a.txt".to_string(), "b.txt".to_string()],
             Some(std::path::Path::new("/tmp")),
         );
-        assert_eq!(cmd.program, "sz");
+        assert!(
+            cmd.program.ends_with("/sz"),
+            "expected a resolved sz path, got {:?}",
+            cmd.program
+        );
         assert_eq!(cmd.args, vec!["-e", "a.txt", "b.txt"]);
         assert_eq!(cmd.cwd.as_deref(), Some(std::path::Path::new("/tmp")));
     }
@@ -941,7 +966,11 @@ mod escape_flag_tests {
         // payload byte can be mistaken for one.
         let paths = vec!["file.bin".to_string()];
         let cmd = local_command(Direction::Upload, &paths, None);
-        assert_eq!(cmd.program, "sz");
+        assert!(
+            cmd.program.ends_with("/sz"),
+            "expected a resolved sz path, got {:?}",
+            cmd.program
+        );
         assert!(
             cmd.args.contains(&"-e".to_string()),
             "upload must run sz with -e, got {:?}",
@@ -961,7 +990,47 @@ mod escape_flag_tests {
         // `rz` has no equivalent flag and needs none: nothing it writes is a
         // payload the peer's environment would interpret.
         let cmd = local_command(Direction::Download, &[], None);
-        assert_eq!(cmd.program, "rz");
+        assert!(
+            cmd.program.ends_with("/rz"),
+            "expected a resolved rz path, got {:?}",
+            cmd.program
+        );
         assert!(!cmd.args.iter().any(|a| a == "-e"));
+    }
+}
+
+#[cfg(test)]
+mod program_lookup_tests {
+    use super::{program_available, resolve_program};
+
+    #[test]
+    fn a_program_on_path_resolves() {
+        let found = resolve_program("sh").expect("sh must resolve");
+        assert!(found.is_absolute(), "expected an absolute path, got {found:?}");
+        assert!(program_available("sh"));
+    }
+
+    #[test]
+    fn a_missing_program_does_not_resolve() {
+        assert!(resolve_program("definitely-not-a-real-program-xyz").is_none());
+        assert!(!program_available("definitely-not-a-real-program-xyz"));
+    }
+
+    #[test]
+    fn the_fallback_covers_where_package_managers_install() {
+        // A GUI app launched from Finder sees only the system PATH, so
+        // anything from Homebrew is invisible without a fallback. This pins
+        // the intent rather than a specific binary: on a machine without
+        // Homebrew there is nothing to find, and the function still returns
+        // None instead of panicking.
+        let homebrew_sz = std::path::Path::new("/opt/homebrew/bin/sz");
+        if homebrew_sz.exists() {
+            let resolved = resolve_program("sz").expect("sz should resolve");
+            assert!(
+                resolved.is_absolute(),
+                "expected an absolute path, got {resolved:?}"
+            );
+            assert!(program_available("sz"));
+        }
     }
 }

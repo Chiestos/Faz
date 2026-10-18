@@ -261,9 +261,13 @@ mod tests {
             &["/tmp/a.bin".to_string()],
             None,
         );
-        assert_eq!(cmd.program, "sz");
-        // `-e` escapes every control byte; without it the ssh client on the
-        // pty can mistake payload bytes for its own escape sequences.
+        // Resolved to an absolute path: the app's PATH omits Homebrew, so a
+        // bare name would fail to exec even after the availability check.
+        assert!(
+            cmd.program.ends_with("/sz"),
+            "expected a resolved sz path, got {:?}",
+            cmd.program
+        );
         assert_eq!(cmd.args, vec!["-e", "/tmp/a.bin"]);
     }
 
@@ -271,7 +275,11 @@ mod tests {
     fn transfer_command_for_download_targets_rz_in_the_chosen_directory() {
         let dir = std::path::Path::new("/tmp");
         let cmd = transfer_command(Direction::Download, &[], Some(dir));
-        assert_eq!(cmd.program, "rz");
+        assert!(
+            cmd.program.ends_with("/rz"),
+            "expected a resolved rz path, got {:?}",
+            cmd.program
+        );
         assert!(cmd.args.is_empty());
         assert_eq!(cmd.cwd.as_deref(), Some(dir));
     }
