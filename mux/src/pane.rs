@@ -301,6 +301,22 @@ pub trait Pane: Downcast + Send + Sync {
     fn send_paste(&self, text: &str) -> anyhow::Result<()>;
     fn reader(&self) -> anyhow::Result<Option<PaneReader>>;
     fn writer(&self) -> MappedMutexGuard<'_, dyn std::io::Write>;
+
+    /// Is a ZMODEM transfer holding this pane's pty's byte stream?
+    ///
+    /// While true, the local `sz`/`rz` child owns the channel: it is the only
+    /// writer whose bytes may reach the peer. Anything else — a keystroke, a
+    /// paste, an injected command, a char-selector glyph — lands in the middle
+    /// of a protocol frame, fails the peer's CRC check, and aborts the whole
+    /// transfer.
+    ///
+    /// Callers that write to a pane's pty must consult this. `Pane::key_down`
+    /// and `Pane::send_paste` never reach the pty while it holds, but the GUI
+    /// has several paths that write bytes directly (`write_all` on
+    /// [`Pane::writer`]) and those bypass the keyboard entirely.
+    fn is_zmodem_exclusive(&self) -> bool {
+        false
+    }
     fn resize(&self, size: TerminalSize) -> anyhow::Result<()>;
     /// Resize terminal state only without notifying the PTY.
     /// Used during live split-drag to provide smooth visual feedback

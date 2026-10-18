@@ -4907,9 +4907,14 @@ impl TermWindow {
                 } else if name == "restart-to-update" {
                     crate::frontend::confirm_and_apply_update();
                 } else if name == "run-kaku-cli" {
-                    let command = format!("{}\n", crate::frontend::kaku_cli_shell_invocation());
-                    let result = pane.writer().write_all(command.as_bytes());
-                    self.finish_terminal_input(pane, result)?;
+                    if pane.is_zmodem_exclusive() {
+                        log::debug!("zmodem: refusing CLI injection during a transfer");
+                    } else {
+                        let command =
+                            format!("{}\n", crate::frontend::kaku_cli_shell_invocation());
+                        let result = pane.writer().write_all(command.as_bytes());
+                        self.finish_terminal_input(pane, result)?;
+                    }
                 } else if let Some(msg) = lookup_kaku_toast(name) {
                     self.show_toast(msg.to_string());
                 } else if name == "open-kaku-config" {
@@ -6414,6 +6419,16 @@ impl TermWindow {
     }
 
     fn write_terminal_input_bytes(&self, pane: &Arc<dyn Pane>, bytes: &[u8]) -> anyhow::Result<()> {
+        if pane.is_zmodem_exclusive() {
+            // The local sz/rz owns the pty while a transfer runs; an injected
+            // byte would tear a protocol frame. See `Pane::is_zmodem_exclusive`.
+            log::debug!(
+                "zmodem: refusing {} injected byte(s) for pane {} during a transfer",
+                bytes.len(),
+                pane.pane_id()
+            );
+            return Ok(());
+        }
         self.for_each_terminal_input_target(pane, |target| {
             let result = target
                 .writer()
@@ -6435,6 +6450,15 @@ impl TermWindow {
         is_down: bool,
         key_event: Option<&KeyEvent>,
     ) -> anyhow::Result<()> {
+        if pane.is_zmodem_exclusive() {
+            // Kitty/win32 encoding writes straight to the pty, bypassing
+            // `key_down`. Same guard, same reason.
+            log::debug!(
+                "zmodem: refusing encoded key for pane {} during a transfer",
+                pane.pane_id()
+            );
+            return Ok(());
+        }
         self.for_each_terminal_input_target(pane, |target| {
             let encoded = key_event.and_then(|event| {
                 self.encode_win32_input(target, event)
@@ -6980,6 +7004,16 @@ impl TermWindow {
                 pane.zmodem_finish();
             }
         }
+        // A cancelled picker never exchanged a protocol byte, so it must not
+        // arm the cooldown that exists for a peer retransmitting its header.
+        // Leaving it armed made an immediate second `rz` look ignored for three
+        // seconds. `cancel_pending` already cleared the session; this drops the
+        // timer it set.
+        if let Some(pane) = Mux::get().get_pane(pane_id) {
+            if let Some(state) = pane.zmodem_state() {
+                state.finish_cancelled();
+            }
+        }
         // Clear the pending record too, otherwise the re-entry guard would
         // block every later transfer on this pane.
         window.notify(TermWindowNotif::ZmodemFinished(pane_id));
@@ -7063,6 +7097,14 @@ impl TermWindow {
                     Ok(outcome) => log::warn!("zmodem: pane {pane_id} did not finish: {outcome:?}"),
                     Err(err) => log::error!("zmodem: pane {pane_id} could not start: {err}"),
                 }
+
+                // Close the session out. Every ending has to go through here:
+                // without it the sink stays installed, the pty keeps the bytes
+                // the child left behind, and the mode never returns to Idle.
+                // A timed-out upload was re-detected as a fresh download that
+                // way — its leftover ZRQINIT reads as "the peer offers a
+                // file", so the user got a save dialog after a hang.
+                pane.zmodem_finish();
 
                 // Clear the pending record so this pane can transfer again.
                 // `notify` on a window that has since closed is a no-op, so

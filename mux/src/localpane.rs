@@ -431,6 +431,21 @@ impl Pane for LocalPane {
     }
 
     fn zmodem_finish(&self) {
+        // Purge whatever protocol bytes are still queued in the pty before
+        // normal parsing resumes. Two things go wrong otherwise: the VT parser
+        // renders binary payload as control sequences, and the leftover frames
+        // are re-detected as a brand-new session — a timed-out upload leaves a
+        // ZRQINIT behind, which reads as the peer offering a file and pops up a
+        // save dialog nobody asked for.
+        //
+        // Drain whenever a session is ending, not only while the channel is
+        // active: by the time a timeout reaches here the sink is already gone,
+        // so `is_active` is false and the leftover would escape.
+        if self.zmodem.mode() != crate::zmodem::state::ZmodemMode::Idle {
+            if let Some(fd) = self.pty.lock().as_raw_fd() {
+                crate::zmodem::transfer::drain(fd);
+            }
+        }
         self.zmodem.finish()
     }
 
@@ -518,6 +533,10 @@ impl Pane for LocalPane {
             #[cfg(unix)]
             fd,
         }))
+    }
+
+    fn is_zmodem_exclusive(&self) -> bool {
+        self.zmodem.is_active()
     }
 
     fn send_paste(&self, text: &str) -> Result<(), Error> {

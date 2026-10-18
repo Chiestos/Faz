@@ -682,9 +682,15 @@ impl Modal for CharSelector {
                     term_window.copy_to_clipboard(self.copy_to, glyph.clone());
                 }
                 if let Some(pane) = term_window.get_active_pane_or_overlay() {
-                    let result = pane.writer().write_all(glyph.as_bytes());
-                    if let Err(err) = term_window.finish_terminal_input(&pane, result) {
-                        log::warn!("failed to write selected glyph to pane: {err:#}");
+                    if pane.is_zmodem_exclusive() {
+                        log::debug!(
+                            "zmodem: refusing char-selector glyph during a transfer"
+                        );
+                    } else {
+                        let result = pane.writer().write_all(glyph.as_bytes());
+                        if let Err(err) = term_window.finish_terminal_input(&pane, result) {
+                            log::warn!("failed to write selected glyph to pane: {err:#}");
+                        }
                     }
                 }
                 term_window.cancel_modal();

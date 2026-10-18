@@ -205,6 +205,12 @@ impl TermWindow {
                             // read the system clipboard image itself, using the same
                             // path that a real Ctrl+V keypress takes.
                             for pane in &targets {
+                                if pane.is_zmodem_exclusive() {
+                                    log::debug!(
+                                        "zmodem: refusing image-paste byte during a transfer"
+                                    );
+                                    continue;
+                                }
                                 let result = pane.writer().write_all(b"\x16");
                                 if let Err(err) = myself.finish_terminal_input(pane, result) {
                                     log::warn!(
