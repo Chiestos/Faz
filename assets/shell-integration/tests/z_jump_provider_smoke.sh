@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/common.sh"
 
 echo "zshz_jump_provider: starting (zsh=$(command -v zsh 2>/dev/null || echo MISSING), bash=$BASH_VERSION)" >&2
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-zshz-jump-provider.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-zshz-jump-provider.XXXXXX")"
 cleanup() {
   rm -rf "$tmp_dir"
 }
@@ -52,9 +52,9 @@ if [[ "$setup_status" -ne 0 ]]; then
   exit 1
 fi
 
-kaku_zsh="$HOME/.config/faz/zsh/faz.zsh"
-if [[ ! -f "$kaku_zsh" ]]; then
-  echo "zshz_jump_provider: faz.zsh not created at $kaku_zsh" >&2
+faz_zsh="$HOME/.config/faz/zsh/faz.zsh"
+if [[ ! -f "$faz_zsh" ]]; then
+  echo "zshz_jump_provider: faz.zsh not created at $faz_zsh" >&2
   exit 1
 fi
 

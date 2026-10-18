@@ -9,7 +9,7 @@ Not currently. Faz is macOS-only while the macOS experience is being polished. W
 Yes. Add to `~/.config/faz/faz.lua`:
 
 ```lua
-local config = require("kaku").config
+local config = require("faz").config
 config.window_background_opacity = 0.92
 config.macos_window_background_blur = 20  -- optional blur, 0–100
 return config
@@ -51,29 +51,29 @@ All are enabled by default.
 ## How do I restore default config?
 
 ```bash
-kaku reset
+faz reset
 ```
 
 This removes Faz-managed shell and tmux integration, Faz-managed git delta
 defaults, selected Faz state, and managed theme blocks in
 `~/.config/faz/faz.lua`. User-authored Lua outside managed blocks is
-preserved. Run `kaku init` again if you want shell integration back.
+preserved. Run `faz init` again if you want shell integration back.
 
 ## The `faz` command is missing. How do I recover it?
 
 ```bash
-/Applications/Faz.app/Contents/MacOS/kaku init --update-only
+/Applications/Faz.app/Contents/MacOS/faz init --update-only
 exec zsh -l
 ```
 
-Then run `kaku doctor` to verify everything is healthy.
+Then run `faz doctor` to verify everything is healthy.
 
 ## How do I use Faz's CLI from scripts?
 
 ```bash
-kaku cli split-pane
-kaku cli split-pane -- bash -c "echo hello"
-kaku cli --help
+faz cli split-pane
+faz cli split-pane -- bash -c "echo hello"
+faz cli --help
 ```
 
 See [cli.md](cli.md) for full reference.
@@ -136,17 +136,17 @@ Smart Tab stays Faz-only; `FAZ_SMART_TAB_DISABLE=1` turns it off.
 
 ## The `y` shell wrapper doesn't sync my directory on exit.
 
-Make sure the Faz fish/zsh shell integration is sourced. Check with `kaku doctor`. The `y` wrapper requires the shell init to be loaded. A bare `yazi` call will not sync the directory.
+Make sure the Faz fish/zsh shell integration is sourced. Check with `faz doctor`. The `y` wrapper requires the shell init to be loaded. A bare `yazi` call will not sync the directory.
 
 ## Homebrew can't find the binary / wrong Faz gets updated.
 
-There is an older unrelated package named `kaku` on Homebrew. Install Faz with the tap to avoid conflicts:
+There is an older unrelated package named `faz` on Homebrew. Install Faz with the tap to avoid conflicts:
 
 ```bash
 brew install tw93/tap/kakuku
 ```
 
-If you see checksum errors with `kaku update`, use `brew upgrade tw93/tap/kakuku` directly.
+To upgrade, run `brew upgrade tw93/tap/kakuku` directly. Faz has no in-app update command.
 
 ## Claude Code notifications don't appear.
 

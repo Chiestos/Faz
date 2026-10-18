@@ -1589,12 +1589,12 @@ mod test {
     #[test]
     fn context_process_title_keeps_cwd_primary_without_spaces() {
         assert_eq!(
-            context_process_title(Some("kaku"), Some("codex")).as_deref(),
-            Some("kaku\u{00b7}codex")
+            context_process_title(Some("faz"), Some("codex")).as_deref(),
+            Some("faz\u{00b7}codex")
         );
         assert_eq!(
-            context_process_title(Some("kaku"), None).as_deref(),
-            Some("kaku")
+            context_process_title(Some("faz"), None).as_deref(),
+            Some("faz")
         );
         assert_eq!(
             context_process_title(None, Some("codex")).as_deref(),
@@ -1609,8 +1609,8 @@ mod test {
     #[test]
     fn multi_pane_separator_is_distinct_from_context_process_separator() {
         assert_eq!(
-            ["www/kaku\u{00b7}codex", "www/kaku"].join(MULTI_PANE_TITLE_SEPARATOR),
-            "www/kaku\u{00b7}codex\u{2219}www/kaku"
+            ["www/faz\u{00b7}codex", "www/faz"].join(MULTI_PANE_TITLE_SEPARATOR),
+            "www/faz\u{00b7}codex\u{2219}www/faz"
         );
         assert_ne!(CONTEXT_PROCESS_SEPARATOR, MULTI_PANE_TITLE_SEPARATOR.trim());
     }

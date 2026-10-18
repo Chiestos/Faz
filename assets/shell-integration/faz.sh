@@ -48,60 +48,60 @@ esac
 # _-prefixed helpers, so calling one from here leaves a dangling reference
 # in snapshot-restored shells (#493).
 if [ -n "${ZSH_NAME-}" ] && alias ssh >/dev/null 2>&1; then
-  _kaku_existing_ssh_alias="${aliases[ssh]-}"
+  _faz_existing_ssh_alias="${aliases[ssh]-}"
   function ssh {
-    local -a _kaku_alias_words _kaku_ssh_cmd
-    _kaku_alias_words=(${(z)_kaku_existing_ssh_alias})
+    local -a _faz_alias_words _faz_ssh_cmd
+    _faz_alias_words=(${(z)_faz_existing_ssh_alias})
     # Snapshot-restored shells keep this function but not the alias
     # variable; fall back to plain ssh instead of exec'ing "$1".
-    if [[ ${#_kaku_alias_words[@]} -eq 0 ]]; then
-      _kaku_ssh_cmd=(command ssh)
-    elif [[ "${_kaku_alias_words[1]-}" == "ssh" ]]; then
-      _kaku_ssh_cmd=(command ssh "${(@)_kaku_alias_words[2,-1]}")
-    elif [[ "${_kaku_alias_words[1]-}" == "command" && "${_kaku_alias_words[2]-}" == "ssh" ]]; then
-      _kaku_ssh_cmd=(command ssh "${(@)_kaku_alias_words[3,-1]}")
-    elif [[ "${_kaku_alias_words[1]-}" == *=* ]]; then
+    if [[ ${#_faz_alias_words[@]} -eq 0 ]]; then
+      _faz_ssh_cmd=(command ssh)
+    elif [[ "${_faz_alias_words[1]-}" == "ssh" ]]; then
+      _faz_ssh_cmd=(command ssh "${(@)_faz_alias_words[2,-1]}")
+    elif [[ "${_faz_alias_words[1]-}" == "command" && "${_faz_alias_words[2]-}" == "ssh" ]]; then
+      _faz_ssh_cmd=(command ssh "${(@)_faz_alias_words[3,-1]}")
+    elif [[ "${_faz_alias_words[1]-}" == *=* ]]; then
       # Alias starts with VAR=value prefixes; expanded array words are not
       # re-parsed as assignments, so route through env.
-      _kaku_ssh_cmd=(env "${_kaku_alias_words[@]}")
+      _faz_ssh_cmd=(env "${_faz_alias_words[@]}")
     else
-      _kaku_ssh_cmd=("${_kaku_alias_words[@]}")
+      _faz_ssh_cmd=("${_faz_alias_words[@]}")
     fi
-    local _kaku_1p_opt=""
+    local _faz_1p_opt=""
     if [ -z "${FAZ_SSH_SKIP_1PASSWORD_FIX-}" ]; then
       case "${SSH_AUTH_SOCK-}" in
         *1password*|*2BUA8C4S2C*)
           case " $* " in
             *IdentitiesOnly=*) ;;
-            *) _kaku_1p_opt="-oIdentitiesOnly=yes" ;;
+            *) _faz_1p_opt="-oIdentitiesOnly=yes" ;;
           esac
           ;;
       esac
     fi
     if [[ -z "${FAZ_SSH_SKIP_TERM_FIX-}" && "${TERM:-}" == "faz" ]]; then
-      TERM=xterm-256color "${_kaku_ssh_cmd[@]}" ${_kaku_1p_opt:+"$_kaku_1p_opt"} "$@"
+      TERM=xterm-256color "${_faz_ssh_cmd[@]}" ${_faz_1p_opt:+"$_faz_1p_opt"} "$@"
     else
-      "${_kaku_ssh_cmd[@]}" ${_kaku_1p_opt:+"$_kaku_1p_opt"} "$@"
+      "${_faz_ssh_cmd[@]}" ${_faz_1p_opt:+"$_faz_1p_opt"} "$@"
     fi
   }
   unalias ssh
 elif ! typeset -f ssh >/dev/null 2>&1; then
   function ssh {
-    local _kaku_1p_opt=""
+    local _faz_1p_opt=""
     if [ -z "${FAZ_SSH_SKIP_1PASSWORD_FIX-}" ]; then
       case "${SSH_AUTH_SOCK-}" in
         *1password*|*2BUA8C4S2C*)
           case " $* " in
             *IdentitiesOnly=*) ;;
-            *) _kaku_1p_opt="-oIdentitiesOnly=yes" ;;
+            *) _faz_1p_opt="-oIdentitiesOnly=yes" ;;
           esac
           ;;
       esac
     fi
     if [[ -z "${FAZ_SSH_SKIP_TERM_FIX-}" && "${TERM:-}" == "faz" ]]; then
-      TERM=xterm-256color command ssh ${_kaku_1p_opt:+"$_kaku_1p_opt"} "$@"
+      TERM=xterm-256color command ssh ${_faz_1p_opt:+"$_faz_1p_opt"} "$@"
     else
-      command ssh ${_kaku_1p_opt:+"$_kaku_1p_opt"} "$@"
+      command ssh ${_faz_1p_opt:+"$_faz_1p_opt"} "$@"
     fi
   }
 fi
@@ -663,67 +663,5 @@ if [[ -z "${WEZTERM_SHELL_SKIP_CWD-}" ]] ; then
   fi
 fi
 
-# Check for available Faz updates on shell startup
-__kaku_check_update_notification() {
-  # macOS uses ~/Library/Application Support, Linux uses XDG_DATA_HOME
-  local check_file
-  if [[ "$OSTYPE" == darwin* ]]; then
-    check_file="$HOME/Library/Application Support/faz/check_update"
-  else
-    check_file="${XDG_DATA_HOME:-$HOME/.local/share}/faz/check_update"
-  fi
-  [[ -f "$check_file" ]] || return 0
-
-  local latest_tag current_version notified_file
-  # Extract tag_name from JSON
-  latest_tag=$(grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$check_file" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
-  [[ -z "$latest_tag" ]] && return 0
-
-  # Get current version
-  if command -v faz >/dev/null 2>&1; then
-    current_version=$(faz --version 2>/dev/null | head -1 | awk '{print $2}')
-  fi
-  [[ -z "$current_version" ]] && return 0
-
-  # Normalize versions for comparison
-  local latest_clean current_clean
-  latest_clean="${latest_tag#[vV]}"
-  current_clean="${current_version#[vV]}"
-
-  # Skip if same version
-  [[ "$latest_clean" == "$current_clean" ]] && return 0
-
-  # Check if already notified for this version
-  local data_dir
-  if [[ "$OSTYPE" == darwin* ]]; then
-    data_dir="$HOME/Library/Application Support/faz"
-  else
-    data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/faz"
-  fi
-  notified_file="$data_dir/update_notified_${latest_clean}"
-  [[ -f "$notified_file" ]] && return 0
-
-  # Numeric version comparison using sort -V
-  local newer
-  newer=$(printf '%s\n%s\n' "$current_clean" "$latest_clean" | sort -V | tail -n1)
-  if [[ "$newer" == "$latest_clean" && "$newer" != "$current_clean" ]]; then
-    local key
-    printf '\033[1;36mKaku %s is available. Press Enter to update, any other key to skip.\033[0m ' "$latest_clean"
-    # Use zsh-compatible read: -r (raw), -s (silent), -k 1 (one char) for zsh; -n 1 for bash
-    if [[ -n "${ZSH_VERSION:-}" ]]; then
-      read -rsk1 key
-    else
-      read -rsn1 key
-    fi
-    echo
-    if [[ -z "$key" ]]; then
-      faz update
-    fi
-    # Mark as notified
-    mkdir -p "$(dirname "$notified_file")" 2>/dev/null
-    touch "$notified_file" 2>/dev/null
-  fi
-}
-__kaku_check_update_notification
 
 true

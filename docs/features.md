@@ -46,7 +46,7 @@ Press `Cmd + Shift + G` to launch lazygit in the current pane. Faz auto-detects 
 
 When a git repo has uncommitted changes and lazygit has not been used in that directory yet, Faz shows a one-time hint to remind you it is available.
 
-Install lazygit with `brew install lazygit` or via `kaku init`.
+Install lazygit with `brew install lazygit` or via `faz init`.
 
 ---
 
@@ -56,7 +56,7 @@ Press `Cmd + Shift + Y` to launch yazi in the current pane. The shell wrapper `y
 
 **Theme sync**: Faz automatically updates `~/.config/yazi/theme.toml` to match the active color scheme (Faz Dark or Faz Light). No manual yazi theme setup needed.
 
-Install yazi with `brew install yazi` or via `kaku init`.
+Install yazi with `brew install yazi` or via `faz init`.
 
 ---
 
@@ -64,7 +64,7 @@ Install yazi with `brew install yazi` or via `kaku init`.
 
 Press `Cmd + Shift + R` to mount the current SSH session's remote filesystem locally via `sshfs` and open it in yazi.
 
-Faz auto-detects the SSH target from the active pane. The mount lives at `~/Library/Caches/dev.kaku/sshfs/<host>`.
+Faz auto-detects the SSH target from the active pane. The mount lives at `~/Library/Caches/dev.faz/sshfs/<host>`.
 
 Requirements: `sshfs` installed (`brew install macfuse sshfs`) and passwordless SSH auth (key-based) for the remote host.
 
@@ -83,9 +83,9 @@ Faz ships a curated set of shell plugins that load automatically inside Faz sess
 
 **Fish support**
 
-Run `kaku init` to provision `~/.config/faz/fish/faz.fish` for fish users. `kaku doctor` verifies both zsh and fish integration paths.
+Run `faz init` to provision `~/.config/faz/fish/faz.fish` for fish users. `faz doctor` verifies both zsh and fish integration paths.
 
-**Optional tools (installed via `kaku init`)**
+**Optional tools (installed via `faz init`)**
 
 - **Starship**: Fast, customizable prompt with git and environment info.
 - **Delta**: Syntax-highlighting pager for git diff and grep.
@@ -102,7 +102,7 @@ Faz's Smart Tab overrides the Tab key in zsh to provide smarter completion behav
 | Suggestion First (default) | Tab accepts autosuggestions when available, falls back to completion | `FAZ_TAB_ACCEPT_SUGGEST_FIRST=1` |
 | Off | Disables Smart Tab entirely, restoring native zsh Tab behavior | `FAZ_SMART_TAB_DISABLE=1` |
 
-You can also set the mode via `kaku config` (the **Smart Tab** option under Behavior) or in `faz.lua`:
+You can also set the mode via `faz config` (the **Smart Tab** option under Behavior) or in `faz.lua`:
 
 ```lua
 config.smart_tab_mode = "suggestion_first"   -- default; Tab accepts autosuggestions first

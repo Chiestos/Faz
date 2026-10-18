@@ -26,7 +26,7 @@ fn neuter_name(name: &str) -> Option<&str> {
 /// files in that folder.
 /// Returns the selected name and the opened File on success.
 fn resolve_file_name(name: Option<&str>) -> anyhow::Result<(PathBuf, File)> {
-    let name = name.and_then(neuter_name).unwrap_or("downloaded-via-kaku");
+    let name = name.and_then(neuter_name).unwrap_or("downloaded-via-faz");
 
     let download_dir = dirs_next::download_dir()
         .ok_or_else(|| anyhow::anyhow!("unable to locate download directory"))?;

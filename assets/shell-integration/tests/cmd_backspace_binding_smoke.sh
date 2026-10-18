@@ -11,7 +11,7 @@ fail() {
   exit 1
 }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-cmd-backspace-binding.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-cmd-backspace-binding.XXXXXX")"
 cleanup() {
   rm -rf "$tmp_dir"
 }
@@ -41,8 +41,8 @@ if [[ "$setup_status" -ne 0 ]]; then
   fail "setup_zsh.sh failed with exit $setup_status"
 fi
 
-kaku_zsh="$HOME/.config/faz/zsh/faz.zsh"
-[[ -f "$kaku_zsh" ]] || fail "managed init file not created at $kaku_zsh"
+faz_zsh="$HOME/.config/faz/zsh/faz.zsh"
+[[ -f "$faz_zsh" ]] || fail "managed init file not created at $faz_zsh"
 
 binding_out=""
 if ! binding_out="$(

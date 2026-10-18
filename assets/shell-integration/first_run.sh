@@ -6,8 +6,8 @@ set -euo pipefail
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/faz"
 STATE_FILE="$CONFIG_DIR/state.json"
-LEGACY_VERSION_FILE="$CONFIG_DIR/.kaku_config_version"
-LEGACY_GEOMETRY_FILE="$CONFIG_DIR/.kaku_window_geometry"
+LEGACY_VERSION_FILE="$CONFIG_DIR/._faz_config_version"
+LEGACY_GEOMETRY_FILE="$CONFIG_DIR/._faz_window_geometry"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMMON_SCRIPT="$SCRIPT_DIR/state_common.sh"
 
@@ -41,7 +41,7 @@ else
 fi
 TOOLS_SCRIPT="$RESOURCES_DIR/install_cli_tools.sh"
 
-resolve_kaku_cli() {
+resolve_faz_cli() {
 	local candidates=(
 		"$RESOURCES_DIR/../MacOS/faz"
 		"/Applications/Faz.app/Contents/MacOS/faz"
@@ -122,13 +122,13 @@ INITIALIZATION_COMPLETE=false
 
 # Process Shell Features
 if [[ "$INSTALL_SHELL" == "true" ]]; then
-	if kaku_bin="$(resolve_kaku_cli)"; then
-		if FAZ_SKIP_TOOL_BOOTSTRAP=1 "$kaku_bin" init; then
+	if _faz_bin="$(resolve_faz_cli)"; then
+		if FAZ_SKIP_TOOL_BOOTSTRAP=1 "$_faz_bin" init; then
 			INITIALIZATION_COMPLETE=true
 		else
 			echo ""
 			echo "Warning: shell setup failed. You can retry manually:"
-			echo "  FAZ_SKIP_TOOL_BOOTSTRAP=1 \"$kaku_bin\" init"
+			echo "  FAZ_SKIP_TOOL_BOOTSTRAP=1 \"$_faz_bin\" init"
 			if [[ -f "$SETUP_SCRIPT" ]]; then
 				echo "Fallback:"
 				echo "  FAZ_SKIP_TOOL_BOOTSTRAP=1 bash \"$SETUP_SCRIPT\""
@@ -151,8 +151,8 @@ else
 	INITIALIZATION_COMPLETE=true
 	echo ""
 	echo "Skipping shell setup. You can run it manually later:"
-	if kaku_bin="$(resolve_kaku_cli)"; then
-		echo "  \"$kaku_bin\" init"
+	if _faz_bin="$(resolve_faz_cli)"; then
+		echo "  \"$_faz_bin\" init"
 	elif [[ -f "$SETUP_SCRIPT" ]]; then
 		echo "  bash \"$SETUP_SCRIPT\""
 	fi
@@ -161,22 +161,22 @@ fi
 mkdir -p "$CONFIG_DIR"
 
 ensure_user_config_via_cli() {
-	local kaku_lua_dest="$CONFIG_DIR/faz.lua"
-	if [[ -f "$kaku_lua_dest" ]]; then
-		echo "Keeping existing user config: $kaku_lua_dest"
+	local _faz_lua_dest="$CONFIG_DIR/faz.lua"
+	if [[ -f "$_faz_lua_dest" ]]; then
+		echo "Keeping existing user config: $_faz_lua_dest"
 		return 0
 	fi
 
-	local kaku_bin
-	if ! kaku_bin="$(resolve_kaku_cli)"; then
+	local _faz_bin
+	if ! _faz_bin="$(resolve_faz_cli)"; then
 		echo "Warning: kaku CLI not found, skipped config initialization."
 		return 0
 	fi
 
-	if "$kaku_bin" config --ensure-only >/dev/null 2>&1; then
-		echo "Created minimal user config: $kaku_lua_dest"
+	if "$_faz_bin" config --ensure-only >/dev/null 2>&1; then
+		echo "Created minimal user config: $_faz_lua_dest"
 	else
-		echo "Warning: failed to initialize user config via '$kaku_bin config --ensure-only'."
+		echo "Warning: failed to initialize user config via '$_faz_bin config --ensure-only'."
 	fi
 }
 

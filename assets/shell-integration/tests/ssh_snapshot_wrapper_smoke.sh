@@ -41,8 +41,8 @@ HOME="$tmp_home" \
   FAZ_VENDOR_DIR="$tmp_vendor" \
   bash "$SHELL_DIR/setup_zsh.sh" --update-only >/dev/null
 
-kaku_zsh="$tmp_home/.config/faz/zsh/faz.zsh"
-[[ -f "$kaku_zsh" ]] || fail "faz.zsh was not generated"
+faz_zsh="$tmp_home/.config/faz/zsh/faz.zsh"
+[[ -f "$faz_zsh" ]] || fail "faz.zsh was not generated"
 
 cat >"$tmp_bin/ssh" <<'EOF'
 #!/bin/sh
@@ -57,7 +57,7 @@ snapshot="$tmp_dir/ssh.snapshot.zsh"
 HOME="$tmp_home" \
   PATH="$tmp_bin:$PATH" \
   TERM=xterm-256color \
-  FAZ_ZSH="$kaku_zsh" \
+  FAZ_ZSH="$faz_zsh" \
   SNAPSHOT="$snapshot" \
   zsh -fc '
     alias ssh="ssh -p 2200"
@@ -97,7 +97,7 @@ live_ssh() {
   HOME="$tmp_home" \
     PATH="$tmp_bin:$PATH" \
     TERM=xterm-256color \
-    FAZ_ZSH="$kaku_zsh" \
+    FAZ_ZSH="$faz_zsh" \
     env "$@" \
     zsh -fc "
       $setup
@@ -125,7 +125,7 @@ grep -Fqx 'ARG=<IdentitiesOnly=yes>' <<<"$output" \
 
 # ...but not when the user already passed it or opted out.
 output="$(HOME="$tmp_home" PATH="$tmp_bin:$PATH" TERM=xterm-256color \
-  FAZ_ZSH="$kaku_zsh" SSH_AUTH_SOCK=/tmp/1password/agent.sock \
+  FAZ_ZSH="$faz_zsh" SSH_AUTH_SOCK=/tmp/1password/agent.sock \
   zsh -fc 'source "$FAZ_ZSH"; TERM=kaku ssh -oIdentitiesOnly=no probe-host' 2>&1)"
 grep -Fqx 'ARG=<IdentitiesOnly=yes>' <<<"$output" \
   && fail "IdentitiesOnly=yes was injected despite an explicit user setting"
@@ -146,7 +146,7 @@ printf 'TERM=%s\n' "${TERM-}"
 EOF
 chmod +x "$tmp_bin/mosh"
 output="$(HOME="$tmp_home" PATH="$tmp_bin:$PATH" TERM=xterm-256color \
-  FAZ_ZSH="$kaku_zsh" \
+  FAZ_ZSH="$faz_zsh" \
   zsh -fc 'source "$FAZ_ZSH"; TERM=kaku mosh probe-host' 2>&1)"
 grep -Fqx 'TERM=xterm-256color' <<<"$output" \
   || fail "mosh wrapper did not apply the TERM fallback"

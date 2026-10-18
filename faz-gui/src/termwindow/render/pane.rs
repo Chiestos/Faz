@@ -6,7 +6,7 @@ use crate::termwindow::render::corners::{
     TOP_RIGHT_ROUNDED_CORNER,
 };
 use crate::termwindow::render::{
-    forces_opaque_kaku_tui_background, same_hyperlink, CursorProperties, LineQuadCacheKey,
+    forces_opaque_faz_tui_background, same_hyperlink, CursorProperties, LineQuadCacheKey,
     LineQuadCacheValue, LineToEleShapeCacheKey, RenderScreenLineParams,
 };
 use crate::termwindow::{ScrollHit, UIItem, UIItemType};
@@ -222,7 +222,7 @@ impl crate::TermWindow {
 
         let window_is_transparent =
             !self.window_background.is_empty() || config.window_background_opacity != 1.0;
-        let force_opaque_background = forces_opaque_kaku_tui_background(&pos.pane);
+        let force_opaque_background = forces_opaque_faz_tui_background(&pos.pane);
         let effective_window_is_transparent = window_is_transparent && !force_opaque_background;
 
         let default_bg = palette

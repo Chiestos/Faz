@@ -819,7 +819,7 @@ pub fn start_tunnel(tunnel_url: String) {
                     }
                     if let Some(update) = capture_pane(pid) {
                         if let Err(e) = tx_for_sub.send(update) {
-                            log::debug!("kaku-tunnel: failed to send update: {:?}", e);
+                            log::debug!("faz-tunnel: failed to send update: {:?}", e);
                         }
                     }
                 }
@@ -829,28 +829,28 @@ pub fn start_tunnel(tunnel_url: String) {
     }
 
     std::thread::Builder::new()
-        .name("kaku-tunnel".to_string())
+        .name("faz-tunnel".to_string())
         .spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .expect("kaku-tunnel tokio runtime");
+                .expect("faz-tunnel tokio runtime");
             rt.block_on(async move {
                 let host_url = format!("{}/h/{}", tunnel_url, token);
                 loop {
                     let rx = tx.subscribe();
-                    log::info!("kaku-tunnel: connecting to {}", host_url);
+                    log::info!("faz-tunnel: connecting to {}", host_url);
                     match run_tunnel_session(&host_url, rx).await {
-                        Ok(()) => log::info!("kaku-tunnel: session ended, reconnecting..."),
+                        Ok(()) => log::info!("faz-tunnel: session ended, reconnecting..."),
                         Err(e) => {
-                            log::warn!("kaku-tunnel: error: {}, reconnecting in 5s", e)
+                            log::warn!("faz-tunnel: error: {}, reconnecting in 5s", e)
                         }
                     }
                     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 }
             });
         })
-        .expect("spawn kaku-tunnel thread");
+        .expect("spawn faz-tunnel thread");
 }
 
 async fn run_tunnel_session(
@@ -925,7 +925,7 @@ async fn run_tunnel_session(
                 }) => {
                     if input.len() > MAX_INPUT_LEN {
                         log::warn!(
-                            "kaku-tunnel: input too large ({} bytes), dropping",
+                            "faz-tunnel: input too large ({} bytes), dropping",
                             input.len()
                         );
                         continue;
@@ -959,7 +959,7 @@ async fn run_tunnel_session(
                 Ok(ClientMsg::AiCancel { conversation_id }) => {
                     cancel_ai_conversation(&conversation_id, &cancel_handles);
                 }
-                Err(e) => log::debug!("kaku-tunnel: unknown message: {}", e),
+                Err(e) => log::debug!("faz-tunnel: unknown message: {}", e),
             },
             Message::Close(_) => break,
             _ => {}

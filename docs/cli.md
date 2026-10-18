@@ -1,6 +1,6 @@
 # CLI Reference
 
-Run `kaku` in your terminal to see all available commands.
+Run `faz` in your terminal to see all available commands.
 
 
 
@@ -57,7 +57,7 @@ faz init --shell fish
 faz init --shell zsh --update-only
 ```
 
-If the `kaku` command goes missing from your shell, restore it with:
+If the `faz` command goes missing from your shell, restore it with:
 
 ```bash
 /Applications/Faz.app/Contents/MacOS/faz init --update-only

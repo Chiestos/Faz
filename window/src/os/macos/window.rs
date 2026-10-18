@@ -3268,8 +3268,8 @@ impl Inner {
     }
 }
 
-const VIEW_CLS_NAME: &str = "KakuWindowView";
-const WINDOW_CLS_NAME: &str = "KakuWindow";
+const VIEW_CLS_NAME: &str = "FazWindowView";
+const WINDOW_CLS_NAME: &str = "FazWindow";
 const TITLEBAR_VIEW_NAME: &str = "NSTitlebarContainerView";
 
 #[derive(Debug, Clone, Copy)]
@@ -4806,15 +4806,15 @@ impl WindowView {
         }
     }
 
-    extern "C" fn kaku_perform_key_assignment(
+    extern "C" fn faz_perform_key_assignment(
         this: &mut Object,
         _sel: Sel,
         menu_item: *mut Object,
     ) {
         let menu_item = MenuItem::with_menu_item(menu_item);
-        // Safe because kakuPerformKeyAssignment: is only used with RepresentedItem
+        // Safe because fazPerformKeyAssignment: is only used with RepresentedItem
         let action = menu_item.get_represented_item();
-        log::debug!("kaku_perform_key_assignment {action:?}",);
+        log::debug!("faz_perform_key_assignment {action:?}",);
         match action {
             Some(RepresentedItem::KeyAssignment(action)) => {
                 if let Some(this) = Self::get_this(this) {
@@ -4859,7 +4859,7 @@ impl WindowView {
                 // Extract the raw window pointer while holding the borrow, then drop the
                 // borrow *before* calling into AppKit. persist_window_size_and_position
                 // and remember_last_closed_window_position both call Cocoa APIs that can
-                // spin the event loop and re-enter kaku_perform_key_assignment, which
+                // spin the event loop and re-enter faz_perform_key_assignment, which
                 // would fail with a double-borrow panic if we held the borrow here.
                 let raw_window = this.inner.borrow().window.as_ref().map(|w| w.load());
                 if let Some(window) = raw_window {
@@ -6385,8 +6385,8 @@ impl WindowView {
             );
 
             cls.add_method(
-                sel!(kakuPerformKeyAssignment:),
-                Self::kaku_perform_key_assignment as extern "C" fn(&mut Object, Sel, *mut Object),
+                sel!(fazPerformKeyAssignment:),
+                Self::faz_perform_key_assignment as extern "C" fn(&mut Object, Sel, *mut Object),
             );
 
             cls.add_method(

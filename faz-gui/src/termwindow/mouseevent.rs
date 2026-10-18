@@ -2051,7 +2051,7 @@ impl super::TermWindow {
                         .map(|pane| pane.pane_id().as_usize());
                     if let Some(pane_id) = target_pane_id {
                         let menu = Menu::new_with_title("");
-                        let selector = sel!(kakuPerformKeyAssignment:);
+                        let selector = sel!(fazPerformKeyAssignment:);
                         for (title, action) in terminal_context_menu_actions() {
                             // Context-menu items deliberately have no AppKit keyEquivalent.
                             // Faz's configurable InputMap remains the shortcut source of truth.

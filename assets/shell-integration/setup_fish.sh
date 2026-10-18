@@ -167,7 +167,7 @@ current_kaku_yazi_flavor() {
 	resolve_kaku_flavor_from_config "$(active_kaku_config_path)"
 }
 
-kaku_yazi_theme_block() {
+_faz_yazi_theme_block() {
 	local flavor="${1:-$(current_kaku_yazi_flavor)}"
 	cat <<EOF
 $FAZ_YAZI_THEME_MARKER_START
@@ -254,7 +254,7 @@ ensure_kaku_yazi_theme() {
 
 # Faz manages the [flavor] section below so Yazi matches the current Faz theme.
 # Add your own theme overrides in other sections if needed.
-$(kaku_yazi_theme_block "$managed_flavor")
+$(_faz_yazi_theme_block "$managed_flavor")
 EOF
 		echo -e "  ${GREEN}✓${NC} ${BOLD}Config${NC}      Initialized yazi theme ${NC}(managed Faz flavor: $managed_flavor)${NC}"
 		return
@@ -277,7 +277,7 @@ EOF
 	{
 		cat "$tmp_theme"
 		printf '\n'
-		kaku_yazi_theme_block "$managed_flavor"
+		_faz_yazi_theme_block "$managed_flavor"
 		printf '\n'
 	} >"${tmp_theme}.next"
 
@@ -749,14 +749,14 @@ if test "$TERM_PROGRAM" = "Faz"
 else if not set -q TMUX
     set -e FAZ_SESSION
 end
-set -l _kaku_in_kaku 0
+set -l _faz_in_kaku 0
 if test "$TERM_PROGRAM" = "Faz"; or begin; set -q TMUX; and set -q FAZ_SESSION; end
-    set _kaku_in_kaku 1
+    set _faz_in_kaku 1
 end
 
 # === Starship prompt ===
 # Faz-only by default; FAZ_PROMPT_EVERYWHERE=1 opts it into every terminal.
-if begin; test $_kaku_in_kaku = 1; or set -q FAZ_PROMPT_EVERYWHERE; end; and command -q starship
+if begin; test $_faz_in_kaku = 1; or set -q FAZ_PROMPT_EVERYWHERE; end; and command -q starship
     starship init fish | source
 end
 
@@ -773,19 +773,19 @@ end
 # function untouched.
 if not functions -q ssh
 function ssh
-    set -l _kaku_extra
+    set -l _faz_extra
     if not set -q FAZ_SSH_SKIP_1PASSWORD_FIX
         switch "$SSH_AUTH_SOCK"
             case '*1password*' '*2BUA8C4S2C*'
                 if not string match -q -- '*IdentitiesOnly=*' $argv
-                    set _kaku_extra -oIdentitiesOnly=yes
+                    set _faz_extra -oIdentitiesOnly=yes
                 end
         end
     end
     if test "$TERM" = faz; and not set -q FAZ_SSH_SKIP_TERM_FIX
-        TERM=xterm-256color command ssh $_kaku_extra $argv
+        TERM=xterm-256color command ssh $_faz_extra $argv
     else
-        command ssh $_kaku_extra $argv
+        command ssh $_faz_extra $argv
     end
 end
 end
@@ -814,15 +814,15 @@ function sudo
 end
 
 # === OSC 7: Working directory reporting ===
-function __kaku_osc7 --on-event fish_prompt
+function __faz_osc7 --on-event fish_prompt
     printf '\033]7;file://%s%s\033\\' (hostname) $PWD
 end
 
 # === OSC 133: Semantic prompt zones ===
-function __kaku_semantic_preexec --on-event fish_preexec
+function __faz_semantic_preexec --on-event fish_preexec
     printf '\033]133;C;\007'
 end
-function __kaku_semantic_precmd --on-event fish_prompt
+function __faz_semantic_precmd --on-event fish_prompt
     # Recover input modes abandoned by a crashed TUI or disconnected SSH (#551).
     if test "$TERM_PROGRAM" = Faz; or begin; test -n "$TMUX"; and test -n "$FAZ_SESSION"; end
         printf '\033[?1000;1002;1003;1004;1005;1006;1007;1016l'
@@ -909,9 +909,9 @@ echo -e "  ${GREEN}✓${NC} ${BOLD}Script${NC}      Generated faz.fish init scri
 mkdir -p "$FISH_CONF_D_DIR"
 cat <<EOF >"$FISH_CONF_D_FILE"
 # Faz shell integration -- managed. Remove with: faz reset
-set -l _kaku_fish_init "\$HOME/.config/faz/fish/faz.fish"
-if test -f \$_kaku_fish_init
-    source \$_kaku_fish_init
+set -l _faz_fish_init "\$HOME/.config/faz/fish/faz.fish"
+if test -f \$_faz_fish_init
+    source \$_faz_fish_init
 end
 EOF
 

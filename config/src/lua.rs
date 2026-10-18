@@ -353,7 +353,7 @@ end
             )
             .context("set wezterm.config_dir")?;
 
-        lua.set_named_registry_value("kaku-watch-paths", Vec::<String>::new())?;
+        lua.set_named_registry_value("faz-watch-paths", Vec::<String>::new())?;
         wezterm_mod.set(
             "add_to_config_reload_watch_list",
             lua.create_function(add_to_config_reload_watch_list)?,
@@ -950,9 +950,9 @@ pub fn add_to_config_reload_watch_list<'lua>(
     lua: &'lua Lua,
     args: Variadic<String>,
 ) -> mlua::Result<()> {
-    let mut watch_paths: Vec<String> = lua.named_registry_value("kaku-watch-paths")?;
+    let mut watch_paths: Vec<String> = lua.named_registry_value("faz-watch-paths")?;
     watch_paths.extend_from_slice(&args);
-    lua.set_named_registry_value("kaku-watch-paths", watch_paths)?;
+    lua.set_named_registry_value("faz-watch-paths", watch_paths)?;
     Ok(())
 }
 

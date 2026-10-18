@@ -607,7 +607,7 @@ fn build_shell_integration_group(
 fn build_runtime_group(shell_kind: &ShellKind) -> DoctorGroup {
     let mut checks = Vec::new();
 
-    let candidates = kaku_bin_candidates();
+    let candidates = faz_bin_candidates();
     let existing = candidates
         .iter()
         .find(|p| config::is_executable_file(p))
@@ -665,7 +665,7 @@ fn build_runtime_group(shell_kind: &ShellKind) -> DoctorGroup {
 
 #[cfg(target_os = "macos")]
 fn build_local_network_check() -> DoctorCheck {
-    let app_bundle = kaku_bin_candidates()
+    let app_bundle = faz_bin_candidates()
         .into_iter()
         .find(|path| config::is_executable_file(path))
         .and_then(|path| {
@@ -1298,7 +1298,7 @@ fn zshrc_path() -> PathBuf {
     }
 }
 
-fn kaku_bin_candidates() -> Vec<PathBuf> {
+fn faz_bin_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
     if let Some(path) = std::env::var_os("FAZ_BIN") {

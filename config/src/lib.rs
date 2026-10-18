@@ -881,7 +881,7 @@ mod tests {
             .split_once("config.color_schemes = config.color_schemes or {}")
             .expect("Faz schemes")
             .1
-            .split_once("config.color_scheme = resolve_kaku_color_scheme")
+            .split_once("config.color_scheme = resolve_faz_color_scheme")
             .expect("end of Faz schemes")
             .0;
         // Evaluate only palette literals, without startup handlers or user config.
@@ -1321,7 +1321,7 @@ return tab, {{ tab }}, panes, effective_config
             "lazygit dispatch must not reject an outer pane cwd; nested shells own their real PWD"
         );
         assert!(
-            !launch.contains("kaku-toast-lazygit-not-git"),
+            !launch.contains("faz-toast-lazygit-not-git"),
             "lazygit dispatch must let lazygit report non-git directories itself"
         );
         assert!(
@@ -1743,7 +1743,7 @@ impl ConfigInner {
     }
 
     fn accumulate_watch_paths(lua: &Lua, watch_paths: &mut Vec<PathBuf>) {
-        if let Ok(mlua::Value::Table(tbl)) = lua.named_registry_value("kaku-watch-paths") {
+        if let Ok(mlua::Value::Table(tbl)) = lua.named_registry_value("faz-watch-paths") {
             for path in tbl.sequence_values::<String>() {
                 if let Ok(path) = path {
                     watch_paths.push(PathBuf::from(path));

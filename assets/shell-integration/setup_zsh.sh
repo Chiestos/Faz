@@ -176,7 +176,7 @@ current_kaku_yazi_flavor() {
 	resolve_kaku_flavor_from_config "$(active_kaku_config_path)"
 }
 
-kaku_yazi_theme_block() {
+_faz_yazi_theme_block() {
 	local flavor="${1:-$(current_kaku_yazi_flavor)}"
 	cat <<EOF
 $FAZ_YAZI_THEME_MARKER_START
@@ -263,7 +263,7 @@ ensure_kaku_yazi_theme() {
 
 # Faz manages the [flavor] section below so Yazi matches the current Faz theme.
 # Add your own theme overrides in other sections if needed.
-$(kaku_yazi_theme_block "$managed_flavor")
+$(_faz_yazi_theme_block "$managed_flavor")
 EOF
 		echo -e "  ${GREEN}✓${NC} ${BOLD}Config${NC}      Initialized yazi theme ${NC}(managed Faz flavor: $managed_flavor)${NC}"
 		return
@@ -290,7 +290,7 @@ EOF
 	{
 		cat "$tmp_theme"
 		printf '\n'
-		kaku_yazi_theme_block "$managed_flavor"
+		_faz_yazi_theme_block "$managed_flavor"
 		printf '\n'
 	} >"${tmp_theme}.next"
 
@@ -772,30 +772,30 @@ fi
 if [[ -n "$AUTOSUGGEST_CLI_PROVIDER" ]]; then
 	AUTOSUGGEST_BLOCK="$(cat <<EOF
 # Faz defers autosuggestions to the external provider detected during faz init.
-typeset -g _kaku_autosuggest_cli_provider="${AUTOSUGGEST_CLI_PROVIDER}"
-typeset -g _kaku_external_autosuggest_provider=0
+typeset -g _faz_autosuggest_cli_provider="${AUTOSUGGEST_CLI_PROVIDER}"
+typeset -g _faz_external_autosuggest_provider=0
 
-if _kaku_has_autosuggest_system; then
-    _kaku_external_autosuggest_provider=1
+if _faz_has_autosuggest_system; then
+    _faz_external_autosuggest_provider=1
 fi
-if [[ -n "\${_kaku_autosuggest_cli_provider:-}" ]]; then
-    _kaku_external_autosuggest_provider=1
+if [[ -n "\${_faz_autosuggest_cli_provider:-}" ]]; then
+    _faz_external_autosuggest_provider=1
 fi
 EOF
 )"
 else
 	AUTOSUGGEST_BLOCK="$(cat <<'EOF'
-typeset -g _kaku_autosuggest_cli_provider=""
-typeset -g _kaku_external_autosuggest_provider=0
+typeset -g _faz_autosuggest_cli_provider=""
+typeset -g _faz_external_autosuggest_provider=0
 
-if _kaku_has_autosuggest_system; then
-    _kaku_external_autosuggest_provider=1
+if _faz_has_autosuggest_system; then
+    _faz_external_autosuggest_provider=1
 fi
 
 # Load zsh-autosuggestions only if:
 # 1. User config has not loaded it yet (_zsh_autosuggest_start not defined)
 # 2. No other autosuggest system is active (to avoid widget wrapping conflicts)
-if ! (( ${+functions[_zsh_autosuggest_start]} )) && [[ "${_kaku_external_autosuggest_provider:-0}" != "1" ]] && [[ -f "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
+if ! (( ${+functions[_zsh_autosuggest_start]} )) && [[ "${_faz_external_autosuggest_provider:-0}" != "1" ]] && [[ -f "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
     source "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
 fi
 EOF
@@ -826,56 +826,56 @@ if [[ "\${TERM_PROGRAM:-}" == "Faz" ]]; then
 elif [[ -z "\${TMUX:-}" ]]; then
     unset FAZ_SESSION
 fi
-_kaku_in_kaku=0
+_faz_in_kaku=0
 if [[ "\${TERM_PROGRAM:-}" == "Faz" ]] || [[ -n "\${TMUX:-}" && -n "\${FAZ_SESSION:-}" ]]; then
-    _kaku_in_kaku=1
+    _faz_in_kaku=1
 fi
 
 # Initialize Starship inside Faz by default. The managed file is sourced by
 # every zsh so PATH and shared helpers remain available in IDE and system
 # terminals. FAZ_PROMPT_EVERYWHERE=1 opts the prompt into all of them, for
 # people who use Faz's Starship as their one prompt (#503).
-if { (( _kaku_in_kaku )) || [[ -n "\${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command -v starship &> /dev/null; then
+if { (( _faz_in_kaku )) || [[ -n "\${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command -v starship &> /dev/null; then
     # Cache the full starship init script. Plain \`starship init zsh\` forks
     # starship on every new shell (twice: the stub it prints re-runs
     # \`starship init zsh --print-full-init\`), and that fork+exec is the
     # largest fixed cost of shell startup. The cache key (binary path +
     # mtime) is recorded on the first line, so upgrading or relocating
     # starship refreshes the cache automatically.
-    _kaku_starship_init_ok=0
-    _kaku_starship_cache="\$FAZ_ZSH_DIR/cache/starship-init.zsh"
-    _kaku_starship_key=""
+    _faz_starship_init_ok=0
+    _faz_starship_cache="\$FAZ_ZSH_DIR/cache/starship-init.zsh"
+    _faz_starship_key=""
     if zmodload -F zsh/stat b:zstat 2>/dev/null; then
-        typeset -a _kaku_starship_stat
-        if zstat -A _kaku_starship_stat +mtime -- "\${commands[starship]}" 2>/dev/null; then
-            _kaku_starship_key="# \${commands[starship]} \${_kaku_starship_stat[1]}"
+        typeset -a _faz_starship_stat
+        if zstat -A _faz_starship_stat +mtime -- "\${commands[starship]}" 2>/dev/null; then
+            _faz_starship_key="# \${commands[starship]} \${_faz_starship_stat[1]}"
         fi
-        unset _kaku_starship_stat
+        unset _faz_starship_stat
     fi
-    if [[ -n "\$_kaku_starship_key" && -r "\$_kaku_starship_cache" ]]; then
-        _kaku_starship_cache_key=""
-        IFS= read -r _kaku_starship_cache_key < "\$_kaku_starship_cache" 2>/dev/null
-        if [[ "\$_kaku_starship_cache_key" == "\$_kaku_starship_key" ]]; then
-            builtin source "\$_kaku_starship_cache"
-            _kaku_starship_init_ok=1
+    if [[ -n "\$_faz_starship_key" && -r "\$_faz_starship_cache" ]]; then
+        _faz_starship_cache_key=""
+        IFS= read -r _faz_starship_cache_key < "\$_faz_starship_cache" 2>/dev/null
+        if [[ "\$_faz_starship_cache_key" == "\$_faz_starship_key" ]]; then
+            builtin source "\$_faz_starship_cache"
+            _faz_starship_init_ok=1
         fi
-        unset _kaku_starship_cache_key
+        unset _faz_starship_cache_key
     fi
-    if (( ! _kaku_starship_init_ok )); then
-        _kaku_starship_init="\$(starship init zsh --print-full-init)"
-        if [[ -n "\$_kaku_starship_init" ]]; then
-            eval "\$_kaku_starship_init"
-            if [[ -n "\$_kaku_starship_key" ]]; then
+    if (( ! _faz_starship_init_ok )); then
+        _faz_starship_init="\$(starship init zsh --print-full-init)"
+        if [[ -n "\$_faz_starship_init" ]]; then
+            eval "\$_faz_starship_init"
+            if [[ -n "\$_faz_starship_key" ]]; then
                 # Write via a per-pid temp file and rename so two shells
                 # starting concurrently can't interleave into a truncated
                 # cache that later shells would keep sourcing.
-                command mkdir -p "\${_kaku_starship_cache:h}" 2>/dev/null
+                command mkdir -p "\${_faz_starship_cache:h}" 2>/dev/null
                 if {
-                    builtin print -r -- "\$_kaku_starship_key"
-                    builtin print -r -- "\$_kaku_starship_init"
-                } >| "\${_kaku_starship_cache}.\$\$" 2>/dev/null; then
-                    command mv -f "\${_kaku_starship_cache}.\$\$" "\$_kaku_starship_cache" 2>/dev/null \
-                        || command rm -f "\${_kaku_starship_cache}.\$\$" 2>/dev/null
+                    builtin print -r -- "\$_faz_starship_key"
+                    builtin print -r -- "\$_faz_starship_init"
+                } >| "\${_faz_starship_cache}.\$\$" 2>/dev/null; then
+                    command mv -f "\${_faz_starship_cache}.\$\$" "\$_faz_starship_cache" 2>/dev/null \
+                        || command rm -f "\${_faz_starship_cache}.\$\$" 2>/dev/null
                 fi
             fi
         else
@@ -883,15 +883,15 @@ if { (( _kaku_in_kaku )) || [[ -n "\${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command
             # unexpectedly produced nothing.
             eval "\$(starship init zsh)"
         fi
-        unset _kaku_starship_init
+        unset _faz_starship_init
     fi
-    unset _kaku_starship_init_ok _kaku_starship_cache _kaku_starship_key
+    unset _faz_starship_init_ok _faz_starship_cache _faz_starship_key
 
     # Faz workaround: Fix Zsh + Starship bug where Ctrl-C prints the literal RPROMPT string.
     # When Zsh receives SIGINT during prompt evaluation, it aborts the command
     # substitution and prints the literal \$(starship...) string. Pre-evaluating
     # the right prompt in precmd avoids this entirely.
-    _kaku_render_starship_rprompt() {
+    _faz_render_starship_rprompt() {
         command starship prompt --right \
             --terminal-width="\${COLUMNS:-}" \
             --keymap="\${KEYMAP:-}" \
@@ -901,24 +901,24 @@ if { (( _kaku_in_kaku )) || [[ -n "\${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command
             --jobs="\${STARSHIP_JOBS_COUNT:-0}" 2>/dev/null
     }
 
-    _kaku_fix_starship_rprompt() {
+    _faz_fix_starship_rprompt() {
         # Check if RPROMPT currently holds a dynamic starship command
         if [[ "\${RPROMPT:-}" == *'\$('*'starship'*'prompt --right'* ]]; then
             # Capture it and save it as our template
-            _kaku_starship_rprompt_cmd="\$RPROMPT"
+            _faz_starship_rprompt_cmd="\$RPROMPT"
         fi
 
         # If we have a saved starship command template, we should evaluate it.
         # BUT we only overwrite RPROMPT if RPROMPT is exactly what we set it to last time,
         # or if it is the original starship command itself.
         # If the user sets RPROMPT="foo", we leave it alone.
-        if [[ -n "\${_kaku_starship_rprompt_cmd:-}" ]]; then
-            if [[ "\${RPROMPT:-}" == "\${_kaku_starship_rprompt_cmd}" ]] || [[ "\${RPROMPT:-}" == "\${_kaku_last_injected_rprompt:-}" ]]; then
+        if [[ -n "\${_faz_starship_rprompt_cmd:-}" ]]; then
+            if [[ "\${RPROMPT:-}" == "\${_faz_starship_rprompt_cmd}" ]] || [[ "\${RPROMPT:-}" == "\${_faz_last_injected_rprompt:-}" ]]; then
                 local evaled
-                if [[ "\${_kaku_starship_rprompt_cmd}" == *starship*'prompt --right'* ]]; then
-                    evaled="\$(_kaku_render_starship_rprompt)"
+                if [[ "\${_faz_starship_rprompt_cmd}" == *starship*'prompt --right'* ]]; then
+                    evaled="\$(_faz_render_starship_rprompt)"
                 else
-                    local cmd="\${_kaku_starship_rprompt_cmd}"
+                    local cmd="\${_faz_starship_rprompt_cmd}"
                     # Avoid zsh pattern parsing here; strip a literal \$(
                     # prefix and trailing ) via slicing instead.
                     if [[ "\${cmd[1]}" == '$' && "\${cmd[2]}" == '(' && "\${cmd[-1]}" == ')' ]]; then
@@ -927,12 +927,12 @@ if { (( _kaku_in_kaku )) || [[ -n "\${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command
                     evaled="\$(eval "\$cmd" 2>/dev/null)"
                 fi
                 RPROMPT="\$evaled"
-                _kaku_last_injected_rprompt="\$evaled"
+                _faz_last_injected_rprompt="\$evaled"
             fi
         fi
     }
-    if [[ \${precmd_functions[(Ie)_kaku_fix_starship_rprompt]} -eq 0 ]]; then
-        precmd_functions+=(_kaku_fix_starship_rprompt)
+    if [[ \${precmd_functions[(Ie)_faz_fix_starship_rprompt]} -eq 0 ]]; then
+        precmd_functions+=(_faz_fix_starship_rprompt)
     fi
 fi
 
@@ -969,55 +969,55 @@ if [[ "\$(bindkey -M emacs '^[[A' 2>/dev/null)" == *"up-line-or-history"* ]]; th
     zle -N up-line-or-beginning-search
     zle -N down-line-or-beginning-search
     zmodload zsh/terminfo 2>/dev/null || true
-    for _kaku_keymap in emacs viins; do
-        [[ -n "\${terminfo[kcuu1]:-}" ]] && bindkey -M "\$_kaku_keymap" "\${terminfo[kcuu1]}" up-line-or-beginning-search
-        [[ -n "\${terminfo[kcud1]:-}" ]] && bindkey -M "\$_kaku_keymap" "\${terminfo[kcud1]}" down-line-or-beginning-search
-        bindkey -M "\$_kaku_keymap" '^[[A' up-line-or-beginning-search
-        bindkey -M "\$_kaku_keymap" '^[[B' down-line-or-beginning-search
-        bindkey -M "\$_kaku_keymap" '^[OA' up-line-or-beginning-search
-        bindkey -M "\$_kaku_keymap" '^[OB' down-line-or-beginning-search
+    for _faz_keymap in emacs viins; do
+        [[ -n "\${terminfo[kcuu1]:-}" ]] && bindkey -M "\$_faz_keymap" "\${terminfo[kcuu1]}" up-line-or-beginning-search
+        [[ -n "\${terminfo[kcud1]:-}" ]] && bindkey -M "\$_faz_keymap" "\${terminfo[kcud1]}" down-line-or-beginning-search
+        bindkey -M "\$_faz_keymap" '^[[A' up-line-or-beginning-search
+        bindkey -M "\$_faz_keymap" '^[[B' down-line-or-beginning-search
+        bindkey -M "\$_faz_keymap" '^[OA' up-line-or-beginning-search
+        bindkey -M "\$_faz_keymap" '^[OB' down-line-or-beginning-search
     done
-    unset _kaku_keymap
+    unset _faz_keymap
 fi
 
 # Faz line-selection widgets for modified arrows in prompt editing.
-_kaku_select_left_char() {
+_faz_select_left_char() {
     emulate -L zsh
     if (( ! REGION_ACTIVE )); then
         zle set-mark-command
     fi
     zle backward-char
 }
-_kaku_select_right_char() {
+_faz_select_right_char() {
     emulate -L zsh
     if (( ! REGION_ACTIVE )); then
         zle set-mark-command
     fi
     zle forward-char
 }
-_kaku_select_line_start() {
+_faz_select_line_start() {
     emulate -L zsh
     if (( ! REGION_ACTIVE )); then
         zle set-mark-command
     fi
     zle beginning-of-line
 }
-_kaku_select_line_end() {
+_faz_select_line_end() {
     emulate -L zsh
     if (( ! REGION_ACTIVE )); then
         zle set-mark-command
     fi
     zle end-of-line
 }
-_kaku_has_active_region() {
+_faz_has_active_region() {
     emulate -L zsh
     # Require both an active region flag and a non-empty span. Either one can
     # be stale on its own and would cause false-positive kill-region deletes.
     (( REGION_ACTIVE && MARK != CURSOR ))
 }
-_kaku_deactivate_region() {
+_faz_deactivate_region() {
     emulate -L zsh
-    if ! _kaku_has_active_region; then
+    if ! _faz_has_active_region; then
         return 1
     fi
     if (( \${+widgets[deactivate-region]} )); then
@@ -1030,10 +1030,10 @@ _kaku_deactivate_region() {
     return 0
 }
 # Unconditional region deactivation helper (not bound to any key; called from
-# _kaku_mv_* widgets below). Unlike _kaku_deactivate_region this always clears
+# _faz_mv_* widgets below). Unlike _faz_deactivate_region this always clears
 # REGION_ACTIVE without checking MARK vs CURSOR, ensuring stale region flags
 # are removed even when the selection span is empty.
-_kaku_force_deactivate_region() {
+_faz_force_deactivate_region() {
     emulate -L zsh
     (( ! REGION_ACTIVE )) && return
     if (( \${+widgets[deactivate-region]} )); then
@@ -1048,37 +1048,37 @@ _kaku_force_deactivate_region() {
 # The Faz GUI sends ^B/^F/^A/^E when collapsing a selection with a plain or
 # Cmd+arrow key; these wrappers ensure zsh clears REGION_ACTIVE in the same
 # keystroke, preventing spurious region-extension or stale region highlights.
-_kaku_mv_backward_char() {
+_faz_mv_backward_char() {
     emulate -L zsh
-    _kaku_force_deactivate_region
+    _faz_force_deactivate_region
     zle backward-char
 }
-_kaku_mv_forward_char() {
+_faz_mv_forward_char() {
     emulate -L zsh
-    _kaku_force_deactivate_region
+    _faz_force_deactivate_region
     zle forward-char
 }
-_kaku_mv_beginning_of_line() {
+_faz_mv_beginning_of_line() {
     emulate -L zsh
-    _kaku_force_deactivate_region
+    _faz_force_deactivate_region
     zle beginning-of-line
 }
-_kaku_mv_end_of_line() {
+_faz_mv_end_of_line() {
     emulate -L zsh
-    _kaku_force_deactivate_region
+    _faz_force_deactivate_region
     zle end-of-line
 }
-zle -N _kaku_mv_backward_char
-zle -N _kaku_mv_forward_char
-zle -N _kaku_mv_beginning_of_line
-zle -N _kaku_mv_end_of_line
-zle -N _kaku_select_left_char
-zle -N _kaku_select_right_char
-zle -N _kaku_select_line_start
-zle -N _kaku_select_line_end
+zle -N _faz_mv_backward_char
+zle -N _faz_mv_forward_char
+zle -N _faz_mv_beginning_of_line
+zle -N _faz_mv_end_of_line
+zle -N _faz_select_left_char
+zle -N _faz_select_right_char
+zle -N _faz_select_line_start
+zle -N _faz_select_line_end
 
 # Terminal-assisted selection shortcuts (Faz GUI sends these directly).
-_kaku_cmd_a_select_all() {
+_faz_cmd_a_select_all() {
     emulate -L zsh
     # Move to beginning first so MARK is anchored there, then extend to end.
     # If set-mark-command were called first, MARK would be at the current cursor
@@ -1087,47 +1087,47 @@ _kaku_cmd_a_select_all() {
     zle set-mark-command
     zle end-of-line
 }
-_kaku_cmd_shift_left() {
+_faz_cmd_shift_left() {
     emulate -L zsh
     zle set-mark-command
     zle beginning-of-line
 }
-_kaku_cmd_shift_right() {
+_faz_cmd_shift_right() {
     emulate -L zsh
     zle set-mark-command
     zle end-of-line
 }
-zle -N _kaku_cmd_a_select_all
-zle -N _kaku_cmd_shift_left
-zle -N _kaku_cmd_shift_right
+zle -N _faz_cmd_a_select_all
+zle -N _faz_cmd_shift_left
+zle -N _faz_cmd_shift_right
 
 # Cancel selection without moving cursor (ESC key in Faz GUI).
-_kaku_cancel_selection() {
+_faz_cancel_selection() {
     emulate -L zsh
-    _kaku_force_deactivate_region
+    _faz_force_deactivate_region
 }
-zle -N _kaku_cancel_selection
+zle -N _faz_cancel_selection
 
 # Shift+Left/Right: char expand; Shift+Home/End: to line boundary.
-bindkey '^[[1;2D' _kaku_select_left_char
-bindkey '^[[1;2C' _kaku_select_right_char
-bindkey '^[[1;2H' _kaku_select_line_start
-bindkey '^[[1;2F' _kaku_select_line_end
+bindkey '^[[1;2D' _faz_select_left_char
+bindkey '^[[1;2C' _faz_select_right_char
+bindkey '^[[1;2H' _faz_select_line_start
+bindkey '^[[1;2F' _faz_select_line_end
 
 # Terminal-assisted selection shortcuts (distinct CSI sequences from Faz GUI).
-bindkey '^[[990~' _kaku_cmd_a_select_all
-bindkey '^[[991~' _kaku_cmd_shift_left
-bindkey '^[[992~' _kaku_cmd_shift_right
-bindkey '^[[995~' _kaku_cancel_selection
+bindkey '^[[990~' _faz_cmd_a_select_all
+bindkey '^[[991~' _faz_cmd_shift_left
+bindkey '^[[992~' _faz_cmd_shift_right
+bindkey '^[[995~' _faz_cancel_selection
 
 # Emacs movement keys wrapped to auto-deactivate any active region.
 # ^B/^F/^A/^E are sent by the Faz GUI when collapsing a selection with a
 # plain or Cmd+arrow key. Wrapping them (rather than using a custom CSI escape)
 # avoids stray characters if the sequence is received in an unexpected context.
-bindkey '^B' _kaku_mv_backward_char
-bindkey '^F' _kaku_mv_forward_char
-bindkey '^A' _kaku_mv_beginning_of_line
-bindkey '^E' _kaku_mv_end_of_line
+bindkey '^B' _faz_mv_backward_char
+bindkey '^F' _faz_mv_forward_char
+bindkey '^A' _faz_mv_beginning_of_line
+bindkey '^E' _faz_mv_end_of_line
 
 # Bind delete keys to native zsh widgets. The Faz GUI handles selection-aware
 # deletion directly (sending kill sequences via line_editor_selection), so the
@@ -1253,7 +1253,7 @@ if ! (( \${+functions[_main_complete]} )) || ! (( \${+_comps} )); then
     fi
 fi
 
-_kaku_has_jump_provider() {
+_faz_has_jump_provider() {
     (( \${+functions[z]} )) \
         || (( \${+functions[zshz]} )) \
         || (( \${+functions[__zoxide_z]} )) \
@@ -1261,20 +1261,20 @@ _kaku_has_jump_provider() {
 }
 
 # Load zsh-z (smart directory jumping) if not already provided by user config.
-if [[ -f "\$FAZ_ZSH_DIR/plugins/zsh-z/zsh-z.plugin.zsh" ]] && ! _kaku_has_jump_provider; then
+if [[ -f "\$FAZ_ZSH_DIR/plugins/zsh-z/zsh-z.plugin.zsh" ]] && ! _faz_has_jump_provider; then
     # Default to smart case matching so \`z kaku\` prefers \`Faz\` over lowercase
     # path entries. Users can still override this in their own shell config.
     : "\${ZSHZ_CASE:=smart}"
     export ZSHZ_CASE
     source "\$FAZ_ZSH_DIR/plugins/zsh-z/zsh-z.plugin.zsh"
 fi
-unset -f _kaku_has_jump_provider 2>/dev/null
+unset -f _faz_has_jump_provider 2>/dev/null
 
 # cd + Tab falls back to zsh-z frecency history when filesystem completion
 # has no match. Delegate ranking to zshz --complete so behavior stays aligned
 # with the plugin (frecency ordering, smart-case, future plugin changes).
 if (( \${+functions[zshz]} )); then
-    _kaku_cd_history_complete() {
+    _faz_cd_history_complete() {
         emulate -L zsh
         setopt extended_glob no_sh_word_split
 
@@ -1305,14 +1305,14 @@ if (( \${+functions[zshz]} )); then
     }
 
     if (( \${+functions[compdef]} )); then
-        compdef _kaku_cd_history_complete cd
+        compdef _faz_cd_history_complete cd
     fi
 fi
 
 # Detect if any autosuggest system is already active (e.g., Kiro CLI, Fig, etc.)
 # These systems wrap zle widgets with names containing "autosuggest", which would
 # conflict with zsh-autosuggestions and cause FUNCNEST recursion errors.
-_kaku_has_autosuggest_system() {
+_faz_has_autosuggest_system() {
     local w
     for w in \${(k)widgets}; do
         case "\${w:l}" in
@@ -1324,7 +1324,7 @@ _kaku_has_autosuggest_system() {
 }
 
 $AUTOSUGGEST_BLOCK
-unset -f _kaku_has_autosuggest_system 2>/dev/null
+unset -f _faz_has_autosuggest_system 2>/dev/null
 
 # Smart Tab behavior:
 # - Use completion while typing arguments/path-like tokens
@@ -1333,8 +1333,8 @@ unset -f _kaku_has_autosuggest_system 2>/dev/null
 # - Without FAZ_TAB_ACCEPT_SUGGEST_FIRST, prefer completion so Tab reveals
 #   candidates instead of accepting recent-history suggestions
 # - Only claim Tab inside Faz sessions unless explicitly disabled
-if [[ -z "\${FAZ_SMART_TAB_DISABLE:-}" ]] && (( _kaku_in_kaku )); then
-    _kaku_tab_widget() {
+if [[ -z "\${FAZ_SMART_TAB_DISABLE:-}" ]] && (( _faz_in_kaku )); then
+    _faz_tab_widget() {
         emulate -L zsh
 
         local has_suggestion=0
@@ -1346,7 +1346,7 @@ if [[ -z "\${FAZ_SMART_TAB_DISABLE:-}" ]] && (( _kaku_in_kaku )); then
 
         # When Faz defers autosuggestions to an external provider, keep Tab
         # as completion-only to avoid widget recursion.
-        if [[ "\${_kaku_external_autosuggest_provider:-0}" != "1" ]] && (( \${+widgets[autosuggest-accept]} )) && [[ -n "\${POSTDISPLAY:-}" ]]; then
+        if [[ "\${_faz_external_autosuggest_provider:-0}" != "1" ]] && (( \${+widgets[autosuggest-accept]} )) && [[ -n "\${POSTDISPLAY:-}" ]]; then
             has_suggestion=1
         fi
 
@@ -1367,8 +1367,8 @@ if [[ -z "\${FAZ_SMART_TAB_DISABLE:-}" ]] && (( _kaku_in_kaku )); then
             zle expand-or-complete
         fi
     }
-    zle -N _kaku_tab_widget
-    bindkey '^I' _kaku_tab_widget
+    zle -N _faz_tab_widget
+    bindkey '^I' _faz_tab_widget
 fi
 
 # Defer fast-syntax-highlighting to first prompt (~40ms saved at startup)
@@ -1399,14 +1399,14 @@ fi
 
 # Recover the shell after a TUI or SSH session exits without restoring input
 # modes (#551). Run at the next prompt, never on wake while a TUI is still alive.
-_kaku_reset_mouse_tracking() {
+_faz_reset_mouse_tracking() {
     if [[ "\${TERM_PROGRAM:-}" == "Faz" || ( -n "\${TMUX:-}" && -n "\${FAZ_SESSION:-}" ) ]]; then
         printf '\033[?1000;1002;1003;1004;1005;1006;1007;1016l'
     fi
     return 0
 }
-if [[ \${precmd_functions[(Ie)_kaku_reset_mouse_tracking]} -eq 0 ]]; then
-    precmd_functions+=(_kaku_reset_mouse_tracking)
+if [[ \${precmd_functions[(Ie)_faz_reset_mouse_tracking]} -eq 0 ]]; then
+    precmd_functions+=(_faz_reset_mouse_tracking)
 fi
 
 
@@ -1422,30 +1422,30 @@ fi
 # _-prefixed helpers, so calling one from here leaves a dangling reference
 # in snapshot-restored shells (#493).
 if (( \$+aliases[ssh] )); then
-    typeset _kaku_existing_ssh_alias="\${aliases[ssh]}"
+    typeset _faz_existing_ssh_alias="\${aliases[ssh]}"
     function ssh {
-        local -a _kaku_alias_words _kaku_ssh_cmd _kaku_ssh_args
-        _kaku_alias_words=(\${(z)_kaku_existing_ssh_alias})
+        local -a _faz_alias_words _faz_ssh_cmd _faz_ssh_args
+        _faz_alias_words=(\${(z)_faz_existing_ssh_alias})
         # Snapshot-restored shells keep this function but not the alias
         # variable; fall back to plain ssh instead of exec'ing "\$1".
-        if [[ \${#_kaku_alias_words[@]} -eq 0 ]]; then
-            _kaku_ssh_cmd=(command ssh)
-            _kaku_ssh_args=("\$@")
-        elif [[ "\${_kaku_alias_words[1]-}" == "ssh" ]]; then
-            _kaku_ssh_cmd=(command ssh)
-            _kaku_ssh_args=("\${(@)_kaku_alias_words[2,-1]}" "\$@")
-        elif [[ "\${_kaku_alias_words[1]-}" == "command" && "\${_kaku_alias_words[2]-}" == "ssh" ]]; then
-            _kaku_ssh_cmd=(command ssh)
-            _kaku_ssh_args=("\${(@)_kaku_alias_words[3,-1]}" "\$@")
-        elif [[ "\${_kaku_alias_words[1]-}" == *=* ]]; then
+        if [[ \${#_faz_alias_words[@]} -eq 0 ]]; then
+            _faz_ssh_cmd=(command ssh)
+            _faz_ssh_args=("\$@")
+        elif [[ "\${_faz_alias_words[1]-}" == "ssh" ]]; then
+            _faz_ssh_cmd=(command ssh)
+            _faz_ssh_args=("\${(@)_faz_alias_words[2,-1]}" "\$@")
+        elif [[ "\${_faz_alias_words[1]-}" == "command" && "\${_faz_alias_words[2]-}" == "ssh" ]]; then
+            _faz_ssh_cmd=(command ssh)
+            _faz_ssh_args=("\${(@)_faz_alias_words[3,-1]}" "\$@")
+        elif [[ "\${_faz_alias_words[1]-}" == *=* ]]; then
             # Alias starts with VAR=value prefixes (e.g. alias ssh='TERM=xterm ssh');
             # expanded array words are not re-parsed as assignments, so route
             # through env to keep them out of command position.
-            _kaku_ssh_cmd=(env "\${_kaku_alias_words[@]}")
-            _kaku_ssh_args=("\$@")
+            _faz_ssh_cmd=(env "\${_faz_alias_words[@]}")
+            _faz_ssh_args=("\$@")
         else
-            _kaku_ssh_cmd=("\${_kaku_alias_words[@]}")
-            _kaku_ssh_args=("\$@")
+            _faz_ssh_cmd=("\${_faz_alias_words[@]}")
+            _faz_ssh_args=("\$@")
         fi
 
         local -a extra_opts=()
@@ -1453,7 +1453,7 @@ if (( \$+aliases[ssh] )); then
             local sock="\${SSH_AUTH_SOCK:-}"
             if [[ "\$sock" == *1password* || "\$sock" == *2BUA8C4S2C* ]]; then
                 local has_identitiesonly=false prev="" arg
-                for arg in "\${_kaku_ssh_args[@]}"; do
+                for arg in "\${_faz_ssh_args[@]}"; do
                     [[ "\$prev" == "-o" && "\$arg" == IdentitiesOnly=* ]] && has_identitiesonly=true
                     [[ "\$arg" == -oIdentitiesOnly=* ]] && has_identitiesonly=true
                     prev="\$arg"
@@ -1463,9 +1463,9 @@ if (( \$+aliases[ssh] )); then
         fi
 
         if [[ -z "\${FAZ_SSH_SKIP_TERM_FIX-}" && "\$TERM" == "faz" ]]; then
-            TERM=xterm-256color "\${_kaku_ssh_cmd[@]}" "\${extra_opts[@]}" "\${_kaku_ssh_args[@]}"
+            TERM=xterm-256color "\${_faz_ssh_cmd[@]}" "\${extra_opts[@]}" "\${_faz_ssh_args[@]}"
         else
-            "\${_kaku_ssh_cmd[@]}" "\${extra_opts[@]}" "\${_kaku_ssh_args[@]}"
+            "\${_faz_ssh_cmd[@]}" "\${extra_opts[@]}" "\${_faz_ssh_args[@]}"
         fi
     }
     unalias ssh
@@ -1531,7 +1531,7 @@ fi
 # etc.). This one-shot precmd guard reapplies the override after .zshrc has
 # fully run, only when the comment style is still at an invisible default, so
 # users who picked their own color are preserved.
-_kaku_apply_highlight_styles() {
+_faz_apply_highlight_styles() {
     # Both fast-syntax-highlighting and zsh-syntax-highlighting ship the same
     # invisible default for \`[comment]\`: fg=black,bold (older versions: fg=8).
     # Faz Dark's color_overrides collapse those to #3A3942 against #1F1D2C,
@@ -1550,9 +1550,9 @@ _kaku_apply_highlight_styles() {
                 ZSH_HIGHLIGHT_STYLES[comment]='fg=249' ;;
         esac
     fi
-    precmd_functions=("\${precmd_functions[@]:#_kaku_apply_highlight_styles}")
+    precmd_functions=("\${precmd_functions[@]:#_faz_apply_highlight_styles}")
 }
-precmd_functions+=(_kaku_apply_highlight_styles)
+precmd_functions+=(_faz_apply_highlight_styles)
 EOF
 
 if [[ -s "$FAZ_INIT_TMPFILE" ]]; then
@@ -1808,25 +1808,25 @@ fi
 # Load zsh-autosuggestions only if:
 # 1. User config has not loaded it yet (_zsh_autosuggest_start not defined)
 # 2. No other autosuggest system is active (to avoid widget wrapping conflicts)
-if ! (( ${+functions[_zsh_autosuggest_start]} )) && [[ "${_kaku_external_autosuggest_provider:-0}" != "1" ]] && [[ -f "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
+if ! (( ${+functions[_zsh_autosuggest_start]} )) && [[ "${_faz_external_autosuggest_provider:-0}" != "1" ]] && [[ -f "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
     source "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
     # Smart Tab: suggestion-first when FAZ_TAB_ACCEPT_SUGGEST_FIRST=1,
     # otherwise completion-first.
     # Keep this widget out of autosuggestions rebinding, otherwise POSTDISPLAY is
     # cleared before our condition check and Tab always falls back to completion.
     typeset -ga ZSH_AUTOSUGGEST_IGNORE_WIDGETS
-    ZSH_AUTOSUGGEST_IGNORE_WIDGETS+=(kaku_tab_accept_or_complete)
-    kaku_tab_accept_or_complete() {
+    ZSH_AUTOSUGGEST_IGNORE_WIDGETS+=(_faz_tab_accept_or_complete)
+    _faz_tab_accept_or_complete() {
         if [[ "${FAZ_TAB_ACCEPT_SUGGEST_FIRST:-0}" == "1" ]] && [[ -n "$POSTDISPLAY" ]]; then
             zle autosuggest-accept
         else
             zle expand-or-complete
         fi
     }
-    zle -N kaku_tab_accept_or_complete
-    bindkey -M emacs '^I' kaku_tab_accept_or_complete
-    bindkey -M main '^I' kaku_tab_accept_or_complete
-    bindkey -M viins '^I' kaku_tab_accept_or_complete
+    zle -N _faz_tab_accept_or_complete
+    bindkey -M emacs '^I' _faz_tab_accept_or_complete
+    bindkey -M main '^I' _faz_tab_accept_or_complete
+    bindkey -M viins '^I' _faz_tab_accept_or_complete
 fi
 # Defer zsh-syntax-highlighting to first prompt (~40ms saved at startup)
 # This plugin must be loaded LAST, and we delay it for faster shell startup

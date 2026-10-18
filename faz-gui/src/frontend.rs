@@ -58,7 +58,7 @@ pub(crate) fn refresh_fast_config_snapshot() {
     FAST_CONFIG_SNAPSHOT.lock().unwrap().replace(cfg);
 }
 
-fn resolve_bundled_kaku_bin() -> anyhow::Result<PathBuf> {
+fn resolve_bundled_faz_bin() -> anyhow::Result<PathBuf> {
     fn add_candidate(candidates: &mut Vec<PathBuf>, path: PathBuf) {
         if !candidates.iter().any(|p| p == &path) {
             candidates.push(path);
@@ -114,7 +114,7 @@ fn resolve_bundled_kaku_bin() -> anyhow::Result<PathBuf> {
     }
 
     anyhow::bail!(
-        "could not find kaku binary; checked: {}",
+        "could not find faz binary; checked: {}",
         candidates
             .iter()
             .map(|p| p.display().to_string())
@@ -123,24 +123,24 @@ fn resolve_bundled_kaku_bin() -> anyhow::Result<PathBuf> {
     )
 }
 
-pub(crate) fn kaku_cli_program_for_spawn() -> String {
-    match resolve_bundled_kaku_bin() {
+pub(crate) fn faz_cli_program_for_spawn() -> String {
+    match resolve_bundled_faz_bin() {
         Ok(path) => path.to_string_lossy().into_owned(),
         Err(err) => {
             // Finder-launched apps can have a minimal PATH; fall back only when
             // we cannot resolve the bundled companion binary.
-            log::warn!("Falling back to PATH lookup for `kaku`: {err:#}");
-            "kaku".to_string()
+            log::warn!("Falling back to PATH lookup for `faz`: {err:#}");
+            "faz".to_string()
         }
     }
 }
 
 /// The bundled CLI as a single shell-quoted token, for typing into an
 /// interactive shell (menu actions). Spawn paths take the unquoted program
-/// via `kaku_cli_program_for_spawn` instead.
-pub(crate) fn kaku_cli_shell_invocation() -> String {
-    let kaku_bin = kaku_cli_program_for_spawn();
-    shell_quote_program(&kaku_bin)
+/// via `faz_cli_program_for_spawn` instead.
+pub(crate) fn faz_cli_shell_invocation() -> String {
+    let faz_bin = faz_cli_program_for_spawn();
+    shell_quote_program(&faz_bin)
 }
 
 fn shell_quote_program(program: &str) -> String {
@@ -209,8 +209,8 @@ where
     .detach();
 }
 
-fn kaku_config_command(kaku_bin: String, config_file: Option<&Path>) -> Vec<String> {
-    let mut args = vec![kaku_bin];
+fn faz_config_command(faz_bin: String, config_file: Option<&Path>) -> Vec<String> {
+    let mut args = vec![faz_bin];
     if let Some(path) = config_file {
         // Settings must edit the file that this GUI loads, even when its new
         // window starts in a different working directory.
@@ -222,9 +222,9 @@ fn kaku_config_command(kaku_bin: String, config_file: Option<&Path>) -> Vec<Stri
     args
 }
 
-pub fn open_kaku_config() {
-    let kaku_bin = kaku_cli_program_for_spawn();
-    ensure_singleton_window("kaku-config", async move || {
+pub fn open_faz_config() {
+    let faz_bin = faz_cli_program_for_spawn();
+    ensure_singleton_window("faz-config", async move || {
         let config = fast_config_snapshot();
         let dpi = config.dpi.unwrap_or_else(|| ::window::default_dpi());
         let size = config.initial_size(dpi as u32, None);
@@ -232,8 +232,8 @@ pub fn open_kaku_config() {
         crate::spawn::spawn_command_internal(
             SpawnCommand {
                 domain: SpawnTabDomain::DomainName("local".to_string()),
-                args: Some(kaku_config_command(
-                    kaku_bin,
+                args: Some(faz_config_command(
+                    faz_bin,
                     config::config_file_override().as_deref(),
                 )),
                 ..Default::default()
@@ -249,20 +249,20 @@ pub fn open_kaku_config() {
     });
 }
 
-pub fn run_kaku_doctor_in_new_tab() {
-    run_kaku_subcommand_in_new_tab("doctor", None, false);
+pub fn run_faz_doctor_in_new_tab() {
+    run_faz_subcommand_in_new_tab("doctor", None, false);
 }
 
-fn run_kaku_subcommand_in_new_tab(
+fn run_faz_subcommand_in_new_tab(
     subcommand: &str,
     running_flag: Option<&'static AtomicBool>,
     auto_confirm: bool,
 ) {
     let subcommand = subcommand.to_string();
-    let kaku_bin = kaku_cli_program_for_spawn();
-    let fallback_bin = shlex::try_quote(&kaku_bin)
+    let faz_bin = faz_cli_program_for_spawn();
+    let fallback_bin = shlex::try_quote(&faz_bin)
         .map(|q| q.into_owned())
-        .unwrap_or_else(|_| kaku_bin.clone());
+        .unwrap_or_else(|_| faz_bin.clone());
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
     let shell_name = Path::new(&shell)
@@ -871,18 +871,18 @@ impl GuiFrontEnd {
                 }
 
                 match action {
-                    KeyAssignment::EmitEvent(event) if event == "run-kaku-cli" => {
-                        let kaku_cli = kaku_cli_program_for_spawn();
+                    KeyAssignment::EmitEvent(event) if event == "run-faz-cli" => {
+                        let faz_cli = faz_cli_program_for_spawn();
                         spawn_command(
                             &SpawnCommand {
-                                args: Some(vec![kaku_cli]),
+                                args: Some(vec![faz_cli]),
                                 ..Default::default()
                             },
                             SpawnWhere::NewWindow,
                         );
                     }
-                    KeyAssignment::EmitEvent(event) if event == "open-kaku-config" => {
-                        open_kaku_config();
+                    KeyAssignment::EmitEvent(event) if event == "open-faz-config" => {
+                        open_faz_config();
                     }
                     KeyAssignment::EmitEvent(event) if event == SET_DEFAULT_TERMINAL_EVENT => {
                         set_default_terminal_with_feedback();
@@ -1247,29 +1247,29 @@ pub fn try_new() -> Result<Rc<GuiFrontEnd>, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{kaku_config_command, shell_quote_program};
+    use super::{faz_config_command, shell_quote_program};
     use std::path::Path;
 
     #[test]
     fn settings_command_preserves_custom_config_path() {
         assert_eq!(
-            kaku_config_command("kaku".into(), Some(Path::new("/tmp/custom config.lua"))),
-            vec!["kaku", "--config-file", "/tmp/custom config.lua", "config"]
+            faz_config_command("faz".into(), Some(Path::new("/tmp/custom config.lua"))),
+            vec!["faz", "--config-file", "/tmp/custom config.lua", "config"]
         );
     }
 
     #[test]
     fn settings_command_keeps_default_config_resolution() {
         assert_eq!(
-            kaku_config_command("kaku".into(), None),
-            vec!["kaku", "config"]
+            faz_config_command("faz".into(), None),
+            vec!["faz", "config"]
         );
     }
 
     #[test]
     fn settings_command_resolves_relative_config_before_spawn() {
         let relative = Path::new("Cargo.toml");
-        let args = kaku_config_command("kaku".into(), Some(relative));
+        let args = faz_config_command("faz".into(), Some(relative));
         let expected = std::fs::canonicalize(relative).expect("existing fixture");
         assert_eq!(Path::new(&args[2]), expected);
         assert!(Path::new(&args[2]).is_absolute());

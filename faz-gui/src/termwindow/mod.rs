@@ -209,7 +209,7 @@ fn normalize_bell_notification_source(value: &str) -> Option<String> {
         .trim_start_matches("Bell from ")
         .trim();
     if first_line.is_empty()
-        || first_line.eq_ignore_ascii_case("kaku")
+        || first_line.eq_ignore_ascii_case("faz")
         || first_line.eq_ignore_ascii_case("wezterm")
         || first_line.eq_ignore_ascii_case("bell")
     {
@@ -441,7 +441,7 @@ fn bell_notification_message(
 }
 
 /// Lookup table for simple lazygit/yazi toast messages dispatched via EmitEvent.
-fn lookup_kaku_toast(event_name: &str) -> Option<&'static str> {
+fn lookup_faz_toast(event_name: &str) -> Option<&'static str> {
     const FAZ_TOAST_MAP: &[(&str, &str)] = &[
         ("faz-toast-try-lazygit", "Try Lazygit: Cmd+Shift+G"),
         ("faz-toast-lazygit-no-pane", "Lazygit: No active pane"),
@@ -1869,7 +1869,7 @@ impl TermWindow {
         crate::startup_trace::mark("  Window::new_window start");
         let window = Window::new_window(
             &get_window_class(),
-            "kaku",
+            "faz",
             geometry,
             Some(&config),
             Rc::clone(&fontconfig),
@@ -2538,7 +2538,7 @@ impl TermWindow {
                                 .map(|pane| {
                                     let user_vars = pane.copy_user_vars();
                                     (
-                                        user_vars.get("kaku_last_cmd").cloned(),
+                                        user_vars.get("faz_last_cmd").cloned(),
                                         user_vars.get("WEZTERM_PROG").cloned(),
                                         pane.get_title(),
                                         pane.get_foreground_process_name(CachePolicy::AllowStale),
@@ -4807,7 +4807,7 @@ impl TermWindow {
             ScrollToBottom => self.scroll_to_bottom(pane),
             ShowTabNavigator => self.show_tab_navigator(),
             ShowDebugOverlay => {
-                crate::frontend::run_kaku_doctor_in_new_tab();
+                crate::frontend::run_faz_doctor_in_new_tab();
             }
             ShowLauncher => self.show_launcher(),
             ShowLauncherArgs(args) => {
@@ -4882,19 +4882,19 @@ impl TermWindow {
                 self.do_open_link_at_mouse_cursor(pane);
             }
             EmitEvent(name) => {
-                if name == "run-kaku-cli" {
+                if name == "run-faz-cli" {
                     if pane.is_zmodem_exclusive() {
                         log::debug!("zmodem: refusing CLI injection during a transfer");
                     } else {
                         let command =
-                            format!("{}\n", crate::frontend::kaku_cli_shell_invocation());
+                            format!("{}\n", crate::frontend::faz_cli_shell_invocation());
                         let result = pane.writer().write_all(command.as_bytes());
                         self.finish_terminal_input(pane, result)?;
                     }
-                } else if let Some(msg) = lookup_kaku_toast(name) {
+                } else if let Some(msg) = lookup_faz_toast(name) {
                     self.show_toast(msg.to_string());
-                } else if name == "open-kaku-config" {
-                    crate::frontend::open_kaku_config();
+                } else if name == "open-faz-config" {
+                    crate::frontend::open_faz_config();
                 } else if name == "faz-zmodem-send" {
                     self.start_zmodem_send_from_menu(pane.pane_id());
                 } else if name == "faz-zmodem-receive" {
@@ -7512,7 +7512,7 @@ mod tests {
             bell_notification_message(
                 Some("cargo test -p faz-gui"),
                 Some("zsh"),
-                "kaku",
+                "faz",
                 Some("/bin/zsh")
             ),
             "Task complete: cargo test"
@@ -7522,7 +7522,7 @@ mod tests {
     #[test]
     fn bell_notification_message_uses_reported_program_before_default_title() {
         assert_eq!(
-            bell_notification_message(None, Some("npm run build"), "kaku", None),
+            bell_notification_message(None, Some("npm run build"), "faz", None),
             "Task complete: npm run build"
         );
     }
@@ -7530,7 +7530,7 @@ mod tests {
     #[test]
     fn bell_notification_message_falls_back_to_process_basename() {
         assert_eq!(
-            bell_notification_message(None, None, "kaku", Some("/opt/homebrew/bin/git")),
+            bell_notification_message(None, None, "faz", Some("/opt/homebrew/bin/git")),
             "Task complete: git"
         );
     }
@@ -7538,7 +7538,7 @@ mod tests {
     #[test]
     fn bell_notification_message_uses_background_fallback_for_uninformative_values() {
         assert_eq!(
-            bell_notification_message(Some("   "), Some("wezterm"), "kaku", None),
+            bell_notification_message(Some("   "), Some("wezterm"), "faz", None),
             "Background task complete"
         );
     }
@@ -7546,7 +7546,7 @@ mod tests {
     #[test]
     fn bell_notification_message_summarizes_shell_wrapped_command() {
         assert_eq!(
-            bell_notification_message(Some("zsh -lc cargo check -p faz-gui"), None, "kaku", None),
+            bell_notification_message(Some("zsh -lc cargo check -p faz-gui"), None, "faz", None),
             "Task complete: cargo check"
         );
     }
@@ -7562,7 +7562,7 @@ mod tests {
     #[test]
     fn bell_notification_message_handles_sudo_with_user_flag() {
         assert_eq!(
-            bell_notification_message(Some("sudo -u root cargo build"), None, "kaku", None),
+            bell_notification_message(Some("sudo -u root cargo build"), None, "faz", None),
             "Task complete: cargo build"
         );
     }
@@ -7570,7 +7570,7 @@ mod tests {
     #[test]
     fn bell_notification_message_handles_docker_compose_up() {
         assert_eq!(
-            bell_notification_message(Some("docker compose up -d"), None, "kaku", None),
+            bell_notification_message(Some("docker compose up -d"), None, "faz", None),
             "Task complete: docker compose up"
         );
     }

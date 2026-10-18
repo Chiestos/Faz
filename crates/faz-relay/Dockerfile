@@ -9,6 +9,6 @@ RUN cargo build --release
 
 FROM debian:bookworm-slim
 COPY --from=builder /app/target/release/faz-relay /usr/local/bin/faz-relay
-ENV RUST_LOG=kaku_relay=info
+ENV RUST_LOG=faz_relay=info
 EXPOSE 8080
 CMD ["faz-relay"]

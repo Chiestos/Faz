@@ -102,7 +102,7 @@ table.insert(config.keys, {
 table.insert(config.keys, {
   key = 'Space',
   mods = 'CMD|SHIFT',
-  action = wezterm.action.EmitEvent('kaku-ai-chat'),
+  action = wezterm.action.EmitEvent('faz-ai-chat'),
 })
 ```
 

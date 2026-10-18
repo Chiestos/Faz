@@ -673,7 +673,7 @@ impl CommandDef {
 
         let mut candidates_for_removal = vec![];
         #[allow(unexpected_cfgs)] // <https://github.com/SSheldon/rust-objc/issues/125>
-        let kaku_perform_key_assignment_sel = sel!(kakuPerformKeyAssignment:);
+        let faz_perform_key_assignment_sel = sel!(fazPerformKeyAssignment:);
 
         /// Mark menu items as candidates for removal
         fn mark_candidates(menu: &Menu, candidates: &mut Vec<MenuItem>, action: SEL) {
@@ -693,7 +693,7 @@ impl CommandDef {
                 mark_candidates(
                     &existing,
                     &mut candidates_for_removal,
-                    kaku_perform_key_assignment_sel,
+                    faz_perform_key_assignment_sel,
                 );
 
                 existing
@@ -858,11 +858,11 @@ impl CommandDef {
 
                         let about_item = MenuItem::new_with(
                             &format!("Faz V{}", config::wezterm_version()),
-                            Some(kaku_perform_key_assignment_sel),
+                            Some(faz_perform_key_assignment_sel),
                             "",
                         );
                         about_item.set_represented_item(RepresentedItem::KeyAssignment(
-                            KeyAssignment::EmitEvent("run-kaku-cli".to_string()),
+                            KeyAssignment::EmitEvent("run-faz-cli".to_string()),
                         ));
                         menu.add_item(&about_item);
 
@@ -887,7 +887,7 @@ impl CommandDef {
 
                         let set_default_terminal_item = MenuItem::new_with(
                             "Set as Default Terminal",
-                            Some(kaku_perform_key_assignment_sel),
+                            Some(faz_perform_key_assignment_sel),
                             "",
                         );
                         set_default_terminal_item.set_represented_item(
@@ -978,7 +978,7 @@ impl CommandDef {
                     None => {
                         let item = MenuItem::new_with(
                             &cmd.brief,
-                            Some(kaku_perform_key_assignment_sel),
+                            Some(faz_perform_key_assignment_sel),
                             &short_cut,
                         );
                         submenu.add_item(&item);

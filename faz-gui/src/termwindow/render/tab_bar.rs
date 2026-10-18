@@ -1,5 +1,5 @@
 use crate::quad::TripleLayerQuadAllocator;
-use crate::termwindow::render::{forces_opaque_kaku_tui_window_background, RenderScreenLineParams};
+use crate::termwindow::render::{forces_opaque_faz_tui_window_background, RenderScreenLineParams};
 use crate::utilsprites::RenderMetrics;
 use config::ConfigHandle;
 use mux::renderable::RenderableDimensions;
@@ -19,7 +19,7 @@ impl crate::TermWindow {
             border.top.get() as f32
         };
         let panes = self.get_panes_to_render();
-        let force_opaque_tab_bar_background = forces_opaque_kaku_tui_window_background(&panes);
+        let force_opaque_tab_bar_background = forces_opaque_faz_tui_window_background(&panes);
 
         if self.config.use_fancy_tab_bar {
             if self.fancy_tab_bar.is_none() {

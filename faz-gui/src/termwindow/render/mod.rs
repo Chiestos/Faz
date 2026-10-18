@@ -104,7 +104,7 @@ pub struct LineToEleShapeCacheKey {
     pub window_is_transparent: bool,
 }
 
-pub(crate) fn forces_opaque_kaku_tui_background(pane: &Arc<dyn Pane>) -> bool {
+pub(crate) fn forces_opaque_faz_tui_background(pane: &Arc<dyn Pane>) -> bool {
     let Some(info) = pane.get_foreground_process_info(mux::pane::CachePolicy::AllowStale) else {
         return false;
     };
@@ -113,7 +113,9 @@ pub(crate) fn forces_opaque_kaku_tui_background(pane: &Arc<dyn Pane>) -> bool {
         .executable
         .file_name()
         .map(|name| name.to_string_lossy().into_owned());
-    if executable.as_deref() != Some("kaku") {
+    // The CLI binary is `faz`. This compared against the pre-rename name, so
+    // the opaque-background rule never fired.
+    if executable.as_deref() != Some("faz") {
         return false;
     }
 
@@ -124,8 +126,8 @@ pub(crate) fn forces_opaque_kaku_tui_background(pane: &Arc<dyn Pane>) -> bool {
         .any(|arg| matches!(arg, "ai" | "config"))
 }
 
-pub(crate) fn forces_opaque_kaku_tui_window_background(panes: &[PositionedPane]) -> bool {
-    panes.len() == 1 && forces_opaque_kaku_tui_background(&panes[0].pane)
+pub(crate) fn forces_opaque_faz_tui_window_background(panes: &[PositionedPane]) -> bool {
+    panes.len() == 1 && forces_opaque_faz_tui_background(&panes[0].pane)
 }
 
 pub struct LineToElementShapeItem {

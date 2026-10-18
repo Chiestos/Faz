@@ -4,7 +4,7 @@ set -euo pipefail
 
 TMUX_SOURCE_LINE='source-file "$HOME/.config/faz/tmux/faz.tmux.conf" # Faz tmux Integration'
 
-normalize_kaku_tmux_source_line_file() {
+normalize_faz_tmux_source_line_file() {
   local input_file="$1"
   local output_file="$2"
 
@@ -65,14 +65,14 @@ run_normalize() {
   local label="$4"
 
   local tmp_dir input_file output_file expected_file status
-  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-tmux-test.XXXXXX")"
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-tmux-test.XXXXXX")"
   input_file="$tmp_dir/input.tmux.conf"
   output_file="$tmp_dir/output.tmux.conf"
   expected_file="$tmp_dir/expected.tmux.conf"
   printf '%s' "$input_text" >"$input_file"
   printf '%s' "$expected_output" >"$expected_file"
 
-  if normalize_kaku_tmux_source_line_file "$input_file" "$output_file"; then
+  if normalize_faz_tmux_source_line_file "$input_file" "$output_file"; then
     status=0
   else
     status=$?

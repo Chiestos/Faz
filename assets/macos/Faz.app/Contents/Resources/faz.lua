@@ -57,7 +57,7 @@ local function url_decode(str)
   return result
 end
 
-local function default_kaku_user_config_path()
+local function default_faz_user_config_path()
   local xdg = os.getenv('XDG_CONFIG_HOME')
   if xdg and xdg ~= '' then
     return xdg .. '/faz/faz.lua'
@@ -69,7 +69,7 @@ local function default_kaku_user_config_path()
   return nil
 end
 
-local function is_bundled_kaku_config_path(path)
+local function is_bundled_faz_config_path(path)
   if type(path) ~= 'string' or path == '' then
     return false
   end
@@ -81,7 +81,7 @@ end
 
 -- Detect if user has custom config overrides in their config file.
 -- Prefer the actively loaded config file, but ignore the bundled defaults file.
-local function kaku_user_config_path()
+local function _faz_user_config_path()
   local runtime_config = nil
   if type(wezterm.config_file) == 'string' and wezterm.config_file ~= '' then
     runtime_config = wezterm.config_file
@@ -93,11 +93,11 @@ local function kaku_user_config_path()
     end
   end
 
-  if runtime_config and runtime_config ~= '' and not is_bundled_kaku_config_path(runtime_config) then
+  if runtime_config and runtime_config ~= '' and not is_bundled_faz_config_path(runtime_config) then
     return runtime_config
   end
 
-  return default_kaku_user_config_path()
+  return default_faz_user_config_path()
 end
 
 local user_has_custom_padding = false
@@ -112,7 +112,7 @@ local user_theme_selection = nil
 
 -- Single scan of the user config (runs once at load time).
 do
-  local user_config_path = kaku_user_config_path()
+  local user_config_path = _faz_user_config_path()
   local file = user_config_path and io.open(user_config_path, 'r')
   if file then
     user_theme_selection = 'none'
@@ -188,7 +188,7 @@ local function resolve_appearance_color_scheme()
   return is_macos_dark_appearance() and 'Faz Dark' or 'Faz Light'
 end
 
-local function resolve_kaku_color_scheme(scheme)
+local function resolve_faz_color_scheme(scheme)
   if scheme == 'Auto' then
     return resolve_appearance_color_scheme()
   end
@@ -201,15 +201,15 @@ end
 -- Optional Claude Code theme sync with Faz color scheme.
 -- Disabled by default because it writes ~/.claude.json.
 -- Set FAZ_CLAUDE_SYNC=1 to opt in.
-local kaku_last_synced_cc_theme = nil
+local _faz_last_synced_cc_theme = nil
 
 local function sync_claude_code_theme(is_light)
   if os.getenv('FAZ_CLAUDE_SYNC') ~= '1' then return end
   local target = is_light and 'light-ansi' or 'dark-ansi'
-  if kaku_last_synced_cc_theme == target then return end
+  if _faz_last_synced_cc_theme == target then return end
   local home = os.getenv('HOME')
   if not home or home == '' then return end
-  kaku_last_synced_cc_theme = target
+  _faz_last_synced_cc_theme = target
   wezterm.run_child_process({
     'python3', '-c',
     [[
@@ -406,13 +406,13 @@ local runtime_cwd_startup_grace_secs = 3
 local runtime_cwd_warmup_until_secs = now_secs() + runtime_cwd_startup_grace_secs
 
 local home_dir = os.getenv("HOME") or wezterm.home_dir
-local kaku_state_dir = home_dir and (home_dir .. "/.config/faz") or nil
+local _faz_state_dir = home_dir and (home_dir .. "/.config/faz") or nil
 local xdg_config_home = os.getenv("XDG_CONFIG_HOME")
-local kaku_config_dir = xdg_config_home and xdg_config_home ~= ""
+local _faz_config_dir = xdg_config_home and xdg_config_home ~= ""
     and (xdg_config_home .. "/faz")
-  or kaku_state_dir
-local lazygit_state_file = kaku_state_dir and (kaku_state_dir .. "/lazygit_state.json") or nil
-local last_cwd_file = kaku_state_dir and (kaku_state_dir .. "/last_cwd") or nil
+  or _faz_state_dir
+local lazygit_state_file = _faz_state_dir and (_faz_state_dir .. "/lazygit_state.json") or nil
+local last_cwd_file = _faz_state_dir and (_faz_state_dir .. "/last_cwd") or nil
 local last_saved_cwd = nil
 
 local function save_last_cwd(path)
@@ -497,11 +497,11 @@ local function read_text_file(path)
   return content
 end
 
-local function ensure_kaku_state_dir()
-  if not kaku_state_dir or kaku_state_dir == "" then
+local function ensure_faz_state_dir()
+  if not _faz_state_dir or _faz_state_dir == "" then
     return
   end
-  os.execute(string.format("mkdir -p %q", kaku_state_dir))
+  os.execute(string.format("mkdir -p %q", _faz_state_dir))
 end
 
 local function load_lazygit_state()
@@ -540,7 +540,7 @@ local function save_lazygit_state()
     return
   end
 
-  ensure_kaku_state_dir()
+  ensure_faz_state_dir()
   local state = load_lazygit_state()
   local ok, encoded = pcall(wezterm.json_encode, state)
   if not ok or type(encoded) ~= "string" or encoded == "" then
@@ -739,12 +739,12 @@ local function resolve_yazi_command()
   return resolved
 end
 
-local kaku_yazi_theme_marker_start = "# ===== Faz Yazi Flavor (managed) ====="
-local kaku_yazi_theme_marker_end = "# ===== End Faz Yazi Flavor (managed) ====="
+local _faz_yazi_theme_marker_start = "# ===== Faz Yazi Flavor (managed) ====="
+local _faz_yazi_theme_marker_end = "# ===== End Faz Yazi Flavor (managed) ====="
 
 local function current_yazi_flavor(window)
   local overrides = window and window:get_config_overrides() or {}
-  local scheme = resolve_kaku_color_scheme(overrides.color_scheme or config.color_scheme)
+  local scheme = resolve_faz_color_scheme(overrides.color_scheme or config.color_scheme)
   return scheme == 'Faz Light' and 'faz-light' or 'faz-dark'
 end
 
@@ -753,9 +753,9 @@ local function strip_managed_yazi_theme_block(content)
   local skipping = false
 
   for line in (content .. "\n"):gmatch("(.-)\n") do
-    if line == kaku_yazi_theme_marker_start then
+    if line == _faz_yazi_theme_marker_start then
       skipping = true
-    elseif line == kaku_yazi_theme_marker_end then
+    elseif line == _faz_yazi_theme_marker_end then
       skipping = false
     elseif not skipping then
       table.insert(lines, line)
@@ -767,11 +767,11 @@ end
 
 local function build_managed_yazi_theme_block(flavor)
   return table.concat({
-    kaku_yazi_theme_marker_start,
+    _faz_yazi_theme_marker_start,
     "[flavor]",
     string.format('dark = "%s"', flavor),
     string.format('light = "%s"', flavor),
-    kaku_yazi_theme_marker_end,
+    _faz_yazi_theme_marker_end,
   }, "\n")
 end
 
@@ -861,7 +861,7 @@ local function sync_managed_yazi_theme(window)
     }, "\n")
   else
     local has_user_flavor = ("\n" .. existing .. "\n"):find("\n%s*%[flavor%]%s*\n") ~= nil
-    local has_managed = existing:find(kaku_yazi_theme_marker_start, 1, true) ~= nil
+    local has_managed = existing:find(_faz_yazi_theme_marker_start, 1, true) ~= nil
     if has_user_flavor and not has_managed then
       return
     end
@@ -1162,7 +1162,7 @@ end
 -- Tab-title events hand us PaneInformation objects that expose plain fields
 -- only; method-style access (pane:get_xxx()) raises on them, so read fields
 -- directly instead of reusing the pane_* helpers above.
-function kaku_foreground_process_title(pane)
+function _faz_foreground_process_title(pane)
   if not pane then
     return nil
   end
@@ -1250,7 +1250,7 @@ function kaku_foreground_process_title(pane)
   return name
 end
 
-function kaku_context_process_title(context, process)
+function _faz_context_process_title(context, process)
   if type(context) ~= 'string' then
     context = ''
   end
@@ -1788,7 +1788,7 @@ local function tab_display_title(tab, effective_config)
 
   if text == '' then
     local show_process = effective_config and effective_config.tab_title_show_foreground_process == true
-    local process_title = show_process and active_pane and kaku_foreground_process_title(active_pane) or nil
+    local process_title = show_process and active_pane and _faz_foreground_process_title(active_pane) or nil
     local path_title = ''
     if tab then
       local parent, current = tab_path_parts(tab)
@@ -1798,7 +1798,7 @@ local function tab_display_title(tab, effective_config)
         path_title = parent .. '/' .. current
       end
     end
-    text = kaku_context_process_title(path_title, process_title) or ''
+    text = _faz_context_process_title(path_title, process_title) or ''
   end
 
   if text == '' and active_pane then
@@ -1874,10 +1874,10 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, effective_config, hove
         full_text = parent .. '/' .. current
       end
       local short_text = current
-      local process_title = show_process and kaku_foreground_process_title(p) or nil
+      local process_title = show_process and _faz_foreground_process_title(p) or nil
       if process_title then
-        full_text = kaku_context_process_title(full_text, process_title) or ''
-        short_text = kaku_context_process_title(short_text, process_title) or ''
+        full_text = _faz_context_process_title(full_text, process_title) or ''
+        short_text = _faz_context_process_title(short_text, process_title) or ''
       end
       if full_text == '' then
         full_text = resolve_remote_target_from_pane(p) or p.title or '?'
@@ -2306,7 +2306,7 @@ end
 -- Dynamically switch font weight when theme changes
 wezterm.on('window-config-reloaded', function(window, pane)
   local overrides = window:get_config_overrides() or {}
-  local scheme = resolve_kaku_color_scheme(overrides.color_scheme or config.color_scheme)
+  local scheme = resolve_faz_color_scheme(overrides.color_scheme or config.color_scheme)
   local is_light = scheme == 'Faz Light'
   sync_claude_code_theme(is_light)
   local overrides_changed = false
@@ -2659,7 +2659,7 @@ config.color_schemes['Faz Light'] = {
 
 -- Legacy alias for compatibility
 config.color_schemes['Faz Theme'] = config.color_schemes['Faz Dark']
-config.color_scheme = resolve_kaku_color_scheme(config.color_scheme)
+config.color_scheme = resolve_faz_color_scheme(config.color_scheme)
 
 config.set_environment_variables = config.set_environment_variables or {}
 -- Match child-process theme hints to the user's intended theme, even when the
@@ -2668,7 +2668,7 @@ config.set_environment_variables['COLORFGBG'] = initial_is_light_theme and '0;15
 
 -- ===== Window Frame (theme-aware) =====
 get_window_frame_colors = function(scheme)
-  scheme = resolve_kaku_color_scheme(scheme)
+  scheme = resolve_faz_color_scheme(scheme)
   if scheme == 'Faz Light' then
     return {
       active_titlebar_bg = '#FFFCF0',
@@ -3166,12 +3166,12 @@ wezterm.on('gui-startup', function(cmd)
 
   local current_version = read_current_config_version()
 
-  local state_file = kaku_config_dir .. "/state.json"
+  local state_file = _faz_config_dir .. "/state.json"
   local is_first_run = false
   local needs_update = false
 
   local function ensure_state_dir()
-    os.execute(string.format("mkdir -p %q", kaku_config_dir))
+    os.execute(string.format("mkdir -p %q", _faz_config_dir))
   end
 
   local function write_state(version, state)
@@ -3219,11 +3219,11 @@ wezterm.on('gui-startup', function(cmd)
   local state_file_exists = false
   local loaded_legacy_state = false
   local sf = io.open(state_file, "r")
-  if not sf and kaku_config_dir ~= kaku_state_dir then
+  if not sf and _faz_config_dir ~= _faz_state_dir then
     -- Pre-XDG releases stored state at ~/.config/faz regardless of
     -- XDG_CONFIG_HOME. Fall back so existing users are not re-onboarded;
     -- the next write_state migrates the data to the XDG location.
-    sf = io.open(kaku_state_dir .. "/state.json", "r")
+    sf = io.open(_faz_state_dir .. "/state.json", "r")
     loaded_legacy_state = sf ~= nil
   end
   if sf then

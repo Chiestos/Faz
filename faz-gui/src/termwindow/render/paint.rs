@@ -4,7 +4,7 @@ use crate::termwindow::render::corners::{
     BOTTOM_LEFT_ROUNDED_CORNER, BOTTOM_RIGHT_ROUNDED_CORNER, TOP_LEFT_ROUNDED_CORNER,
     TOP_RIGHT_ROUNDED_CORNER,
 };
-use crate::termwindow::render::forces_opaque_kaku_tui_window_background;
+use crate::termwindow::render::forces_opaque_faz_tui_window_background;
 use crate::termwindow::{DimensionContext, RenderFrame, TermWindowNotif};
 use crate::utilsprites::RenderMetrics;
 use ::window::bitmaps::atlas::OutOfTextureSpace;
@@ -299,7 +299,7 @@ impl crate::TermWindow {
         let focused = self.focused.is_some();
         let window_is_transparent =
             !self.window_background.is_empty() || self.config.window_background_opacity != 1.0;
-        let force_opaque_window_background = forces_opaque_kaku_tui_window_background(&panes);
+        let force_opaque_window_background = forces_opaque_faz_tui_window_background(&panes);
         let effective_window_is_transparent =
             window_is_transparent && !force_opaque_window_background;
 
