@@ -4201,26 +4201,6 @@ impl TermWindow {
         promise::spawn::spawn(future).detach();
     }
 
-    /// Show a confirmation overlay before applying a pending update, since
-    /// applying closes every window and stops running tasks. Routed here from
-    /// the update toast click, menu "Restart to Update", and menu "Check for
-    /// Updates" when a staged package is already ready.
-    pub(crate) fn show_update_confirmation(&mut self) {
-        let mux = Mux::get();
-        let tab = match mux.get_active_tab_for_window(self.mux_window_id) {
-            Some(tab) => tab,
-            None => return,
-        };
-
-        if let Some(window) = self.window.clone() {
-            let (overlay, future) = start_overlay(self, &tab, move |tab_id, term| {
-                crate::overlay::confirm_apply_update(term, window, tab_id)
-            });
-            self.assign_overlay(tab.tab_id(), overlay);
-            promise::spawn::spawn(future).detach();
-        }
-    }
-
     fn show_tab_navigator(&mut self) {
         let mux = Mux::get();
         let active_tab_idx = match mux.get_window(self.mux_window_id) {
@@ -4902,11 +4882,7 @@ impl TermWindow {
                 self.do_open_link_at_mouse_cursor(pane);
             }
             EmitEvent(name) => {
-                if name == "update-kaku" || name == "run-kaku-update" {
-                    crate::frontend::check_for_updates_from_menu();
-                } else if name == "restart-to-update" {
-                    crate::frontend::confirm_and_apply_update();
-                } else if name == "run-kaku-cli" {
+                if name == "run-kaku-cli" {
                     if pane.is_zmodem_exclusive() {
                         log::debug!("zmodem: refusing CLI injection during a transfer");
                     } else {

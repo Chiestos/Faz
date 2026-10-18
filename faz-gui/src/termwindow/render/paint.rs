@@ -264,14 +264,6 @@ impl crate::TermWindow {
         if is_first_paint {
             self.first_paint_logged = true;
             crate::startup_trace::mark("first paint_impl done");
-            // Initialize notifications only after the first frame is on
-            // screen: the synchronous notification-center init (and the
-            // first-launch permission prompt on macOS) has no business on
-            // the first-paint critical path. No release polling happens here.
-            promise::spawn::spawn_with_low_priority(async {
-                crate::update::start_update_checker();
-            })
-            .detach();
         }
 
         Ok(())

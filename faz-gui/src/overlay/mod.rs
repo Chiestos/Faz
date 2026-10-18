@@ -17,9 +17,7 @@ pub mod selector;
 
 #[cfg(not(target_os = "macos"))]
 pub use confirm_close_pane::confirm_close_window;
-pub use confirm_close_pane::{
-    confirm_apply_update, confirm_close_pane, confirm_close_tab, confirm_quit_program,
-};
+pub use confirm_close_pane::{confirm_close_pane, confirm_close_tab, confirm_quit_program};
 pub use copy::{CopyModeParams, CopyOverlay};
 pub use launcher::{launcher, LauncherArgs, LauncherFlags};
 pub use quickselect::QuickSelectOverlay;

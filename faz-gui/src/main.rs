@@ -114,7 +114,6 @@ mod tabbar;
 mod termwindow;
 mod thread_util;
 mod uniforms;
-mod update;
 mod utilsprites;
 
 #[cfg(feature = "dhat-heap")]

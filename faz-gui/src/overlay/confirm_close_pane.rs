@@ -88,25 +88,6 @@ pub fn confirm_close_window(
     Ok(())
 }
 
-pub fn confirm_apply_update(
-    mut term: TermWizTerminal,
-    window: ::window::Window,
-    tab_id: TabId,
-) -> anyhow::Result<()> {
-    if confirm::run_confirmation(
-        "Update Faz now?\nAll windows will close and running tasks will stop.",
-        &mut term,
-    )? {
-        promise::spawn::spawn_into_main_thread(async move {
-            crate::frontend::apply_update_now();
-        })
-        .detach();
-    }
-    TermWindow::schedule_cancel_overlay(window, tab_id, None);
-
-    Ok(())
-}
-
 pub fn confirm_quit_program(
     mut term: TermWizTerminal,
     window: ::window::Window,

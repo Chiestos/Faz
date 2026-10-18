@@ -253,10 +253,7 @@ impl CommandDef {
             MoveTabToNewWindow,
             TogglePaneZoomState,
             ShowTabNavigator,
-            // Help menu
             ShowDebugOverlay,
-            OpenUri("https://github.com/tw93/Faz".to_string()),
-            OpenUri("https://github.com/tw93/Faz/issues/".to_string()),
         ];
 
         let mut result = vec![];
@@ -428,7 +425,6 @@ impl CommandDef {
                 Some("Edit") => 1,
                 Some("View") => 2,
                 Some("Window") => 3,
-                Some("Help") => 4,
                 _ => 5,
             }
         }
@@ -713,7 +709,7 @@ impl CommandDef {
         commands.retain(|cmd| !cmd.menubar.is_empty());
 
         // Prefer to put the menus in this order
-        let mut order: Vec<&'static str> = vec!["Faz", "Shell", "Edit", "View", "Window", "Help"];
+        let mut order: Vec<&'static str> = vec!["Faz", "Shell", "Edit", "View", "Window"];
         // Add any other menus on the end
         for cmd in &commands {
             if !order.contains(&cmd.menubar[0]) {
@@ -793,13 +789,6 @@ impl CommandDef {
                     }) => 52,
                     TogglePaneZoomState => 60,
                     SwitchToWorkspace { .. } | SwitchWorkspaceRelative(_) => 70,
-                    _ => 500,
-                },
-                "Help" => match action {
-                    OpenUri(uri) if uri == "https://github.com/tw93/Faz" => 10,
-                    OpenUri(uri) if uri == "https://github.com/tw93/Faz/discussions/" => 20,
-                    OpenUri(uri) if uri == "https://github.com/tw93/Faz/issues/" => 30,
-                    ShowDebugOverlay => 90,
                     _ => 500,
                 },
                 _ => 1000,
@@ -895,30 +884,6 @@ impl CommandDef {
                             settings_item.set_target(app_delegate);
                         }
                         menu.add_item(&settings_item);
-
-                        let check_update = MenuItem::new_with(
-                            "Check for Updates...",
-                            Some(kaku_perform_key_assignment_sel),
-                            "",
-                        );
-                        check_update.set_represented_item(RepresentedItem::KeyAssignment(
-                            KeyAssignment::EmitEvent("run-kaku-update".to_string()),
-                        ));
-                        menu.add_item(&check_update);
-
-                        // Show "Restart to Update" when a staged update is ready.
-                        if let Some(info) = crate::update::staged_update_available() {
-                            let version = info.tag.trim_start_matches(['v', 'V']);
-                            let restart_item = MenuItem::new_with(
-                                &format!("Restart to Update ({})", version),
-                                Some(kaku_perform_key_assignment_sel),
-                                "",
-                            );
-                            restart_item.set_represented_item(RepresentedItem::KeyAssignment(
-                                KeyAssignment::EmitEvent("restart-to-update".to_string()),
-                            ));
-                            menu.add_item(&restart_item);
-                        }
 
                         let set_default_terminal_item = MenuItem::new_with(
                             "Set as Default Terminal",
@@ -2238,7 +2203,7 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                 doc: "Star Faz on GitHub".into(),
                 keys: vec![],
                 args: &[],
-                menubar: &["Help"],
+                menubar: &[],
                 icon: None,
             },
             "https://github.com/tw93/Faz/discussions/" => CommandDef {
@@ -2254,7 +2219,7 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
                 doc: "Submit bug report or feature request".into(),
                 keys: vec![],
                 args: &[],
-                menubar: &["Help"],
+                menubar: &[],
                 icon: None,
             },
             _ => CommandDef {
