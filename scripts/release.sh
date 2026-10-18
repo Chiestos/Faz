@@ -21,7 +21,7 @@ set -euo pipefail
 #
 # Resume flags (skip earlier stages after a mid-release failure):
 #   --notarize-only  Skip build; notarize existing dist/Faz.app, upload, tap.
-#   --upload-only    Skip build + notarize; upload existing dist/Kaku.dmg + tap.
+#   --upload-only    Skip build + notarize; upload existing dist/Faz.dmg + tap.
 #   --tap-only       Only re-dispatch the Homebrew tap update.
 #
 # Dry-run flag (validates pre-flight, then exits without building or publishing):
@@ -84,15 +84,15 @@ time_stage() {
 # Verify version consistency across crates
 check_version_consistency() {
     log_info "Checking version consistency..."
-    local kaku_version kaku_gui_version
-    kaku_version=$(grep '^version =' "$REPO_ROOT/kaku/Cargo.toml" | head -n1 | cut -d'"' -f2)
-    kaku_gui_version=$(grep '^version =' "$REPO_ROOT/faz-gui/Cargo.toml" | head -n1 | cut -d'"' -f2)
+    local faz_version faz_gui_version
+    faz_version=$(grep '^version =' "$REPO_ROOT/faz-cli/Cargo.toml" | head -n1 | cut -d'"' -f2)
+    faz_gui_version=$(grep '^version =' "$REPO_ROOT/faz-gui/Cargo.toml" | head -n1 | cut -d'"' -f2)
 
-    if [[ "$kaku_version" != "$kaku_gui_version" ]]; then
-        die "Version mismatch: kaku=$kaku_version, faz-gui=$kaku_gui_version"
+    if [[ "$faz_version" != "$faz_gui_version" ]]; then
+        die "Version mismatch: faz=$faz_version, faz-gui=$faz_gui_version"
     fi
 
-    log_info "Version: $kaku_version"
+    log_info "Version: $faz_version"
 }
 
 # Check release notes match version
@@ -234,7 +234,7 @@ check_notarization_creds() {
 
     asc_api_key_path="${FAZ_ASC_API_KEY_PATH:-}"
     if [[ -z "$asc_api_key_path" ]]; then
-        asc_api_key_path=$(security find-generic-password -s "kaku-asc-api-key-path" -w 2>/dev/null || true)
+        asc_api_key_path=$(security find-generic-password -s "faz-asc-api-key-path" -w 2>/dev/null || true)
     fi
     if [[ -n "$asc_api_key_path" && -f "$asc_api_key_path" ]] && command -v rcodesign >/dev/null 2>&1; then
         have_creds=1
@@ -243,7 +243,7 @@ check_notarization_creds() {
 
     notarytool_profile="${FAZ_NOTARYTOOL_PROFILE:-}"
     if [[ -z "$notarytool_profile" ]]; then
-        notarytool_profile=$(security find-generic-password -s "kaku-notarytool-profile" -w 2>/dev/null || true)
+        notarytool_profile=$(security find-generic-password -s "faz-notarytool-profile" -w 2>/dev/null || true)
     fi
     if [[ -n "$notarytool_profile" ]]; then
         have_creds=1
@@ -253,11 +253,11 @@ check_notarization_creds() {
     if [[ "$have_creds" -eq 0 ]]; then
         log_warn "Notarization credentials not found"
         log_warn "Notarization may fail. To set up credentials:"
-        log_warn "  security add-generic-password -s 'kaku-asc-api-key-path' -a 'kaku' -w '/path/to/asc_api_key.json'"
+        log_warn "  security add-generic-password -s 'faz-asc-api-key-path' -a "faz" -w '/path/to/asc_api_key.json'"
         log_warn ""
         log_warn "Or store a notarytool Keychain profile:"
-        log_warn "  xcrun notarytool store-credentials kaku-notarytool --apple-id <apple-id> --team-id <team-id>"
-        log_warn "  security add-generic-password -s 'kaku-notarytool-profile' -a 'kaku' -w 'kaku-notarytool'"
+        log_warn "  xcrun notarytool store-credentials faz-notarytool --apple-id <apple-id> --team-id <team-id>"
+        log_warn "  security add-generic-password -s 'faz-notarytool-profile' -a "faz" -w 'faz-notarytool'"
         if [[ ! -t 0 ]]; then
             die "Notarization credentials are missing and stdin is not interactive."
         fi
@@ -357,7 +357,7 @@ create_github_release() {
     # Build a cleaned notes file: strip the first heading line and remove blank
     # lines between numbered list items so GitHub doesn't render extra spacing.
     local notes_tmp
-    notes_tmp=$(mktemp /tmp/kaku-release-notes.XXXXXX.md)
+    notes_tmp=$(mktemp /tmp/faz-release-notes.XXXXXX.md)
     # shellcheck disable=SC2064
     trap "rm -f $notes_tmp" RETURN
 
@@ -402,7 +402,7 @@ create_github_release() {
             "${release_edit_args[@]}"
         gh release upload "$tag" \
             -R "$GITHUB_REPO" \
-            "$OUT_DIR/Kaku.dmg" \
+            "$OUT_DIR/Faz.dmg" \
             "$OUT_DIR/faz_for_update.zip" \
             "$OUT_DIR/faz_for_update.zip.sha256" \
             --clobber
@@ -410,7 +410,7 @@ create_github_release() {
         if [[ "$notes_arg" == "--notes-file" ]]; then
             gh release create "$tag" \
                 -R "$GITHUB_REPO" \
-                "$OUT_DIR/Kaku.dmg" \
+                "$OUT_DIR/Faz.dmg" \
                 "$OUT_DIR/faz_for_update.zip" \
                 "$OUT_DIR/faz_for_update.zip.sha256" \
                 --title "$release_title" \
@@ -418,7 +418,7 @@ create_github_release() {
         else
             gh release create "$tag" \
                 -R "$GITHUB_REPO" \
-                "$OUT_DIR/Kaku.dmg" \
+                "$OUT_DIR/Faz.dmg" \
                 "$OUT_DIR/faz_for_update.zip" \
                 "$OUT_DIR/faz_for_update.zip.sha256" \
                 --title "$release_title" \
@@ -458,7 +458,7 @@ update_homebrew_tap() {
         return 0
     fi
 
-    dmg_sha256=$(shasum -a 256 "$OUT_DIR/Kaku.dmg" | awk '{print $1}')
+    dmg_sha256=$(shasum -a 256 "$OUT_DIR/Faz.dmg" | awk '{print $1}')
 
     log_info "Dispatching Homebrew tap update..."
 
@@ -556,7 +556,7 @@ main() {
     if [[ "$DRY_RUN" == "1" ]]; then
         log_warn "[DRY-RUN] All pre-flight checks passed."
         log_warn "[DRY-RUN] Would build → notarize → tag V${version} → upload → tap dispatch"
-        log_warn "[DRY-RUN] Expected artifacts: $OUT_DIR/Kaku.dmg, $OUT_DIR/faz_for_update.zip, $OUT_DIR/faz_for_update.zip.sha256"
+        log_warn "[DRY-RUN] Expected artifacts: $OUT_DIR/Faz.dmg, $OUT_DIR/faz_for_update.zip, $OUT_DIR/faz_for_update.zip.sha256"
         log_warn "[DRY-RUN] GitHub repo: $GITHUB_REPO"
         log_warn "[DRY-RUN] Homebrew tap: $HOMEBREW_TAP_REPO"
         log_warn "[DRY-RUN] Unset DRY_RUN (or drop --dry-run) to run for real."
@@ -568,8 +568,8 @@ main() {
         time_stage "build" build_release
     else
         log_warn "Skipping build (resume flag)"
-        if [[ ! -f "$OUT_DIR/Kaku.dmg" ]]; then
-            die "Resume requires prior build; $OUT_DIR/Kaku.dmg not found."
+        if [[ ! -f "$OUT_DIR/Faz.dmg" ]]; then
+            die "Resume requires prior build; $OUT_DIR/Faz.dmg not found."
         fi
         detect_signing_identity
     fi
@@ -592,7 +592,7 @@ main() {
 
     log_info "Release $version complete!"
     log_info "Artifacts:"
-    log_info "  - $OUT_DIR/Kaku.dmg"
+    log_info "  - $OUT_DIR/Faz.dmg"
     log_info "  - $OUT_DIR/faz_for_update.zip"
     log_info "  - $OUT_DIR/faz_for_update.zip.sha256"
     log_info ""

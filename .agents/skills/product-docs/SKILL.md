@@ -12,8 +12,8 @@ The audience is normal users, not contributors. Explain what each page/button/sh
 
 ## Where things live
 
-- **Site worktree**: `~/www/kaku-site` on the `vercel` branch (NOT `main`). Vercel serves `kaku.fun` by pushing that branch. `git worktree list` confirms the path.
-- **Design system**: Kami parchment system. Read `~/www/kaku-site/DESIGN.md` before any visual change. Match the existing pages; do not invent new components.
+- **Site worktree**: `~/www/faz-site` on the `vercel` branch (NOT `main`). Vercel serves `kaku.fun` by pushing that branch. `git worktree list` confirms the path.
+- **Design system**: Kami parchment system. Read `~/www/faz-site/DESIGN.md` before any visual change. Match the existing pages; do not invent new components.
 - **Doc pages** (EN under `docs/`, ZH under `zh/docs/`, kept in lockstep):
   Install (`index.html`), Guide (`guide.html`), Features (`features.html`), CLI Reference (`cli.html`), Configuration (`configuration.html`), Keybindings (`keybindings.html`), FAQ (`faq.html`), Contributing (`contributing.html`).
 - **Guide vs Features**: Guide is the narrative onboarding walkthrough (first launch → tabs/panes → shell → AI → tools → settings). Features is feature-by-feature reference. Keep the Guide short and link out to the reference pages; do not duplicate config tables there.

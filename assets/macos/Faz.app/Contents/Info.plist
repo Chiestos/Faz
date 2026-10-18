@@ -31,7 +31,7 @@
 			<string>fun.serendo.faz</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>kaku</string>
+				<string>faz</string>
 			</array>
 		</dict>
 	</array>

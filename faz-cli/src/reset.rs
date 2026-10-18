@@ -45,7 +45,7 @@ mod imp {
     const FAZ_LEGACY_INLINE_VAR: &str = "FAZ_ZSH_DIR";
     const FAZ_LEGACY_SYNTAX_HINT: &str = "zsh-syntax-highlighting/zsh-syntax-highlighting.zsh";
     // SYNC: this list must stay in sync with the heredoc in
-    // assets/shell-integration/setup_zsh.sh legacy_inline_block_has_only_kaku_managed_lines().
+    // assets/shell-integration/setup_zsh.sh legacy_inline_block_has_only_faz_managed_lines().
     // When adding or removing lines, update both places.
     const FAZ_LEGACY_INLINE_KNOWN_LINES: &[&str] = &[
         "# Faz Zsh Integration - DO NOT EDIT MANUALLY",
@@ -130,23 +130,23 @@ mod imp {
         "    compinit -C",
         "# Load zsh-z (smart directory jumping) - Fast, no delay needed",
         r#"if [[ -f "$FAZ_ZSH_DIR/plugins/zsh-z/zsh-z.plugin.zsh" ]]; then"#,
-        "    # Default to smart case matching so `z kaku` prefers `Faz` over lowercase",
+        "    # Default to smart case matching so `z faz` prefers `Faz` over lowercase",
         "    # path entries. Users can still override this in their own shell config.",
         r#"    : "${ZSHZ_CASE:=smart}""#,
         "    export ZSHZ_CASE",
         r#"    source "$FAZ_ZSH_DIR/plugins/zsh-z/zsh-z.plugin.zsh""#,
         "# Faz defers autosuggestions to the external provider detected during faz init.",
-        r#"typeset -g _kaku_autosuggest_cli_provider="""#,
-        r#"typeset -g _kaku_autosuggest_cli_provider="kiro-cli""#,
-        r#"typeset -g _kaku_autosuggest_cli_provider="q""#,
-        "typeset -g _kaku_external_autosuggest_provider=0",
-        "if _kaku_has_autosuggest_system; then",
-        "    _kaku_external_autosuggest_provider=1",
-        r#"if [[ -n "${_kaku_autosuggest_cli_provider:-}" ]]; then"#,
+        r#"typeset -g _faz_autosuggest_cli_provider="""#,
+        r#"typeset -g _faz_autosuggest_cli_provider="kiro-cli""#,
+        r#"typeset -g _faz_autosuggest_cli_provider="q""#,
+        "typeset -g _faz_external_autosuggest_provider=0",
+        "if _faz_has_autosuggest_system; then",
+        "    _faz_external_autosuggest_provider=1",
+        r#"if [[ -n "${_faz_autosuggest_cli_provider:-}" ]]; then"#,
         "# Load zsh-autosuggestions only if:",
         "# 1. User config has not loaded it yet (_zsh_autosuggest_start not defined)",
         "# 2. No other autosuggest system is active (to avoid widget wrapping conflicts)",
-        r#"if ! (( ${+functions[_zsh_autosuggest_start]} )) && [[ "${_kaku_external_autosuggest_provider:-0}" != "1" ]] && [[ -f "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then"#,
+        r#"if ! (( ${+functions[_zsh_autosuggest_start]} )) && [[ "${_faz_external_autosuggest_provider:-0}" != "1" ]] && [[ -f "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then"#,
         "# When Faz defers autosuggestions to an external provider, keep Tab",
         "# as completion-only to avoid widget recursion.",
         "# Load zoxide (smart directory jumping) if not already provided by user config.",
@@ -160,18 +160,18 @@ mod imp {
         "    # Keep this widget out of autosuggestions rebinding, otherwise POSTDISPLAY is",
         "    # cleared before our condition check and Tab always falls back to completion.",
         "    typeset -ga ZSH_AUTOSUGGEST_IGNORE_WIDGETS",
-        "    ZSH_AUTOSUGGEST_IGNORE_WIDGETS+=(kaku_tab_accept_or_complete)",
-        "    kaku_tab_accept_or_complete() {",
+        "    ZSH_AUTOSUGGEST_IGNORE_WIDGETS+=(faz_tab_accept_or_complete)",
+        "    faz_tab_accept_or_complete() {",
         r#"        if [[ "${FAZ_TAB_ACCEPT_SUGGEST_FIRST:-0}" == "1" ]] && [[ -n "$POSTDISPLAY" ]]; then"#,
         "            zle autosuggest-accept",
         "        else",
         "            zle expand-or-complete",
         "        fi",
         "    }",
-        "    zle -N kaku_tab_accept_or_complete",
-        r#"    bindkey -M emacs '^I' kaku_tab_accept_or_complete"#,
-        r#"    bindkey -M main '^I' kaku_tab_accept_or_complete"#,
-        r#"    bindkey -M viins '^I' kaku_tab_accept_or_complete"#,
+        "    zle -N faz_tab_accept_or_complete",
+        r#"    bindkey -M emacs '^I' faz_tab_accept_or_complete"#,
+        r#"    bindkey -M main '^I' faz_tab_accept_or_complete"#,
+        r#"    bindkey -M viins '^I' faz_tab_accept_or_complete"#,
         "# Defer zsh-syntax-highlighting to first prompt (~40ms saved at startup)",
         "# This plugin must be loaded LAST, and we delay it for faster shell startup",
         r#"source "$FAZ_ZSH_DIR/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh""#,
@@ -240,7 +240,7 @@ mod imp {
                 }
             }
 
-            println!("\nKaku reset completed.");
+            println!("\nFaz reset completed.");
         }
     }
 
@@ -256,11 +256,11 @@ mod imp {
         let mut report = ResetReport::default();
 
         remove_zsh_integration(&mut report)?;
-        remove_kaku_shell_dir(&mut report)?;
+        remove_faz_shell_dir(&mut report)?;
         remove_fish_integration(&mut report)?;
         remove_tmux_integration(&mut report)?;
         remove_file_if_exists(
-            home_kaku_dir().join("tmux").join("faz.tmux.conf"),
+            home_faz_dir().join("tmux").join("faz.tmux.conf"),
             "removed managed tmux integration script",
             &mut report,
         )?;
@@ -271,38 +271,20 @@ mod imp {
             "removed persisted Faz state",
             &mut report,
         )?;
-        remove_file_if_exists(
-            config_home().join(".kaku_config_version"),
-            "removed legacy Faz config version marker",
-            &mut report,
-        )?;
-        remove_file_if_exists(
-            config_home().join(".kaku_window_geometry"),
-            "removed legacy Faz window geometry marker",
-            &mut report,
-        )?;
         // With XDG_CONFIG_HOME set, GUI processes launched outside the shell
         // may have written state to the default location as well; clean both.
-        if home_kaku_dir() != config_home() {
+        if home_faz_dir() != config_home() {
             for (name, label) in [
                 (
                     "state.json",
                     "removed persisted Faz state (default location)",
                 ),
-                (
-                    ".kaku_config_version",
-                    "removed legacy Faz config version marker (default location)",
-                ),
-                (
-                    ".kaku_window_geometry",
-                    "removed legacy Faz window geometry marker (default location)",
-                ),
             ] {
-                remove_file_if_exists(home_kaku_dir().join(name), label, &mut report)?;
+                remove_file_if_exists(home_faz_dir().join(name), label, &mut report)?;
             }
         }
         remove_file_if_exists(
-            home_kaku_dir().join("lazygit_state.json"),
+            home_faz_dir().join("lazygit_state.json"),
             "removed Lazygit hint state",
             &mut report,
         )?;
@@ -326,7 +308,7 @@ mod imp {
             "removed AI chat onboarding flag",
             &mut report,
         )?;
-        remove_empty_kaku_config_dir(&mut report)?;
+        remove_empty_faz_config_dir(&mut report)?;
 
         report.print();
 
@@ -425,11 +407,11 @@ mod imp {
     // Shell assets and the legacy Lazygit hint state are intentionally anchored
     // at `$HOME/.config/faz`. Keep this separate from `config_home()`, which
     // follows XDG_CONFIG_HOME for application state and faz.lua.
-    fn home_kaku_dir() -> PathBuf {
-        home_kaku_dir_for(&home_dir())
+    fn home_faz_dir() -> PathBuf {
+        home_faz_dir_for(&home_dir())
     }
 
-    fn home_kaku_dir_for(home: &Path) -> PathBuf {
+    fn home_faz_dir_for(home: &Path) -> PathBuf {
         home.join(".config").join("faz")
     }
 
@@ -450,7 +432,7 @@ mod imp {
             .any(|token| token == "source-file")
     }
 
-    fn is_active_kaku_tmux_source_line(trimmed_line: &str) -> bool {
+    fn is_active_faz_tmux_source_line(trimmed_line: &str) -> bool {
         if trimmed_line.starts_with('#') || !trimmed_line.contains(FAZ_TMUX_SOURCE_PATTERN) {
             return false;
         }
@@ -506,14 +488,14 @@ mod imp {
         Ok(())
     }
 
-    fn remove_kaku_shell_dir(report: &mut ResetReport) -> anyhow::Result<()> {
-        let kaku_init = home_kaku_dir().join("zsh").join("faz.zsh");
-        if kaku_init.exists() {
-            std::fs::remove_file(&kaku_init)
-                .with_context(|| format!("remove {}", kaku_init.display()))?;
-            report.changed(format!("removed {}", kaku_init.display()));
+    fn remove_faz_shell_dir(report: &mut ResetReport) -> anyhow::Result<()> {
+        let faz_init = home_faz_dir().join("zsh").join("faz.zsh");
+        if faz_init.exists() {
+            std::fs::remove_file(&faz_init)
+                .with_context(|| format!("remove {}", faz_init.display()))?;
+            report.changed(format!("removed {}", faz_init.display()));
         } else {
-            report.skipped(format!("{} not found", kaku_init.display()));
+            report.skipped(format!("{} not found", faz_init.display()));
         }
         Ok(())
     }
@@ -532,14 +514,14 @@ mod imp {
         )?;
 
         // Remove managed fish init file
-        let fish_init = home_kaku_dir().join("fish").join("faz.fish");
+        let fish_init = home_faz_dir().join("fish").join("faz.fish");
         remove_file_if_exists(fish_init, "removed ~/.config/faz/fish/faz.fish", report)?;
 
         // Remove fish wrapper bin
-        let fish_wrapper = home_kaku_dir().join("fish").join("bin").join("faz");
+        let fish_wrapper = home_faz_dir().join("fish").join("bin").join("faz");
         remove_file_if_exists(
             fish_wrapper,
-            "removed ~/.config/faz/fish/bin/kaku wrapper",
+            "removed ~/.config/faz/fish/bin/faz wrapper",
             report,
         )?;
 
@@ -557,7 +539,7 @@ mod imp {
             .with_context(|| format!("read {}", tmuxrc.display()))?;
         let filtered: Vec<&str> = original
             .lines()
-            .filter(|line| !is_active_kaku_tmux_source_line(line.trim_start()))
+            .filter(|line| !is_active_faz_tmux_source_line(line.trim_start()))
             .collect();
 
         if filtered.len() == original.lines().count() {
@@ -727,14 +709,14 @@ mod imp {
             let current = lines[i].trim();
             if current == FAZ_LEGACY_INLINE_MARKER {
                 let mut j = i + 1;
-                let mut saw_kaku_var = false;
+                let mut saw_faz_var = false;
                 let mut saw_syntax_line = false;
                 let mut end = None;
 
                 while j < lines.len() {
                     let line = lines[j];
                     if line.contains(FAZ_LEGACY_INLINE_VAR) {
-                        saw_kaku_var = true;
+                        saw_faz_var = true;
                     }
                     if line.contains(FAZ_LEGACY_SYNTAX_HINT) {
                         saw_syntax_line = true;
@@ -749,7 +731,7 @@ mod imp {
                     j += 1;
                 }
 
-                if saw_kaku_var {
+                if saw_faz_var {
                     if let Some(end_idx) = end {
                         let block_lines = &lines[i + 1..=end_idx];
                         if block_lines
@@ -819,7 +801,7 @@ mod imp {
         Ok(())
     }
 
-    fn remove_empty_kaku_config_dir(report: &mut ResetReport) -> anyhow::Result<()> {
+    fn remove_empty_faz_config_dir(report: &mut ResetReport) -> anyhow::Result<()> {
         let dir = config_home();
         if !dir.exists() {
             return Ok(());
@@ -842,15 +824,15 @@ mod imp {
     #[cfg(test)]
     mod tests {
         use super::{
-            home_kaku_dir_for, is_active_kaku_tmux_source_line, strip_legacy_inline_block,
+            home_faz_dir_for, is_active_faz_tmux_source_line, strip_legacy_inline_block,
             FAZ_TMUX_SOURCE_PATTERN,
         };
         use std::path::Path;
 
         #[test]
-        fn home_anchored_kaku_files_stay_under_home_dot_config() {
+        fn home_anchored_faz_files_stay_under_home_dot_config() {
             assert_eq!(
-                home_kaku_dir_for(Path::new("/Users/tester")),
+                home_faz_dir_for(Path::new("/Users/tester")),
                 Path::new("/Users/tester/.config/faz")
             );
         }
@@ -859,19 +841,19 @@ mod imp {
         fn active_tmux_source_line_is_detected() {
             let line =
                 r#"source-file "$HOME/.config/faz/tmux/faz.tmux.conf" # Faz tmux Integration"#;
-            assert!(is_active_kaku_tmux_source_line(line));
+            assert!(is_active_faz_tmux_source_line(line));
         }
 
         #[test]
         fn commented_tmux_source_line_is_ignored() {
             let line = r#"# source-file "$HOME/.config/faz/tmux/faz.tmux.conf""#;
-            assert!(!is_active_kaku_tmux_source_line(line));
+            assert!(!is_active_faz_tmux_source_line(line));
         }
 
         #[test]
         fn plain_text_reference_is_ignored() {
             let line = format!("note: {}", FAZ_TMUX_SOURCE_PATTERN);
-            assert!(!is_active_kaku_tmux_source_line(&line));
+            assert!(!is_active_faz_tmux_source_line(&line));
         }
 
         #[test]

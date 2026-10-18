@@ -702,7 +702,7 @@ impl App {
                 }
             }
             let value = Self::strip_trailing_comment(value_part);
-            if key == "color_scheme" && Self::is_kaku_auto_color_scheme_expr(&value) {
+            if key == "color_scheme" && Self::is_faz_auto_color_scheme_expr(&value) {
                 return Some("Auto".to_string());
             }
             // Number, boolean, or identifier
@@ -714,7 +714,7 @@ impl App {
         None
     }
 
-    fn is_kaku_auto_color_scheme_expr(raw: &str) -> bool {
+    fn is_faz_auto_color_scheme_expr(raw: &str) -> bool {
         raw.trim() == FAZ_AUTO_COLOR_SCHEME_EXPR
     }
 
@@ -1478,7 +1478,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn test_app() -> App {
-        App::new(PathBuf::from("/tmp/kaku-config-tui-test.lua"))
+        App::new(PathBuf::from("/tmp/faz-config-tui-test.lua"))
     }
 
     #[test]

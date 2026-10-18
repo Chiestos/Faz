@@ -71,7 +71,7 @@ Full keybinding reference: [docs/keybindings.md](docs/keybindings.md)
 
 **Can I use transparent windows?** Yes, set `config.window_background_opacity` in `~/.config/faz/faz.lua`.
 
-**The `kaku` command is missing.** Run `/Applications/Faz.app/Contents/MacOS/kaku init --update-only && exec zsh -l`, then `kaku doctor`.
+**The `faz` command is missing.** Run `/Applications/Faz.app/Contents/MacOS/faz init --update-only && exec zsh -l`, then `faz doctor`.
 
 Full FAQ: [docs/faq.md](docs/faq.md)
 

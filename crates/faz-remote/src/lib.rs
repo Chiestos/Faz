@@ -451,7 +451,7 @@ async fn route_panes(Query(query): Query<WsQuery>, headers: axum::http::HeaderMa
 fn check_token(query: &WsQuery, headers: &axum::http::HeaderMap) -> bool {
     let expected = get_or_init_token();
     headers
-        .get("x-kaku-token")
+        .get("x-faz-token")
         .and_then(|v| v.to_str().ok())
         .map(|t| t == expected)
         .unwrap_or(false)
@@ -461,7 +461,7 @@ fn check_token(query: &WsQuery, headers: &axum::http::HeaderMap) -> bool {
 // ── QR code endpoint ──────────────────────────────────────────────────────────
 
 /// Returns an HTML page with an inline SVG QR code for the connection URL.
-/// The URL encodes: kakuremote://host:port?token=xxx
+/// The URL encodes: fazremote://host:port?token=xxx
 /// Restricted to localhost: the token must never be served to LAN peers.
 async fn route_qr(
     axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<SocketAddr>,
@@ -482,7 +482,7 @@ async fn route_qr_inner() -> Html<String> {
     let token = get_or_init_token();
 
     let host = lan_ip().unwrap_or_else(|| "127.0.0.1".to_string());
-    let url = format!("kakuremote://{}:{}?token={}", host, port, token);
+    let url = format!("fazremote://{}:{}?token={}", host, port, token);
 
     let svg_string = QrCode::new(url.as_bytes())
         .map(|code| {
@@ -751,7 +751,7 @@ pub fn read_state() -> anyhow::Result<RemoteState> {
 }
 
 pub fn render_qr_terminal(host: &str, port: u16, token: &str) -> String {
-    let url = format!("kakuremote://{}:{}?token={}", host, port, token);
+    let url = format!("fazremote://{}:{}?token={}", host, port, token);
     let qr = match QrCode::new(url.as_bytes()) {
         Ok(q) => q,
         Err(_) => return "Failed to generate QR code".to_string(),
@@ -768,12 +768,12 @@ pub fn render_qr_terminal(host: &str, port: u16, token: &str) -> String {
 // ── Relay tunnel ──────────────────────────────────────────────────────────────
 
 /// Render a TUI QR code for the relay connection URL.
-/// URL scheme: `kakuremote://relay?server=<host>&token=<token>`
+/// URL scheme: `fazremote://relay?server=<host>&token=<token>`
 pub fn render_relay_qr_terminal(relay_server: &str, token: &str) -> String {
     let host = relay_server
         .trim_start_matches("wss://")
         .trim_start_matches("ws://");
-    let url = format!("kakuremote://relay?server={}&token={}", host, token);
+    let url = format!("fazremote://relay?server={}&token={}", host, token);
     let qr = match QrCode::new(url.as_bytes()) {
         Ok(q) => q,
         Err(_) => return "Failed to generate QR code".to_string(),

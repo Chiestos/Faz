@@ -81,7 +81,7 @@ struct CachedLeaderInfo {
 
 /// Cache of `with_root_pid(process_group_leader_pid)` to avoid repeating the
 /// full system `proc_listallpids` + per-pid `proc_pidinfo` scan on every paint.
-/// `forces_opaque_kaku_tui_background` (render hot path) and the tab bar both
+/// `forces_opaque_faz_tui_background` (render hot path) and the tab bar both
 /// query this each frame; without a cache, multiple panes streaming output from
 /// TUI agents (claude code, codex) trigger N x ~1000 syscalls per frame.
 #[cfg(unix)]

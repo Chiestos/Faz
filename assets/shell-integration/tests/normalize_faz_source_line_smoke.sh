@@ -5,7 +5,7 @@ set -euo pipefail
 PATH_LINE='[[ ":$PATH:" != *":$HOME/.config/faz/zsh/bin:"* ]] && export PATH="$HOME/.config/faz/zsh/bin:$PATH" # Faz PATH Integration'
 SOURCE_LINE='[[ -f "$HOME/.config/faz/zsh/faz.zsh" ]] && source "$HOME/.config/faz/zsh/faz.zsh" # Faz Shell Integration'
 
-normalize_kaku_path_line_file() {
+normalize_faz_path_line_file() {
   local input_file="$1"
   local output_file="$2"
 
@@ -123,21 +123,21 @@ run_normalize() {
 }
 
 run_normalize \
-  normalize_kaku_path_line_file \
+  normalize_faz_path_line_file \
   $'export PATH="$HOME/bin:$PATH"\n[[ ":$PATH:" != *":$HOME/.config/faz/zsh/bin:"* ]] && export PATH="$HOME/.config/faz/zsh/bin:$PATH"\n' \
   0 \
   $'export PATH="$HOME/bin:$PATH"\n'"$PATH_LINE"$'\n' \
   "legacy path line is replaced"
 
 run_normalize \
-  normalize_kaku_path_line_file \
+  normalize_faz_path_line_file \
   $'# [[ ":$PATH:" != *":$HOME/.config/faz/zsh/bin:"* ]] && export PATH="$HOME/.config/faz/zsh/bin:$PATH"\n'"$PATH_LINE"$'\n'"$PATH_LINE"$'\n' \
   2 \
   $'# [[ ":$PATH:" != *":$HOME/.config/faz/zsh/bin:"* ]] && export PATH="$HOME/.config/faz/zsh/bin:$PATH"\n'"$PATH_LINE"$'\n' \
   "duplicate path lines collapse"
 
 run_normalize \
-  normalize_kaku_path_line_file \
+  normalize_faz_path_line_file \
   $'if [[ -d "$HOME/.config/faz/zsh/bin" ]]; then\n  export PATH="$PATH:$HOME/.config/faz/zsh/bin"\nfi\n' \
   3 \
   $'if [[ -d "$HOME/.config/faz/zsh/bin" ]]; then\n  export PATH="$PATH:$HOME/.config/faz/zsh/bin"\nfi\n' \

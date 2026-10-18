@@ -22,7 +22,7 @@ The `config` crate owns config loading, Lua integration, schema behavior, proxy 
 
 ## Config TUI (`faz-cli/src/config_tui/` and `faz-cli/src/tui_core/`)
 
-The config TUI is the interactive terminal UI for editing Faz config. It lives in the `kaku` CLI crate, not the `config` crate.
+The config TUI is the interactive terminal UI for editing Faz config. It lives in the `faz-cli` crate, not the `config` crate.
 
 - `faz-cli/src/config_tui/` - TUI app: `mod.rs` (form state and main loop), `ui.rs` (rendering)
 - `faz-cli/src/tui_core/` - shared TUI primitives, currently `theme.rs` only (`accent`, `bg`, `muted`, `panel`, `primary`, `red`, `success`, `text_fg`)
@@ -35,7 +35,7 @@ The config TUI is the interactive terminal UI for editing Faz config. It lives i
 - Avoid introducing config paths that bypass existing precedence rules.
 - `FAZ_CONFIG_FILE` is an output, not an input. Config loading exports it (`config/src/config.rs`) and `effective_config_file_path()` (`config/src/lib.rs`), the GUI single-instance check (`faz-gui/src/main.rs`), `assets/shell-integration/setup_{zsh,fish}.sh`, and the bundled `faz.lua` all read it back. Do not turn it into a config path override; the only supported override is `--config-file` (`CONFIG_FILE_OVERRIDE`).
 - Keep bundled fallback config authoritative at `assets/macos/Faz.app/Contents/Resources/faz.lua`.
-- Faz Dark, Faz Light, and the Faz Theme alias must also resolve for standalone user configs that do not load the bundled Lua defaults. Their `src/scheme_data.rs` mirrors are checked against every bundled palette field by `builtin_kaku_scheme_mirrors_match_complete_bundled_palettes`; synchronize both when changing a Faz palette.
+- Faz Dark, Faz Light, and the Faz Theme alias must also resolve for standalone user configs that do not load the bundled Lua defaults. Their `src/scheme_data.rs` mirrors are checked against every bundled palette field by `builtin_faz_scheme_mirrors_match_complete_bundled_palettes`; synchronize both when changing a Faz palette.
 - Preserve compatibility with runtime reload callers that trigger `config::reload()` from GUI-side signals.
 - The current `config_version` is whatever `assets/shell-integration/config_version.txt` says; never trust a number written in a doc (this line once said 24 while the release was at 26). Any version bump must update bundled config, release checks, and docs together, and add a row to `docs/config-versions.md`. Removed keys are tolerated as `deprecated` fields, never migrated: there is no historical config migration.
 - New config fields are user-facing behavior. Keep them out of pure cleanup/refactor patches unless the maintainer explicitly approved the product change, and update bundled defaults plus documentation in the same change when they do land.

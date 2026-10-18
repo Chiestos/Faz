@@ -4,7 +4,7 @@ Faz is a macOS-native terminal emulator derived from WezTerm and shaped around A
 
 ## Repository Map
 
-- `kaku/` - CLI entry points, command flows, and user-facing configuration commands.
+- `faz-cli/` - CLI entry points, command flows, and user-facing configuration commands.
 - `faz-gui/` - GUI, rendering, window lifecycle, input, and mouse handling.
 - `mux/` - tabs, panes, domains, and client/server state.
 - `term/` - terminal emulation and screen buffer behavior.
@@ -47,7 +47,7 @@ make app
 - Draft issue and PR replies unless the maintainer has already approved the exact public action.
 - Do not modify files outside this repository without showing the intended change and getting explicit confirmation.
 - Do not add instructions for the removed `website/` tree unless that directory exists in the current worktree.
-- The marketing and docs site lives on the `vercel` branch (linked worktree at `~/www/kaku-site`), not on `main`. It follows the design guide at `~/www/kaku-site/DESIGN.md`; verify changes with screenshots at 375px / 1280px and deploy by pushing the `vercel` branch (Vercel serves kaku.fun).
+- The marketing and docs site lives on the `vercel` branch (linked worktree at `~/www/faz-site`), not on `main`. It follows the design guide at `~/www/faz-site/DESIGN.md`; verify changes with screenshots at 375px / 1280px and deploy by pushing the `vercel` branch (Vercel serves kaku.fun).
 - Keep private credentials, local keychain paths, and machine-specific release notes out of public repository docs.
 - **Do not propose UI i18n / multi-language menus / a `config.language` setting.** The `rust-i18n` based Chinese UI localization (PR #362, commit `f6cfb4b`) was reverted on 2026-05-18; `language` remains in the config schema as a deprecated field for backward compat only. UI strings (menus, confirm dialogs, config TUI copy) stay as English literal strings. New UI surfaces should not introduce translation keys, locale-aware formatting, or "what if a user wants Chinese" abstractions. If a user requests a non-English UI, route to the shell integration or documentation; there is no in-app translation surface.
 
@@ -111,7 +111,7 @@ For GUI or rendering issues, read `faz-gui/AGENTS.md` first and verify with `mak
 
 ## Current Risk Areas
 
-- In-app update replace/restart must confirm on every entry path (menu Check for Updates, menu Restart to Update, toast, CLI direct ZIP, brew cask). Do not set `FAZ_UPDATE_AUTO_CONFIRM` for exploratory menu check; only the overlay-confirmed path may auto-confirm. Sibling entry points tend to regress independently; after changing one path, sweep the matrix and keep the guards in `faz-gui` (`user_facing_update_events_route_through_confirm`) and `kaku` (`brew_and_direct_paths_confirm_before_replace`) green. Details: `faz-gui/AGENTS.md` and `.agents/skills/bugs/SKILL.md`.
+- In-app update replace/restart must confirm on every entry path (menu Check for Updates, menu Restart to Update, toast, CLI direct ZIP, brew cask). Do not set `FAZ_UPDATE_AUTO_CONFIRM` for exploratory menu check; only the overlay-confirmed path may auto-confirm. Sibling entry points tend to regress independently; after changing one path, sweep the matrix and keep the guards in `faz-gui` (`user_facing_update_events_route_through_confirm`) and `faz-cli` (`brew_and_direct_paths_confirm_before_replace`) green. Details: `faz-gui/AGENTS.md` and `.agents/skills/bugs/SKILL.md`.
 - Shell integration and the update paths are active product surfaces. Preserve proxy config and the shell user-var contract that user configs subscribe to.
 - `config_version` bumps every release; the source of truth is `assets/shell-integration/config_version.txt` and the gate is `scripts/check_release_config.sh`. Config schema changes must update bundled defaults, docs, and release checks together. **There is no historical config migration**: a removed key is kept as a tolerated `deprecated` field or ignored, never rewritten in the user's file, so do not add version-gated branches. Per-version history lives in `docs/config-versions.md`. Do not hardcode the current version number in agent guides; it goes stale between releases.
 - GUI regressions can come from overlay resize, pane split/removal, macOS worker thread lifetime, WebGPU surface reconfigure, tab bar spacing, and alternate-screen wheel scroll behavior.

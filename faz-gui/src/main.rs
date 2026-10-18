@@ -658,7 +658,7 @@ impl Publish {
                         Ok(res) => {
                             log::debug!(
                                 "Spawned your command via the existing GUI instance. \
-                             Use kaku start --always-new-process if you do not want this behavior. \
+                             Use faz start --always-new-process if you do not want this behavior. \
                              Result={:?}",
                                 res
                             );
@@ -959,7 +959,7 @@ fn run() -> anyhow::Result<()> {
     {
         unsafe {
             ::windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(
-                ::windows::core::PCWSTR(wide_string("sh.kaku.Faz").as_ptr()),
+                ::windows::core::PCWSTR(wide_string("sh.faz.Faz").as_ptr()),
             )
             .unwrap();
         }

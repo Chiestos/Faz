@@ -1298,7 +1298,7 @@ impl Config {
     /// Runtime signature embedded in every cache entry.
     /// Changing the Faz version automatically invalidates all cached bytecode,
     /// preventing cross-version mismatches.
-    const CACHE_SIGNATURE: &'static str = concat!("kaku/", env!("CARGO_PKG_VERSION"), "/lua54");
+    const CACHE_SIGNATURE: &'static str = concat!("faz/", env!("CARGO_PKG_VERSION"), "/lua54");
 
     /// Magic header for the bytecode cache file format.
     const CACHE_MAGIC: &'static [u8; 4] = b"KLBC";
@@ -2214,7 +2214,7 @@ pub fn default_hyperlink_rules() -> Vec<hyperlink::Rule> {
         hyperlink::Rule::new(r"\b\w+@[\w-]+(\.[\w-]+)+\b", "mailto:$0").unwrap(),
         // Bare domains without an explicit scheme: www.-prefixed hosts, and
         // hosts ending in a curated TLD allowlist. These must come before the
-        // file-path rule: on equal-length overlaps (github.com/tw93/kaku) the
+        // file-path rule: on equal-length overlaps (github.com/tw93/Faz) the
         // earlier rule wins, and the web interpretation is the useful one.
         // Emails and scheme'd URLs are longer matches and keep priority.
         // The allowlist deliberately excludes TLDs that collide with common
@@ -2447,8 +2447,8 @@ mod tests {
             Some("https://www.example.org".to_string())
         );
         assert_eq!(
-            uri("released at github.com/tw93/kaku today"),
-            Some("https://github.com/tw93/kaku".to_string())
+            uri("released at github.com/tw93/Faz today"),
+            Some("https://github.com/tw93/Faz".to_string())
         );
         assert_eq!(
             uri("dev server on demo.example.com:8080/index"),
@@ -2462,11 +2462,11 @@ mod tests {
         // Both the bare-domain rule and the file-path rule match this whole
         // span. After the length sort the earlier rule comes first, and the
         // first match is the one whose link wins when applied to cells.
-        let first = Rule::match_hyperlinks("github.com/tw93/kaku", &rules)
+        let first = Rule::match_hyperlinks("github.com/tw93/Faz", &rules)
             .into_iter()
             .next()
             .unwrap();
-        assert_eq!(first.link.uri(), "https://github.com/tw93/kaku");
+        assert_eq!(first.link.uri(), "https://github.com/tw93/Faz");
     }
 
     #[test]
@@ -2821,7 +2821,7 @@ mod tests {
 }
 
 fn default_term() -> String {
-    // WezTerm sets `wezterm` here, but `kaku` causes SSH issues since its
+    // WezTerm sets `wezterm` here, but `faz` causes SSH issues since its
     // terminfo doesn't exist on remote servers. So we default to `xterm-256color`.
     "xterm-256color".into()
 }

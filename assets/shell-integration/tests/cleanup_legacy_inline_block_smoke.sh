@@ -40,7 +40,7 @@ run_cleanup() {
   local line
   local -a block_lines=()
   local in_block=0
-  local saw_kaku_var=0
+  local saw_faz_var=0
   local saw_syntax=0
 
   : >"$output_file"
@@ -49,7 +49,7 @@ run_cleanup() {
     if [[ "$in_block" == "0" ]]; then
       if [[ "$line" == "# Faz Shell Integration" ]]; then
         in_block=1
-        saw_kaku_var=0
+        saw_faz_var=0
         saw_syntax=0
         block_lines=()
         continue
@@ -60,10 +60,10 @@ run_cleanup() {
     fi
 
     block_lines+=("$line")
-    [[ "$line" == *FAZ_ZSH_DIR* ]] && saw_kaku_var=1
+    [[ "$line" == *FAZ_ZSH_DIR* ]] && saw_faz_var=1
     [[ "$line" == *zsh-syntax-highlighting/zsh-syntax-highlighting.zsh* ]] && saw_syntax=1
 
-    if [[ "$saw_kaku_var" == "1" && "$saw_syntax" == "1" && "$line" =~ ^[[:space:]]*fi[[:space:]]*$ ]]; then
+    if [[ "$saw_faz_var" == "1" && "$saw_syntax" == "1" && "$line" =~ ^[[:space:]]*fi[[:space:]]*$ ]]; then
       local managed=1
       local block_line
       for block_line in "${block_lines[@]}"; do
@@ -81,7 +81,7 @@ run_cleanup() {
       fi
 
       in_block=0
-      saw_kaku_var=0
+      saw_faz_var=0
       saw_syntax=0
       block_lines=()
     fi

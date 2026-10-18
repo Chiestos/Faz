@@ -52,7 +52,7 @@ RUST_LOG=debug make dev
 ```bash
 # Build application and DMG (release, Apple Silicon)
 ./scripts/build.sh
-# Outputs: dist/Faz.app and dist/Kaku.dmg
+# Outputs: dist/Faz.app and dist/Faz.dmg
 
 # Build for current architecture only (faster, for local testing)
 ./scripts/build.sh --native-arch

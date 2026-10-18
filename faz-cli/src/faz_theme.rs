@@ -185,7 +185,7 @@ fn appearance_sensitive_theme(palette: ThemePalette, is_dark: bool) -> CachedThe
     }
 }
 
-fn builtin_kaku_theme(config: &Config) -> Option<CachedTheme> {
+fn builtin_faz_theme(config: &Config) -> Option<CachedTheme> {
     let dark = dark_palette();
     let light = light_palette();
     let dark_terminal_text = rgb("#D5D4D6");
@@ -273,7 +273,7 @@ fn parse_color_scheme_selection_line(line: &str) -> Option<ColorSchemeSelection>
     {
         return Some(ColorSchemeSelection::Dark);
     }
-    if rhs.contains("get_appearance") || rhs.contains("resolve_kaku_color_scheme") {
+    if rhs.contains("get_appearance") || rhs.contains("resolve_faz_color_scheme") {
         return Some(ColorSchemeSelection::Auto);
     }
     Some(ColorSchemeSelection::Other)
@@ -339,7 +339,7 @@ fn is_macos_dark_mode() -> bool {
 }
 
 fn theme_from_config(config: &ConfigHandle) -> CachedTheme {
-    if let Some(theme) = builtin_kaku_theme(config) {
+    if let Some(theme) = builtin_faz_theme(config) {
         return theme;
     }
 
@@ -441,7 +441,7 @@ pub fn current_theme_palette() -> ThemePalette {
 #[cfg(test)]
 mod tests {
     use super::{
-        appearance_sensitive_theme, builtin_kaku_theme, cached_theme, color_distance,
+        appearance_sensitive_theme, builtin_faz_theme, cached_theme, color_distance,
         color_scheme_selection_from_content, dark_palette, has_enough_separation,
         is_current_theme_cache_hit, luminance, parse_color_scheme_selection_line, pick_visible,
         rgb, ColorSchemeSelection,
@@ -455,7 +455,7 @@ mod tests {
         let mut config = config::Config::default_config();
         config.color_scheme = Some("Faz Light".to_string());
         assert_eq!(
-            builtin_kaku_theme(&config).map(|theme| theme.palette.is_light),
+            builtin_faz_theme(&config).map(|theme| theme.palette.is_light),
             Some(true),
             "a plain Faz Light config still resolves by name"
         );
@@ -465,7 +465,7 @@ mod tests {
             ..Default::default()
         });
         assert_ne!(
-            builtin_kaku_theme(&config).map(|theme| theme.palette.is_light),
+            builtin_faz_theme(&config).map(|theme| theme.palette.is_light),
             Some(true),
             "config.colors must stop the scheme name from deciding the theme"
         );
@@ -505,12 +505,12 @@ mod tests {
             ),
             Some(ColorSchemeSelection::Auto)
         );
-        // The bundled faz.lua uses resolve_kaku_color_scheme which
+        // The bundled faz.lua uses resolve_faz_color_scheme which
         // internally delegates to get_appearance. The Rust-side detection
         // must recognize this wrapper as Auto too.
         assert_eq!(
             parse_color_scheme_selection_line(
-                "config.color_scheme = resolve_kaku_color_scheme(config.color_scheme)"
+                "config.color_scheme = resolve_faz_color_scheme(config.color_scheme)"
             ),
             Some(ColorSchemeSelection::Auto)
         );

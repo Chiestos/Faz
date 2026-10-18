@@ -739,7 +739,7 @@ impl super::TermWindow {
         match (&window_key.key, mods) {
             (WK::LeftArrow | WK::ApplicationLeftArrow, Modifiers::SHIFT) => {
                 // Send the Shift+Left CSI sequence so the shell-side
-                // _kaku_select_left_char widget activates REGION_ACTIVE and
+                // _faz_select_left_char widget activates REGION_ACTIVE and
                 // produces the visible selection highlight.
                 out.extend_from_slice(b"\x1b[1;2D");
                 self.extend_line_editor_charwise(Dir::Left);
@@ -768,7 +768,7 @@ impl super::TermWindow {
             (WK::LeftArrow | WK::ApplicationLeftArrow, Modifiers::NONE)
                 if self.has_line_editor_selection() =>
             {
-                // Collapse selection leftward. The shell-side _kaku_mv_backward_char widget
+                // Collapse selection leftward. The shell-side _faz_mv_backward_char widget
                 // (bound to ^B) deactivates REGION_ACTIVE before moving the cursor, so no
                 // special escape sequence is needed here.
                 out.push(0x02); // Ctrl-B (backward-char)

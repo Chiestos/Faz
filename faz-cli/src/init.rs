@@ -58,7 +58,7 @@ mod imp {
         persist_managed_shell(shell).context("remember selected shell")?;
         ensure_user_config().context("ensure user config exists")?;
 
-        install_kaku_wrapper(shell).context("install kaku wrapper")?;
+        install_faz_wrapper(shell).context("install faz wrapper")?;
         install_k_wrapper(shell).context("install k wrapper")?;
 
         let script_name = match shell {
@@ -171,7 +171,7 @@ mod imp {
         }
     }
 
-    fn install_kaku_wrapper(shell: ManagedShell) -> anyhow::Result<()> {
+    fn install_faz_wrapper(shell: ManagedShell) -> anyhow::Result<()> {
         let wrapper_path = wrapper_path(shell);
         let wrapper_dir = wrapper_path
             .parent()
@@ -187,7 +187,7 @@ mod imp {
             })?;
         }
 
-        let preferred_bin = resolve_preferred_kaku_bin()
+        let preferred_bin = resolve_preferred_faz_bin()
             .unwrap_or_else(|| PathBuf::from("/Applications/Faz.app/Contents/MacOS/faz"));
         let preferred_bin = escape_for_double_quotes(&preferred_bin.display().to_string());
 
@@ -232,7 +232,7 @@ exit 127
         // If something else already owns this path and it is not our wrapper, skip.
         if k_path.exists() {
             let content = fs::read_to_string(&k_path).unwrap_or_default();
-            if !content.contains("Faz") && !content.contains("kaku") {
+            if !content.contains("Faz") && !content.contains("faz") {
                 eprintln!(
                     "k: {} already exists and does not appear to be a Faz wrapper; skipping.",
                     k_path.display()
@@ -294,7 +294,7 @@ exit 127
 
     fn resolve_preferred_k_bin() -> Option<PathBuf> {
         if let Ok(exe) = std::env::current_exe() {
-            // current_exe is the `kaku` binary; `k` sits alongside it.
+            // current_exe is the `faz` binary; `k` sits alongside it.
             let k_candidate = exe.with_file_name("k");
             if is_executable_file(&k_candidate) {
                 return Some(k_candidate);
@@ -329,7 +329,7 @@ exit 127
             .join("faz")
     }
 
-    fn resolve_preferred_kaku_bin() -> Option<PathBuf> {
+    fn resolve_preferred_faz_bin() -> Option<PathBuf> {
         if let Some(path) = std::env::var_os("FAZ_BIN") {
             let path = PathBuf::from(path);
             if is_executable_file(&path) {
@@ -341,7 +341,7 @@ exit 127
             if exe
                 .file_name()
                 .and_then(|n| n.to_str())
-                .map(|n| n.eq_ignore_ascii_case("kaku"))
+                .map(|n| n.eq_ignore_ascii_case("faz"))
                 .unwrap_or(false)
                 && is_executable_file(&exe)
             {

@@ -97,7 +97,7 @@ backup_tmuxrc_once() {
 	fi
 }
 
-default_kaku_config_path() {
+default_faz_config_path() {
 	if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
 		printf '%s\n' "${XDG_CONFIG_HOME}/faz/faz.lua"
 	else
@@ -105,15 +105,15 @@ default_kaku_config_path() {
 	fi
 }
 
-active_kaku_config_path() {
+active_faz_config_path() {
 	if [[ -n "${FAZ_CONFIG_FILE:-}" ]]; then
 		printf '%s\n' "${FAZ_CONFIG_FILE}"
 	else
-		default_kaku_config_path
+		default_faz_config_path
 	fi
 }
 
-system_kaku_flavor() {
+system_faz_flavor() {
 	local flavor="faz-dark"
 	if command -v defaults >/dev/null 2>&1; then
 		local appearance
@@ -125,10 +125,10 @@ system_kaku_flavor() {
 	printf '%s\n' "$flavor"
 }
 
-resolve_kaku_flavor_from_config() {
+resolve_faz_flavor_from_config() {
 	local config_file="$1"
 	local system_flavor
-	system_flavor="$(system_kaku_flavor)"
+	system_flavor="$(system_faz_flavor)"
 
 	if [[ -f "$config_file" ]]; then
 		local scheme_line
@@ -163,12 +163,12 @@ resolve_kaku_flavor_from_config() {
 	printf '%s\n' "$system_flavor"
 }
 
-current_kaku_yazi_flavor() {
-	resolve_kaku_flavor_from_config "$(active_kaku_config_path)"
+current_faz_yazi_flavor() {
+	resolve_faz_flavor_from_config "$(active_faz_config_path)"
 }
 
 _faz_yazi_theme_block() {
-	local flavor="${1:-$(current_kaku_yazi_flavor)}"
+	local flavor="${1:-$(current_faz_yazi_flavor)}"
 	cat <<EOF
 $FAZ_YAZI_THEME_MARKER_START
 [flavor]
@@ -178,7 +178,7 @@ $FAZ_YAZI_THEME_MARKER_END
 EOF
 }
 
-is_legacy_kaku_yazi_theme_file() {
+is_legacy_faz_yazi_theme_file() {
 	if [[ ! -f "$YAZI_THEME_FILE" ]]; then
 		return 1
 	fi
@@ -213,7 +213,7 @@ migrate_yazi_schema_headers() {
 	done
 }
 
-sync_kaku_yazi_flavors() {
+sync_faz_yazi_flavors() {
 	if [[ ! -d "$FAZ_YAZI_FLAVOR_SOURCE_DIR" ]]; then
 		echo -e "${YELLOW}Warning: bundled Yazi flavors are missing at $FAZ_YAZI_FLAVOR_SOURCE_DIR.${NC}"
 		return
@@ -243,12 +243,12 @@ sync_kaku_yazi_flavors() {
 	echo -e "  ${GREEN}✓${NC} ${BOLD}Config${NC}      Refreshed Faz yazi flavors ${NC}(dark + light)${NC}"
 }
 
-ensure_kaku_yazi_theme() {
+ensure_faz_yazi_theme() {
 	mkdir -p "$YAZI_CONFIG_DIR"
 	local managed_flavor
-	managed_flavor="$(current_kaku_yazi_flavor)"
+	managed_flavor="$(current_faz_yazi_flavor)"
 
-	if [[ ! -f "$YAZI_THEME_FILE" ]] || is_legacy_kaku_yazi_theme_file; then
+	if [[ ! -f "$YAZI_THEME_FILE" ]] || is_legacy_faz_yazi_theme_file; then
 		cat <<EOF >"$YAZI_THEME_FILE"
 #:schema https://yazi-rs.github.io/schemas/theme.json
 
@@ -298,7 +298,7 @@ MARKER_END="# ===== End Faz Yazi Flavor (managed) ====="
 WRAPPER_PATH="${BASH_SOURCE[0]}"
 WRAPPER_DIR="$(cd "$(dirname "$WRAPPER_PATH")" && pwd)"
 
-system_kaku_flavor() {
+system_faz_flavor() {
 	local flavor="faz-dark"
 	if command -v defaults >/dev/null 2>&1; then
 		local appearance
@@ -310,7 +310,7 @@ system_kaku_flavor() {
 	printf '%s\n' "$flavor"
 }
 
-default_kaku_config_path() {
+default_faz_config_path() {
 	if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
 		printf '%s\n' "${XDG_CONFIG_HOME}/faz/faz.lua"
 	else
@@ -318,18 +318,18 @@ default_kaku_config_path() {
 	fi
 }
 
-active_kaku_config_path() {
+active_faz_config_path() {
 	if [[ -n "${FAZ_CONFIG_FILE:-}" ]]; then
 		printf '%s\n' "${FAZ_CONFIG_FILE}"
 	else
-		default_kaku_config_path
+		default_faz_config_path
 	fi
 }
 
-resolve_kaku_flavor_from_config() {
+resolve_faz_flavor_from_config() {
 	local config_file="$1"
 	local system_flavor
-	system_flavor="$(system_kaku_flavor)"
+	system_flavor="$(system_faz_flavor)"
 
 	if [[ -f "$config_file" ]]; then
 		local scheme_line
@@ -365,7 +365,7 @@ resolve_kaku_flavor_from_config() {
 }
 
 current_flavor() {
-	resolve_kaku_flavor_from_config "$(active_kaku_config_path)"
+	resolve_faz_flavor_from_config "$(active_faz_config_path)"
 }
 
 managed_block() {
@@ -488,7 +488,7 @@ if [[ ! -d "$VENDOR_DIR" ]]; then
 	exit 1
 fi
 
-install_kaku_terminfo() {
+install_faz_terminfo() {
 	if [[ "${FAZ_SKIP_TERMINFO_BOOTSTRAP:-0}" == "1" ]]; then
 		return
 	fi
@@ -537,7 +537,7 @@ install_kaku_terminfo() {
 	echo -e "${YELLOW}Warning: failed to install faz terminfo automatically.${NC}"
 }
 
-install_kaku_terminfo
+install_faz_terminfo
 
 echo -e "${BOLD}Setting up Faz Fish Shell Environment${NC}"
 
@@ -602,8 +602,8 @@ EOF
 	echo -e "  ${GREEN}✓${NC} ${BOLD}Config${NC}      Initialized yazi keymap ${NC}(~/.config/yazi/keymap.toml)${NC}"
 fi
 
-sync_kaku_yazi_flavors
-ensure_kaku_yazi_theme
+sync_faz_yazi_flavors
+ensure_faz_yazi_theme
 install_yazi_wrapper
 
 # 3. Configure tmux (Optional)
@@ -698,7 +698,7 @@ has_kaku_tmux_source_line() {
 	grep -Eq '^[[:space:]]*source-file[[:space:]].*(kaku|faz)/tmux/(kaku|faz)\.tmux\.conf([[:space:]]|$)' "$TMUXRC"
 }
 
-ensure_kaku_tmux_integration() {
+ensure_faz_tmux_integration() {
 	local tmux_cmd=""
 	if command -v tmux >/dev/null 2>&1; then
 		tmux_cmd="tmux"
@@ -730,7 +730,7 @@ ensure_kaku_tmux_integration() {
 	fi
 }
 
-ensure_kaku_tmux_integration
+ensure_faz_tmux_integration
 
 # 4. Generate Faz Fish Init File
 cat <<'EOF' >"$FAZ_INIT_FILE"
@@ -749,14 +749,14 @@ if test "$TERM_PROGRAM" = "Faz"
 else if not set -q TMUX
     set -e FAZ_SESSION
 end
-set -l _faz_in_kaku 0
+set -l _faz_in_faz 0
 if test "$TERM_PROGRAM" = "Faz"; or begin; set -q TMUX; and set -q FAZ_SESSION; end
-    set _faz_in_kaku 1
+    set _faz_in_faz 1
 end
 
 # === Starship prompt ===
 # Faz-only by default; FAZ_PROMPT_EVERYWHERE=1 opts it into every terminal.
-if begin; test $_faz_in_kaku = 1; or set -q FAZ_PROMPT_EVERYWHERE; end; and command -q starship
+if begin; test $_faz_in_faz = 1; or set -q FAZ_PROMPT_EVERYWHERE; end; and command -q starship
     starship init fish | source
 end
 

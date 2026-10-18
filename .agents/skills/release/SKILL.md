@@ -1,7 +1,7 @@
 ---
 name: release
 description: "Run the Faz macOS release flow end-to-end: preflight, build, notarize, tag, upload to GitHub Releases, dispatch the Homebrew tap, or publish the rolling Nightly preview package. Source of truth is scripts/release.sh and scripts/nightly.sh; this skill is a runbook with one-time setup commands and recovery hints."
-when_to_use: "发布, 出版本, 打 tag, release Faz, ship Faz, V0.x.x, kaku release, prepare release, dry-run release, resume release, notarize, homebrew tap, nightly, Nightly 包, 更新 nightly, 预览包"
+when_to_use: "发布, 出版本, 打 tag, release Faz, ship Faz, V0.x.x, release, prepare release, dry-run release, resume release, notarize, homebrew tap, nightly, Nightly 包, 更新 nightly, 预览包"
 ---
 
 # Faz Release Runbook
@@ -34,7 +34,7 @@ Rules:
 
 ## One-time machine setup
 
-Tang's credentials live at `~/save/AppleCertificates/`. The release script checks for either `kaku-asc-api-key-path` (rcodesign route, preferred) or `kaku-notarytool-profile` (notarytool fallback) in the login keychain.
+Tang's credentials live at `~/save/AppleCertificates/`. The release script checks for either `faz-asc-api-key-path` (rcodesign route, preferred) or `faz-notarytool-profile` (notarytool fallback) in the login keychain.
 
 ### Preferred: rcodesign + ASC API key
 
@@ -42,7 +42,7 @@ Tang's credentials live at `~/save/AppleCertificates/`. The release script check
 
 ```bash
 cargo install apple-codesign         # binary: rcodesign, lands in ~/.cargo/bin
-security add-generic-password -s 'kaku-asc-api-key-path' -a 'kaku' \
+security add-generic-password -s 'faz-asc-api-key-path' -a "faz" \
   -w "$HOME/save/AppleCertificates/asc_api_key.json"
 ```
 
@@ -51,18 +51,18 @@ The JSON already has `issuer_id`, `key_id`, and `private_key` baked in (rcodesig
 ### Fallback: notarytool profile
 
 ```bash
-xcrun notarytool store-credentials kaku-notarytool \
+xcrun notarytool store-credentials faz-notarytool \
   --apple-id  "$(cat ~/save/AppleCertificates/notary_apple_id.txt)" \
   --team-id   "$(cat ~/save/AppleCertificates/team_id.txt)"  \
   --password  "$(cat ~/save/AppleCertificates/notary_password.txt)"
-security add-generic-password -s 'kaku-notarytool-profile' -a 'kaku' -w 'kaku-notarytool'
+security add-generic-password -s 'faz-notarytool-profile' -a "faz" -w 'faz-notarytool'
 ```
 
 ### Verify
 
 ```bash
 which rcodesign
-security find-generic-password -s 'kaku-asc-api-key-path' -w
+security find-generic-password -s 'faz-asc-api-key-path' -w
 security find-identity -v -p codesigning | grep 'Developer ID Application'
 gh auth status
 ```
@@ -71,7 +71,7 @@ gh auth status
 
 Before invoking `release.sh`, confirm in this order:
 
-1. `kaku/Cargo.toml` and `faz-gui/Cargo.toml` versions match (e.g. `0.10.0`).
+1. `faz-cli/Cargo.toml` and `faz-gui/Cargo.toml` versions match (e.g. `0.10.0`).
 2. `assets/shell-integration/config_version.txt` is the intended schema version, with highlight rows in the matching docs.
 3. `.github/RELEASE_NOTES.md` first heading is `# V<version> <suffix>` (uppercase V, used as the GitHub Release title).
 4. Both English `Changelog` and Chinese `更新日志` sections in `RELEASE_NOTES.md` cover the same items.
@@ -85,8 +85,8 @@ These are the areas that produce the most post-release bug reports and that CI c
 
 1. **macOS window** (#408, #414): on first launch, a single click on the title bar / top inset must not maximize the window; drag the window while it fills the desktop; flip system light/dark and confirm all windows refresh; enter and exit fullscreen cleanly.
 2. **Tab bar** (#409, #435, #439, #443, #445, #447): check both `tab_bar_at_bottom` true/false; open enough tabs to overflow a narrow window and confirm titles truncate but every tab stays clickable; rename a tab, then click another to switch and confirm no position scramble; confirm a tmux/shell status prompt renders in the bar without clipping.
-3. **Shell setup** (#420, #432, #441, #450): from a clean `HOME`, run `kaku init` and confirm z / syntax-highlight / autosuggestions are active in a fresh shell; run `kaku init --update-only` and confirm it exits clean; open a new shell and confirm `~/.config/faz/zsh/faz.zsh` sources with no error.
-4. **AI chat** (#418, #431): run `kaku chat`, quit, then run it again in the same window and confirm it reopens.
+3. **Shell setup** (#420, #432, #441, #450): from a clean `HOME`, run `faz init` and confirm z / syntax-highlight / autosuggestions are active in a fresh shell; run `faz init --update-only` and confirm it exits clean; open a new shell and confirm `~/.config/faz/zsh/faz.zsh` sources with no error.
+4. **AI chat** (#418, #431): run `faz chat`, quit, then run it again in the same window and confirm it reopens.
 5. **Render timing / stale drawable** (#452, #458): on the bundled WebGpu backend, sleep the Mac then wake it and confirm the window repaints instead of freezing on the old frame while keystrokes still reach the shell; connect or disconnect an external display and confirm no frozen frame or geometry jump; open a new window straight into fullscreen and resize it, confirming it fills without a stale first frame.
 6. **Hyperlinks** (#547): Cmd-hover a URL that the terminal soft-wraps and confirm both rows target the full URL. Then print a URL exactly as wide as the terminal, followed by `\r\n` and unindented unrelated text; the target must exclude that text. Terminal and surface tests cover the grouping; check the built app hover target too.
 
@@ -125,7 +125,7 @@ When a release fixes a bug outside this list, add the reproduction here so the n
 | Flag | Skips | Use when |
 |---|---|---|
 | `--notarize-only` | build | Build succeeded; notarization failed or was interrupted. |
-| `--upload-only` | build, notarize | Notarized `dist/Faz.app` and `Kaku.dmg` exist on disk; only need to tag + upload + tap. |
+| `--upload-only` | build, notarize | Notarized `dist/Faz.app` and `Faz.dmg` exist on disk; only need to tag + upload + tap. |
 | `--tap-only` | build, notarize, upload | GitHub release exists; only the Homebrew tap dispatch needs to rerun. |
 
 Resume flags require the corresponding artifacts in `dist/` to still be present.
@@ -148,8 +148,8 @@ Resume flags require the corresponding artifacts in `dist/` to still be present.
 | Variable | Default | Purpose |
 |---|---|---|
 | `FAZ_SIGNING_IDENTITY` | auto-detect | Override the Developer ID Application identity. |
-| `FAZ_ASC_API_KEY_PATH` | keychain item `kaku-asc-api-key-path` | Path to rcodesign ASC API key JSON. |
-| `FAZ_NOTARYTOOL_PROFILE` | keychain item `kaku-notarytool-profile` | notarytool keychain profile name. |
+| `FAZ_ASC_API_KEY_PATH` | keychain item `faz-asc-api-key-path` | Path to rcodesign ASC API key JSON. |
+| `FAZ_NOTARYTOOL_PROFILE` | keychain item `faz-notarytool-profile` | notarytool keychain profile name. |
 | `HOMEBREW_TAP_TOKEN` | `gh auth token` | GitHub token for tap dispatch. |
 | `REQUIRE_HOMEBREW_TAP_UPDATE` | `1` | Set to `0` to allow release to succeed when tap dispatch fails. |
 | `RUN_CLIPPY` | `0` | Set to `1` to run `cargo clippy` during stage:checks. |

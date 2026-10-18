@@ -106,7 +106,7 @@ backup_tmuxrc_once() {
 	fi
 }
 
-default_kaku_config_path() {
+default_faz_config_path() {
 	if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
 		printf '%s\n' "${XDG_CONFIG_HOME}/faz/faz.lua"
 	else
@@ -114,15 +114,15 @@ default_kaku_config_path() {
 	fi
 }
 
-active_kaku_config_path() {
+active_faz_config_path() {
 	if [[ -n "${FAZ_CONFIG_FILE:-}" ]]; then
 		printf '%s\n' "${FAZ_CONFIG_FILE}"
 	else
-		default_kaku_config_path
+		default_faz_config_path
 	fi
 }
 
-system_kaku_flavor() {
+system_faz_flavor() {
 	local flavor="faz-dark"
 	if command -v defaults >/dev/null 2>&1; then
 		local appearance
@@ -134,10 +134,10 @@ system_kaku_flavor() {
 	printf '%s\n' "$flavor"
 }
 
-resolve_kaku_flavor_from_config() {
+resolve_faz_flavor_from_config() {
 	local config_file="$1"
 	local system_flavor
-	system_flavor="$(system_kaku_flavor)"
+	system_flavor="$(system_faz_flavor)"
 
 	if [[ -f "$config_file" ]]; then
 		local scheme_line
@@ -172,12 +172,12 @@ resolve_kaku_flavor_from_config() {
 	printf '%s\n' "$system_flavor"
 }
 
-current_kaku_yazi_flavor() {
-	resolve_kaku_flavor_from_config "$(active_kaku_config_path)"
+current_faz_yazi_flavor() {
+	resolve_faz_flavor_from_config "$(active_faz_config_path)"
 }
 
 _faz_yazi_theme_block() {
-	local flavor="${1:-$(current_kaku_yazi_flavor)}"
+	local flavor="${1:-$(current_faz_yazi_flavor)}"
 	cat <<EOF
 $FAZ_YAZI_THEME_MARKER_START
 [flavor]
@@ -187,7 +187,7 @@ $FAZ_YAZI_THEME_MARKER_END
 EOF
 }
 
-is_legacy_kaku_yazi_theme_file() {
+is_legacy_faz_yazi_theme_file() {
 	if [[ ! -f "$YAZI_THEME_FILE" ]]; then
 		return 1
 	fi
@@ -222,7 +222,7 @@ migrate_yazi_schema_headers() {
 	done
 }
 
-sync_kaku_yazi_flavors() {
+sync_faz_yazi_flavors() {
 	if [[ ! -d "$FAZ_YAZI_FLAVOR_SOURCE_DIR" ]]; then
 		echo -e "${YELLOW}Warning: bundled Yazi flavors are missing at $FAZ_YAZI_FLAVOR_SOURCE_DIR.${NC}"
 		return
@@ -252,12 +252,12 @@ sync_kaku_yazi_flavors() {
 	echo -e "  ${GREEN}✓${NC} ${BOLD}Config${NC}      Refreshed Faz yazi flavors ${NC}(dark + light)${NC}"
 }
 
-ensure_kaku_yazi_theme() {
+ensure_faz_yazi_theme() {
 	mkdir -p "$YAZI_CONFIG_DIR"
 	local managed_flavor
-	managed_flavor="$(current_kaku_yazi_flavor)"
+	managed_flavor="$(current_faz_yazi_flavor)"
 
-	if [[ ! -f "$YAZI_THEME_FILE" ]] || is_legacy_kaku_yazi_theme_file; then
+	if [[ ! -f "$YAZI_THEME_FILE" ]] || is_legacy_faz_yazi_theme_file; then
 		cat <<EOF >"$YAZI_THEME_FILE"
 #:schema https://yazi-rs.github.io/schemas/theme.json
 
@@ -310,7 +310,7 @@ MARKER_END="# ===== End Faz Yazi Flavor (managed) ====="
 WRAPPER_PATH="${BASH_SOURCE[0]}"
 WRAPPER_DIR="$(cd "$(dirname "$WRAPPER_PATH")" && pwd)"
 
-system_kaku_flavor() {
+system_faz_flavor() {
 	local flavor="faz-dark"
 	if command -v defaults >/dev/null 2>&1; then
 		local appearance
@@ -322,7 +322,7 @@ system_kaku_flavor() {
 	printf '%s\n' "$flavor"
 }
 
-default_kaku_config_path() {
+default_faz_config_path() {
 	if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
 		printf '%s\n' "${XDG_CONFIG_HOME}/faz/faz.lua"
 	else
@@ -330,18 +330,18 @@ default_kaku_config_path() {
 	fi
 }
 
-active_kaku_config_path() {
+active_faz_config_path() {
 	if [[ -n "${FAZ_CONFIG_FILE:-}" ]]; then
 		printf '%s\n' "${FAZ_CONFIG_FILE}"
 	else
-		default_kaku_config_path
+		default_faz_config_path
 	fi
 }
 
-resolve_kaku_flavor_from_config() {
+resolve_faz_flavor_from_config() {
 	local config_file="$1"
 	local system_flavor
-	system_flavor="$(system_kaku_flavor)"
+	system_flavor="$(system_faz_flavor)"
 
 	if [[ -f "$config_file" ]]; then
 		local scheme_line
@@ -377,7 +377,7 @@ resolve_kaku_flavor_from_config() {
 }
 
 current_flavor() {
-	resolve_kaku_flavor_from_config "$(active_kaku_config_path)"
+	resolve_faz_flavor_from_config "$(active_faz_config_path)"
 }
 
 managed_block() {
@@ -504,7 +504,7 @@ if [[ ! -d "$VENDOR_DIR" ]]; then
 	exit 1
 fi
 
-install_kaku_terminfo() {
+install_faz_terminfo() {
 	# Skip explicit bootstrap when requested.
 	if [[ "${FAZ_SKIP_TERMINFO_BOOTSTRAP:-0}" == "1" ]]; then
 		return
@@ -557,7 +557,7 @@ install_kaku_terminfo() {
 	echo -e "${YELLOW}Warning: failed to install faz terminfo automatically.${NC}"
 }
 
-install_kaku_terminfo
+install_faz_terminfo
 
 echo -e "${BOLD}Setting up Faz Shell Environment${NC}"
 
@@ -758,8 +758,8 @@ EOF
 	echo -e "  ${GREEN}✓${NC} ${BOLD}Config${NC}      Initialized yazi keymap ${NC}(~/.config/yazi/keymap.toml)${NC}"
 fi
 
-sync_kaku_yazi_flavors
-ensure_kaku_yazi_theme
+sync_faz_yazi_flavors
+ensure_faz_yazi_theme
 install_yazi_wrapper
 
 AUTOSUGGEST_CLI_PROVIDER=""
@@ -826,16 +826,16 @@ if [[ "\${TERM_PROGRAM:-}" == "Faz" ]]; then
 elif [[ -z "\${TMUX:-}" ]]; then
     unset FAZ_SESSION
 fi
-_faz_in_kaku=0
+_faz_in_faz=0
 if [[ "\${TERM_PROGRAM:-}" == "Faz" ]] || [[ -n "\${TMUX:-}" && -n "\${FAZ_SESSION:-}" ]]; then
-    _faz_in_kaku=1
+    _faz_in_faz=1
 fi
 
 # Initialize Starship inside Faz by default. The managed file is sourced by
 # every zsh so PATH and shared helpers remain available in IDE and system
 # terminals. FAZ_PROMPT_EVERYWHERE=1 opts the prompt into all of them, for
 # people who use Faz's Starship as their one prompt (#503).
-if { (( _faz_in_kaku )) || [[ -n "\${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command -v starship &> /dev/null; then
+if { (( _faz_in_faz )) || [[ -n "\${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command -v starship &> /dev/null; then
     # Cache the full starship init script. Plain \`starship init zsh\` forks
     # starship on every new shell (twice: the stub it prints re-runs
     # \`starship init zsh --print-full-init\`), and that fork+exec is the
@@ -1333,7 +1333,7 @@ unset -f _faz_has_autosuggest_system 2>/dev/null
 # - Without FAZ_TAB_ACCEPT_SUGGEST_FIRST, prefer completion so Tab reveals
 #   candidates instead of accepting recent-history suggestions
 # - Only claim Tab inside Faz sessions unless explicitly disabled
-if [[ -z "\${FAZ_SMART_TAB_DISABLE:-}" ]] && (( _faz_in_kaku )); then
+if [[ -z "\${FAZ_SMART_TAB_DISABLE:-}" ]] && (( _faz_in_faz )); then
     _faz_tab_widget() {
         emulate -L zsh
 
@@ -1663,7 +1663,7 @@ has_kaku_tmux_source_line() {
 	grep -Eq '^[[:space:]]*source-file[[:space:]].*(kaku|faz)/tmux/(kaku|faz)\.tmux\.conf([[:space:]]|$)' "$TMUXRC"
 }
 
-ensure_kaku_tmux_integration() {
+ensure_faz_tmux_integration() {
 	# GUI-launched shells inherit a minimal PATH (no Homebrew/MacPorts). Probe
 	# common install locations so tmux is found even when PATH is stripped down.
 	local tmux_cmd=""
@@ -1697,7 +1697,7 @@ ensure_kaku_tmux_integration() {
 	fi
 }
 
-ensure_kaku_tmux_integration
+ensure_faz_tmux_integration
 
 # 5. Configure .zshrc
 PATH_LINE='[[ ":$PATH:" != *":$HOME/.config/faz/zsh/bin:"* ]] && export PATH="$HOME/.config/faz/zsh/bin:$PATH" # Faz PATH Integration'
@@ -1706,7 +1706,7 @@ LEGACY_INLINE_BLOCK_PRESERVED=0
 
 # SYNC: the heredoc below must stay in sync with FAZ_LEGACY_INLINE_KNOWN_LINES
 # in faz-cli/src/reset.rs. When adding or removing lines, update both places.
-legacy_inline_block_has_only_kaku_managed_lines() {
+legacy_inline_block_has_only_faz_managed_lines() {
 	local line
 
 	for line in "$@"; do
@@ -1876,7 +1876,7 @@ cleanup_legacy_inline_block() {
 	local line
 	local -a block_lines=()
 	local in_block=0
-	local saw_kaku_var=0
+	local saw_faz_var=0
 	local saw_syntax=0
 	local removed_block=0
 	local preserved_block=0
@@ -1892,7 +1892,7 @@ cleanup_legacy_inline_block() {
 
 			if [[ "$line" == "# Faz Shell Integration" ]]; then
 				in_block=1
-				saw_kaku_var=0
+				saw_faz_var=0
 				saw_syntax=0
 				block_lines=()
 				continue
@@ -1903,11 +1903,11 @@ cleanup_legacy_inline_block() {
 		fi
 
 		block_lines+=("$line")
-		[[ "$line" == *FAZ_ZSH_DIR* ]] && saw_kaku_var=1
+		[[ "$line" == *FAZ_ZSH_DIR* ]] && saw_faz_var=1
 		[[ "$line" == *zsh-syntax-highlighting/zsh-syntax-highlighting.zsh* ]] && saw_syntax=1
 
-		if [[ "$saw_kaku_var" == "1" && "$saw_syntax" == "1" && "$line" =~ ^[[:space:]]*fi[[:space:]]*$ ]]; then
-			if legacy_inline_block_has_only_kaku_managed_lines "${block_lines[@]}"; then
+		if [[ "$saw_faz_var" == "1" && "$saw_syntax" == "1" && "$line" =~ ^[[:space:]]*fi[[:space:]]*$ ]]; then
+			if legacy_inline_block_has_only_faz_managed_lines "${block_lines[@]}"; then
 				removed_block=1
 				skip_blank_after_removed=1
 			else
@@ -1920,7 +1920,7 @@ cleanup_legacy_inline_block() {
 			fi
 
 			in_block=0
-			saw_kaku_var=0
+			saw_faz_var=0
 			saw_syntax=0
 			block_lines=()
 		fi

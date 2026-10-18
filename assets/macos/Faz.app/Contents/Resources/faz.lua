@@ -775,7 +775,7 @@ local function build_managed_yazi_theme_block(flavor)
   }, "\n")
 end
 
-local function is_legacy_kaku_yazi_theme(content)
+local function is_legacy_faz_yazi_theme(content)
   if content:find("# Faz%-aligned theme for Yazi 26%.x", 1) then
     return true
   end
@@ -846,12 +846,12 @@ local function sync_managed_yazi_theme(window)
     theme_file:close()
   end
 
-  if not is_legacy_kaku_yazi_theme(existing) and existing:find(managed_block, 1, true) then
+  if not is_legacy_faz_yazi_theme(existing) and existing:find(managed_block, 1, true) then
     return
   end
 
   local updated
-  if existing == "" or is_legacy_kaku_yazi_theme(existing) then
+  if existing == "" or is_legacy_faz_yazi_theme(existing) then
     updated = table.concat({
       "#:schema https://yazi-rs.github.io/schemas/theme.json",
       "",

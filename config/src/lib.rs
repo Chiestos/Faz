@@ -868,7 +868,7 @@ fn config_dirs() -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn builtin_kaku_scheme_mirrors_match_complete_bundled_palettes() {
+    fn builtin_faz_scheme_mirrors_match_complete_bundled_palettes() {
         let source = include_str!("../../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let constants = source
             .split_once("local KAKU = {")
@@ -900,7 +900,7 @@ mod tests {
     }
 
     #[test]
-    fn builtin_kaku_schemes_work_without_loading_bundled_defaults() {
+    fn builtin_faz_schemes_work_without_loading_bundled_defaults() {
         for (name, background) in [
             ("Faz Dark", (0x15, 0x14, 0x1b)),
             ("Faz Light", (0xff, 0xfc, 0xf0)),
@@ -925,7 +925,7 @@ mod tests {
     }
 
     #[test]
-    fn user_kaku_scheme_definition_takes_priority_over_builtin() {
+    fn user_faz_scheme_definition_takes_priority_over_builtin() {
         let mut config = crate::Config::default();
         config.color_scheme = Some("Faz Light".to_string());
         let palette = crate::Palette {
@@ -942,21 +942,21 @@ mod tests {
 
     #[test]
     fn empty_xdg_config_home_uses_default_home_config_dir() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let path = xdg_config_home_from(&home, Some(OsString::new()));
         assert_eq!(path, home.join(".config").join("faz"));
     }
 
     #[test]
     fn missing_xdg_config_home_uses_default_home_config_dir() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let path = xdg_config_home_from(&home, None);
         assert_eq!(path, home.join(".config").join("faz"));
     }
 
     #[test]
     fn valid_xdg_config_home_is_used() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let path = xdg_config_home_from(&home, Some(OsString::from("/custom/config")));
         assert_eq!(path, PathBuf::from("/custom/config").join("faz"));
     }
@@ -964,7 +964,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn empty_xdg_config_dirs_entries_are_ignored() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let dirs = config_dirs_from(
             &home,
             Some(OsString::new()),
@@ -983,7 +983,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn missing_xdg_config_dirs_returns_primary_only() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let dirs = config_dirs_from(&home, Some(OsString::from("/custom/config")), None);
         assert_eq!(dirs, vec![PathBuf::from("/custom/config").join("faz")]);
     }
@@ -991,7 +991,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn empty_xdg_config_dirs_returns_primary_only() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let dirs = config_dirs_from(
             &home,
             Some(OsString::from("/custom/config")),
@@ -1027,7 +1027,7 @@ mod tests {
     }
 
     #[test]
-    fn bundled_kaku_lua_defaults_missing_theme_to_appearance() {
+    fn bundled_faz_lua_defaults_missing_theme_to_appearance() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1060,7 +1060,7 @@ mod tests {
     }
 
     #[test]
-    fn bundled_kaku_lua_uses_config_for_remember_last_cwd() {
+    fn bundled_faz_lua_uses_config_for_remember_last_cwd() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1072,7 +1072,7 @@ mod tests {
     }
 
     #[test]
-    fn bundled_kaku_lua_multi_pane_titles_keep_full_segments() {
+    fn bundled_faz_lua_multi_pane_titles_keep_full_segments() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1099,7 +1099,7 @@ mod tests {
     }
 
     #[test]
-    fn bundled_kaku_lua_tab_titles_fit_narrow_width_budgets() -> anyhow::Result<()> {
+    fn bundled_faz_lua_tab_titles_fit_narrow_width_budgets() -> anyhow::Result<()> {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let source = std::fs::read_to_string(&bundled)?;
@@ -1276,7 +1276,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_foreground_process_tab_titles_default_to_off() {
+    fn bundled_faz_lua_foreground_process_tab_titles_default_to_off() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1289,7 +1289,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_maps_claude_versioned_executables() {
+    fn bundled_faz_lua_maps_claude_versioned_executables() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1303,7 +1303,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lazygit_dispatch_does_not_require_outer_pane_git_cwd() {
+    fn bundled_faz_lazygit_dispatch_does_not_require_outer_pane_git_cwd() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1331,7 +1331,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_sets_colorfgbg_from_user_theme_scan() {
+    fn bundled_faz_lua_sets_colorfgbg_from_user_theme_scan() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1346,7 +1346,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_closes_fullscreen_last_window_on_cmd_w() {
+    fn bundled_faz_lua_closes_fullscreen_last_window_on_cmd_w() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1359,7 +1359,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_defaults_close_confirmation_to_smart_prompt() {
+    fn bundled_faz_lua_defaults_close_confirmation_to_smart_prompt() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1373,7 +1373,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_defaults_smart_tab_to_suggestion_first() {
+    fn bundled_faz_lua_defaults_smart_tab_to_suggestion_first() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1385,7 +1385,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_enables_minimum_text_contrast() {
+    fn bundled_faz_lua_enables_minimum_text_contrast() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1397,7 +1397,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_dark_maps_black_foregrounds_to_readable_text() {
+    fn bundled_faz_dark_maps_black_foregrounds_to_readable_text() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
@@ -1413,7 +1413,7 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_light_keeps_claude_selection_visibly_blue() {
+    fn bundled_faz_light_keeps_claude_selection_visibly_blue() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");

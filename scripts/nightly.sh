@@ -13,7 +13,7 @@
 #
 # Usage:
 #   ./scripts/nightly.sh                     # build + notarize + publish
-#   ./scripts/nightly.sh --upload-only       # skip build/notarize; re-publish existing dist/Kaku.dmg
+#   ./scripts/nightly.sh --upload-only       # skip build/notarize; re-publish existing dist/Faz.dmg
 #   ./scripts/nightly.sh --features=remote    # enable optional cargo features
 #
 # Requirements (same credentials as scripts/release.sh):
@@ -34,7 +34,7 @@ GITHUB_REPO="${GITHUB_REPO:-tw93/Faz}"
 NIGHTLY_TAG="${NIGHTLY_TAG:-nightly}"
 PROFILE="${PROFILE:-release-opt}"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/dist}"
-DMG_PATH="$OUT_DIR/Kaku.dmg"
+DMG_PATH="$OUT_DIR/Faz.dmg"
 DMG_ASSET_NAME="Faz-nightly.dmg"
 DMG_ASSET_PATH="$OUT_DIR/$DMG_ASSET_NAME"
 UPLOAD_ONLY=0
@@ -87,12 +87,12 @@ if [[ "$UPLOAD_ONLY" -eq 0 ]]; then
     # Mirror release.sh's lookup so we don't build for minutes then fail at notary.
     have_creds=0
     asc_key="${FAZ_ASC_API_KEY_PATH:-}"
-    [[ -z "$asc_key" ]] && asc_key=$(security find-generic-password -s "kaku-asc-api-key-path" -w 2>/dev/null || true)
+    [[ -z "$asc_key" ]] && asc_key=$(security find-generic-password -s "faz-asc-api-key-path" -w 2>/dev/null || true)
     if [[ -n "$asc_key" && -f "$asc_key" ]] && command -v rcodesign >/dev/null 2>&1; then
         have_creds=1
     fi
     notary_profile="${FAZ_NOTARYTOOL_PROFILE:-}"
-    [[ -z "$notary_profile" ]] && notary_profile=$(security find-generic-password -s "kaku-notarytool-profile" -w 2>/dev/null || true)
+    [[ -z "$notary_profile" ]] && notary_profile=$(security find-generic-password -s "faz-notarytool-profile" -w 2>/dev/null || true)
     [[ -n "$notary_profile" ]] && have_creds=1
     if [[ "$have_creds" -eq 0 ]]; then
         die "No notarization credentials found (rcodesign ASC API key or notarytool profile). See scripts/notarize.sh for setup."
@@ -131,7 +131,7 @@ log "Asset ready: $DMG_ASSET_PATH ($SIZE)"
 
 LAST_STABLE=$(git tag -l 'V*' --sort=-v:refname | head -n1 || true)
 BUILD_DATE=$(date -u "+%Y-%m-%d")
-CARGO_VERSION=$(grep '^version =' "$REPO_ROOT/kaku/Cargo.toml" | head -n1 | cut -d'"' -f2)
+CARGO_VERSION=$(grep '^version =' "$REPO_ROOT/faz-cli/Cargo.toml" | head -n1 | cut -d'"' -f2)
 
 # Commit subjects include reverted and superseded work, so they are not a
 # reliable user-facing changelog. Link the actual source comparison instead.

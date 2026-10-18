@@ -1042,7 +1042,7 @@ fn font_size_state_file() -> PathBuf {
         .first()
         .cloned()
         .unwrap_or_else(|| config::HOME_DIR.join(".config").join("faz"))
-        .join(".kaku_font_size")
+        .join(".faz_font_size")
 }
 
 fn persist_current_font_size(config: &ConfigHandle, font_scale: f64) {
@@ -1481,7 +1481,7 @@ mod tests {
     #[test]
     fn explicit_override_path_wins_for_custom_padding_detection() {
         config::clear_config_file_override();
-        let override_path = PathBuf::from("/tmp/kaku-override.lua");
+        let override_path = PathBuf::from("/tmp/faz-override.lua");
         config::set_config_file_override(&override_path);
 
         assert_eq!(user_custom_window_padding_config_path(), override_path);

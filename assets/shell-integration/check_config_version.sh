@@ -10,8 +10,6 @@ NC='\033[0m'
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/faz"
 STATE_FILE="$CONFIG_DIR/state.json"
-LEGACY_VERSION_FILE="$CONFIG_DIR/.kaku_config_version"
-LEGACY_GEOMETRY_FILE="$CONFIG_DIR/.kaku_window_geometry"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMMON_SCRIPT="$SCRIPT_DIR/state_common.sh"
 
@@ -24,7 +22,7 @@ source "$COMMON_SCRIPT"
 
 CURRENT_CONFIG_VERSION="$(read_bundled_config_version "$SCRIPT_DIR")"
 
-detect_kaku_setup_script() {
+detect_faz_setup_script() {
 	local shell_candidate
 	shell_candidate="${FAZ_TARGET_SHELL:-}"
 	if [[ -z "$shell_candidate" ]]; then
@@ -44,29 +42,10 @@ detect_kaku_setup_script() {
 }
 
 RESOURCE_DIR="$SCRIPT_DIR"
-SETUP_SCRIPT="$RESOURCE_DIR/$(detect_kaku_setup_script)"
+SETUP_SCRIPT="$RESOURCE_DIR/$(detect_faz_setup_script)"
 TOOLS_SCRIPT="$RESOURCE_DIR/install_cli_tools.sh"
 
 user_version="$(read_config_version)"
-
-if [[ $user_version -eq 0 && ! -f "$STATE_FILE" ]]; then
-	if [[ -f "$LEGACY_VERSION_FILE" || -f "$LEGACY_GEOMETRY_FILE" ]]; then
-		legacy_version=0
-		if [[ -f "$LEGACY_VERSION_FILE" ]]; then
-			candidate="$(tr -d '[:space:]' < "$LEGACY_VERSION_FILE" || true)"
-			if [[ "$candidate" =~ ^[0-9]+$ ]]; then
-				legacy_version="$candidate"
-			fi
-		fi
-
-		if [[ $legacy_version -eq 0 ]]; then
-			legacy_version="$CURRENT_CONFIG_VERSION"
-		fi
-
-		persist_config_version "$legacy_version"
-		user_version="$legacy_version"
-	fi
-fi
 
 # Corrupted state file fallback: repair and continue with safe defaults.
 if [[ -f "$STATE_FILE" && $user_version -eq 0 ]]; then

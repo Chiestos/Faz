@@ -1085,8 +1085,8 @@ mod tests {
         // it alone must not write it back, or closing a pane would keep the
         // dead pane's name in the tab.
         assert!(!TabRenameModal::should_apply(
-            "www/kaku∙www/kaku·claude",
-            "www/kaku∙www/kaku·claude"
+            "www/faz∙www/faz·claude",
+            "www/faz∙www/faz·claude"
         ));
     }
 
@@ -1101,7 +1101,7 @@ mod tests {
 
     #[test]
     fn edited_value_is_applied() {
-        assert!(TabRenameModal::should_apply("www/kaku", "build"));
+        assert!(TabRenameModal::should_apply("www/faz", "build"));
     }
 
     #[test]

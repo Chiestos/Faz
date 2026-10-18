@@ -1088,7 +1088,7 @@ assert(wezterm.emit('bar', 42, 'woot') == true)
     }
 
     #[test]
-    fn bundled_kaku_lua_compiles() -> anyhow::Result<()> {
+    fn bundled_faz_lua_compiles() -> anyhow::Result<()> {
         let config_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let lua = make_lua_context(&config_path)?;

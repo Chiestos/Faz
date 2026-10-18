@@ -294,7 +294,7 @@ impl ConnectionOps for Connection {
     }
 
     fn is_default_terminal(&self) -> bool {
-        kaku_is_default_terminal()
+        faz_is_default_terminal()
     }
 
     fn flush_pending_service_events(&self) {
@@ -349,7 +349,7 @@ extern "C" {
     ) -> CFStringRef;
 }
 
-fn kaku_is_default_terminal() -> bool {
+fn faz_is_default_terminal() -> bool {
     let content_type = CFString::new("public.unix-executable");
     let handler = unsafe {
         LSCopyDefaultRoleHandlerForContentType(content_type.as_concrete_TypeRef(), KLS_ROLES_ALL)

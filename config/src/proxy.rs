@@ -4,7 +4,7 @@
 //! env inherited from launchd has no proxy vars, so curl cannot reach the
 //! internet through a user-configured proxy. This module resolves the
 //! macOS system proxy from Network Settings via `/usr/sbin/scutil --proxy`
-//! and exposes it for the update code paths in both `kaku` and `faz-gui`.
+//! and exposes it for the update code paths in both `faz` and `faz-gui`.
 //!
 //! On non-macOS platforms `scutil` will simply fail to spawn and the
 //! detection returns `None`, which is the correct fallback.

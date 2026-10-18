@@ -651,10 +651,6 @@ fn state_file() -> PathBuf {
     config_dir_file("state.json")
 }
 
-fn legacy_window_geometry_file() -> PathBuf {
-    config_dir_file(".kaku_window_geometry")
-}
-
 fn window_position(window: *mut Object) -> Option<ScreenPoint> {
     if window.is_null() {
         return None;
@@ -1008,48 +1004,6 @@ fn has_screen_identifier(screen_id: u32) -> bool {
     false
 }
 
-fn parse_legacy_window_size(s: &str) -> Option<PersistedWindowSize> {
-    let parts: Vec<_> = s.trim().split(',').map(str::trim).collect();
-    match parts.as_slice() {
-        [width, height] => Some(PersistedWindowSize {
-            width: width.parse::<usize>().ok()?,
-            height: height.parse::<usize>().ok()?,
-        }),
-        [_, _, width, height] => Some(PersistedWindowSize {
-            width: width.parse::<usize>().ok()?,
-            height: height.parse::<usize>().ok()?,
-        }),
-        _ => None,
-    }
-}
-
-fn migrate_legacy_window_state() -> Option<PersistedState> {
-    let file_name = legacy_window_geometry_file();
-    let contents = std::fs::read_to_string(&file_name).ok()?;
-    let size = parse_legacy_window_size(&contents)?;
-
-    let state = PersistedState {
-        config_version: None,
-        managed_shell: None,
-        window_geometry: Some(size),
-        window_position: None,
-        extra: BTreeMap::new(),
-    };
-
-    let state_file_name = state_file();
-    if let Some(parent) = state_file_name.parent() {
-        let _ = config::create_user_owned_dirs(parent);
-    }
-
-    if let Ok(encoded) = serde_json::to_string_pretty(&state) {
-        let _ = std::fs::write(&state_file_name, format!("{}\n", encoded));
-    }
-
-    let _ = std::fs::remove_file(&file_name);
-
-    Some(state)
-}
-
 fn load_persisted_state() -> Option<PersistedState> {
     let file_name = state_file();
     if let Ok(contents) = std::fs::read_to_string(file_name) {
@@ -1058,7 +1012,7 @@ fn load_persisted_state() -> Option<PersistedState> {
         }
     }
 
-    migrate_legacy_window_state()
+    None
 }
 
 fn load_persisted_window_size() -> Option<PersistedWindowSize> {
@@ -3538,7 +3492,7 @@ fn should_intercept_special_shortcut(chars: &str, modifiers: Modifiers, virtual_
         // Preserve macOS built-in Cmd+` and Cmd+Shift+` window cycling.
         && virtual_key != kVK_ANSI_Grave;
     // Intercept Cmd+Shift+Space so the system "select previous input source"
-    // shortcut cannot consume it before Faz's own kaku-ai-chat binding fires.
+    // shortcut cannot consume it before Faz's own faz-ai-chat binding fires.
     let command_shift_space =
         modifiers == (Modifiers::SUPER | Modifiers::SHIFT) && virtual_key == kVK_Space;
 
@@ -4309,7 +4263,7 @@ impl WindowView {
             let _: () = msg_send![
                 class!(NSObject),
                 cancelPreviousPerformRequestsWithTarget: view
-                selector: sel!(kakuPersistWindowStateAfterMove:)
+                selector: sel!(fazPersistWindowStateAfterMove:)
                 object: nil
             ];
             let _: () = msg_send![
@@ -4894,12 +4848,12 @@ impl WindowView {
             let _: () = msg_send![
                 class!(NSObject),
                 cancelPreviousPerformRequestsWithTarget: this as *mut Object
-                selector: sel!(kakuPersistWindowStateAfterMove:)
+                selector: sel!(fazPersistWindowStateAfterMove:)
                 object: nil
             ];
             let _: () = msg_send![
                 this,
-                performSelector: sel!(kakuPersistWindowStateAfterMove:)
+                performSelector: sel!(fazPersistWindowStateAfterMove:)
                 withObject: nil
                 afterDelay: MOVE_PERSIST_DELAY_SECS
             ];
@@ -6501,7 +6455,7 @@ impl WindowView {
                 Self::did_change_screen as extern "C" fn(&mut Object, Sel, id),
             );
             cls.add_method(
-                sel!(kakuPersistWindowStateAfterMove:),
+                sel!(fazPersistWindowStateAfterMove:),
                 Self::persist_window_state_after_move as extern "C" fn(&mut Object, Sel, id),
             );
 

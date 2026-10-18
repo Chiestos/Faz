@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for kaku release scripts.
+# Shared helpers for Faz release scripts.
 # Source from scripts/release.sh and scripts/prep_release.sh after REPO_ROOT is set.
 
 LIB_RED='\033[0;31m'
@@ -16,14 +16,14 @@ die() {
     exit 1
 }
 
-# Read package.version from kaku/Cargo.toml.
+# Read package.version from faz-cli/Cargo.toml.
 get_cargo_version() {
     local root="${1:-${REPO_ROOT:-.}}"
-    grep '^version =' "$root/kaku/Cargo.toml" | head -n1 | cut -d'"' -f2
+    grep '^version =' "$root/faz-cli/Cargo.toml" | head -n1 | cut -d'"' -f2
 }
 
 # Read package.version from faz-gui/Cargo.toml.
-get_kaku_gui_version() {
+get_faz_gui_version() {
     local root="${1:-${REPO_ROOT:-.}}"
     grep '^version =' "$root/faz-gui/Cargo.toml" | head -n1 | cut -d'"' -f2
 }
