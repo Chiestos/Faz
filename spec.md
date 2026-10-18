@@ -49,8 +49,8 @@
 | 编号 | 需求 | 状态 | 验证 |
 |---|---|---|---|
 | C-101 | Lua 配置，支持热重载 | 已实现 | `config/src/lib.rs` |
-| C-102 | 配置版本号与迁移：`config_version` 随发布递增 | 已实现 | `assets/shell-integration/config_version.txt`、`scripts/check_release_config.sh` |
-| C-103 | 版本历史与迁移规则记录在文档 | 已实现 | `docs/config-versions.md` |
+| C-102 | `config_version` 随发布递增，触发已安装用户重新生成 shell 集成 | 已实现 | `assets/shell-integration/config_version.txt`、`scripts/check_release_config.sh` |
+| C-103 | 旧配置键通过 deprecated 字段容忍，**不做版本迁移** | 已实现 | `config/src/config.rs` 的 `deprecated = "..."` |
 | C-104 | 配置 TUI（`faz config`）进行交互式设置 | 已实现 | `faz-cli/src/config_cmd.rs` |
 | C-105 | 自定义键绑定，**必须追加**而非替换 `config.keys` | 已实现 | `docs/configuration.md` |
 | C-106 | 主题与配色 | 已实现 | `config/`、`docs/configuration.md` |

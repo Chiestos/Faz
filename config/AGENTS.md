@@ -17,7 +17,7 @@ The `config` crate owns config loading, Lua integration, schema behavior, proxy 
 - `config/src/config.rs`: load/parse flow
 - `config/src/lib.rs`: config API and subscriptions
 - `config/src/proxy.rs`: proxy configuration used by AI and network-facing flows
-- `config/src/version.rs`: config version and migration-related constants
+- `config/src/version.rs`: build version and target triple strings
 - `assets/macos/Faz.app/Contents/Resources/faz.lua`: bundled fallback config
 
 ## Config TUI (`faz-cli/src/config_tui/` and `faz-cli/src/tui_core/`)
@@ -37,7 +37,7 @@ The config TUI is the interactive terminal UI for editing Faz config. It lives i
 - Keep bundled fallback config authoritative at `assets/macos/Faz.app/Contents/Resources/faz.lua`.
 - Faz Dark, Faz Light, and the Faz Theme alias must also resolve for standalone user configs that do not load the bundled Lua defaults. Their `src/scheme_data.rs` mirrors are checked against every bundled palette field by `builtin_kaku_scheme_mirrors_match_complete_bundled_palettes`; synchronize both when changing a Faz palette.
 - Preserve compatibility with runtime reload callers that trigger `config::reload()` from GUI-side signals.
-- The current `config_version` is whatever `assets/shell-integration/config_version.txt` says; never trust a number written in a doc (this line once said 24 while the release was at 26). Any version bump must update bundled config, release checks, docs, and migration expectations together, and add a row to `docs/config-versions.md`.
+- The current `config_version` is whatever `assets/shell-integration/config_version.txt` says; never trust a number written in a doc (this line once said 24 while the release was at 26). Any version bump must update bundled config, release checks, and docs together, and add a row to `docs/config-versions.md`. Removed keys are tolerated as `deprecated` fields, never migrated: there is no historical config migration.
 - New config fields are user-facing behavior. Keep them out of pure cleanup/refactor patches unless the maintainer explicitly approved the product change, and update bundled defaults plus documentation in the same change when they do land.
 - Keep alternate-screen wheel scroll behavior configurable; terminal and GUI defaults must not diverge.
 

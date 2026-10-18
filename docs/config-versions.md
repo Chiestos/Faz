@@ -8,12 +8,13 @@ instruction files; read the txt file instead.
 
 ## Rules for bumping
 
-- A schema change must update the bundled defaults (`assets/macos/Faz.app/Contents/Resources/faz.lua`),
-  user docs, release checks, and migration behavior together, in one change.
-- Only keys that existed in the previous released version need migration code. A feature
-  introduced in the current cycle ships its default directly: no migration, no version-gated
-  branches, no release-note migration mention. Check with
-  `git show V<previous release>:assets/macos/Faz.app/Contents/Resources/faz.lua | grep <key>`.
+- A schema change must update the bundled defaults
+  (`assets/macos/Faz.app/Contents/Resources/faz.lua`) and user docs in one change.
+- **There is no historical config migration.** A removed or renamed key is not
+  rewritten for users who still have it in their `faz.lua`; it is either kept as a
+  tolerated `deprecated` field, or ignored as an unknown key. Do not add
+  version-gated branches that rewrite a user's config.
+- New keys ship their default directly in the bundled config.
 - A bump with no schema change is normal and expected; record why in this file.
 
 ## History

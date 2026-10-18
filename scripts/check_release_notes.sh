@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE_NOTES="$REPO_ROOT/.github/RELEASE_NOTES.md"
 
 # Get version from Cargo.toml
-cargo_version="$(grep '^version =' "$REPO_ROOT/kaku/Cargo.toml" | head -n1 | cut -d'"' -f2)"
+cargo_version="$(grep '^version =' "$REPO_ROOT/faz-cli/Cargo.toml" | head -n1 | cut -d'"' -f2)"
 
 if [[ ! -f "$RELEASE_NOTES" ]]; then
     echo "❌ RELEASE_NOTES.md not found at $RELEASE_NOTES" >&2
