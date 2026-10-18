@@ -825,15 +825,23 @@ pub struct Config {
     #[dynamic(default = "default_true")]
     pub automatically_reload_config: bool,
 
-    #[dynamic(default = "default_check_for_updates")]
+    /// Kept for config compatibility only. There is no in-app update
+    /// surface, so nothing reads these; a user config that still sets them
+    /// keeps loading.
+    #[dynamic(
+        default,
+        deprecated = "no longer does anything; Faz does not check for updates"
+    )]
     pub check_for_updates: bool,
     #[dynamic(
         default,
-        deprecated = "this option no longer does anything and will be removed in a future release"
+        deprecated = "no longer does anything; Faz does not check for updates"
     )]
     pub show_update_window: bool,
-
-    #[dynamic(default = "default_update_interval")]
+    #[dynamic(
+        default,
+        deprecated = "no longer does anything; Faz does not check for updates"
+    )]
     pub check_for_updates_interval_seconds: u64,
 
     /// When set to true, use the CSI-U encoding scheme as described
@@ -2085,10 +2093,6 @@ impl Config {
     }
 }
 
-fn default_check_for_updates() -> bool {
-    cfg!(not(feature = "distro-defaults"))
-}
-
 fn default_pane_select_fg_color() -> RgbaColor {
     SrgbaTuple(0.75, 0.75, 0.75, 1.0).into()
 }
@@ -3003,10 +3007,6 @@ fn default_enq_answerback() -> String {
 
 fn default_tab_max_width() -> usize {
     16
-}
-
-fn default_update_interval() -> u64 {
-    10800
 }
 
 fn default_prefer_egl() -> bool {

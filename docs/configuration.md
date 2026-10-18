@@ -280,25 +280,14 @@ config.send_composed_key_when_right_alt_is_pressed = true  -- default: right = C
 
 ## Updates
 
-Faz checks GitHub for new releases in the background (enabled by default) and
-quietly downloads a newer version when it finds one. It never installs on its
-own: it shows a notification, and clicking it asks you to confirm first, since
-applying an update closes every window and stops running tasks.
+Faz has no in-app update surface: no background check, no menu item, and
+no `faz update` subcommand. Update the application through the same
+channel you installed it with — the Homebrew cask, or a fresh build from
+source.
 
-Turn off background checks entirely:
-
-```lua
-config.check_for_updates = false
-```
-
-Change how often it checks (default `10800`, i.e. every 3 hours):
-
-```lua
-config.check_for_updates_interval_seconds = 86400  -- once a day
-```
-
-You can always update manually with `kaku update` or from the app menu,
-regardless of these settings.
+The old `check_for_updates`, `check_for_updates_interval_seconds`, and
+`show_update_window` fields are still accepted so existing configs keep
+loading, but nothing reads them.
 
 ---
 
