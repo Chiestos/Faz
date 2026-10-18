@@ -57,10 +57,15 @@ impl Direction {
 /// block; short enough that a dead peer does not pin the thread.
 pub const RELAY_GRACE: Duration = Duration::from_secs(1);
 
-/// How long to wait for the child after the relay stops before declaring the
-/// transfer stuck. Generous: a large transfer over a slow link can take a
-/// while to wind down, and killing early would truncate it.
-pub const CHILD_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long the transfer may go without the relay moving a byte before it is
+/// declared stuck.
+///
+/// This is a stall detector, not a duration limit. Bounding the total time
+/// truncates any transfer larger than the bound allows: a 46 MB file at a few
+/// hundred kilobytes per second takes minutes, and killing it at thirty seconds
+/// looks exactly like a hang. What actually indicates a broken transfer is that
+/// nothing is moving in either direction.
+pub const STALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Where to run the local child, and with what arguments.
 #[derive(Debug, Clone)]
@@ -105,7 +110,21 @@ impl LocalCommand {
 /// `paths` are the local files for an upload or the destination path for a
 /// download.
 pub fn local_command(direction: Direction, paths: &[String], cwd: Option<&std::path::Path>) -> LocalCommand {
-    let cmd = LocalCommand::new(direction.local_program()).args(paths.iter().cloned());
+    // \`sz -e\` escapes every control character in the payload.
+    //
+    // Without it, lrzsz only escapes the bytes ZMODEM itself needs. Everything
+    // else travels raw, and this channel is not a plain wire: the bytes are
+    // read by an ssh client sitting on the pty, which scans its input for local
+    // escape sequences. A payload containing \`\n~v\`, \`~.\` or a bare interrupt
+    // is acted on by ssh instead of being forwarded — the session raises its log
+    // level, or drops, and the transfer dies with the receiver asking for
+    // blocks it never got. Small files often survive because they may not
+    // contain the sequence; a large one eventually does.
+    let mut cmd = LocalCommand::new(direction.local_program());
+    if direction == Direction::Upload {
+        cmd = cmd.arg("-e");
+    }
+    let cmd = cmd.args(paths.iter().cloned());
     match cwd {
         Some(dir) => cmd.cwd(dir),
         None => cmd,
@@ -171,6 +190,11 @@ pub struct Transfer {
     progress_sink: Box<dyn FnMut(&[u8]) + Send>,
     /// Stops the progress reader thread.
     progress_stop: Arc<AtomicBool>,
+    /// The pane's transfer state, so the relay can take the pty's read side
+    /// for the duration. `None` only in tests that drive a bare transfer.
+    state: Option<Arc<crate::zmodem::state::ZmodemState>>,
+    /// Live count of bytes the relay has forwarded, for stall detection.
+    forwarded: Option<Arc<std::sync::atomic::AtomicU64>>,
     /// The pty slave, kept open for the transfer's lifetime so its termios
     /// stays under our control. Dropping it would let the shell's settings
     /// come back mid-session.
@@ -278,6 +302,8 @@ impl Transfer {
             on_sink_ready: None,
             progress_sink: Box::new(|_: &[u8]| {}),
             progress_stop: Arc::new(AtomicBool::new(false)),
+            state: None,
+            forwarded: None,
             slave_keepalive: None,
         }
     }
@@ -288,6 +314,12 @@ impl Transfer {
     /// the handle here means it cannot be closed underneath the transfer.
     pub fn on_slave_keepalive(mut self, slave: std::os::fd::OwnedFd) -> Self {
         self.slave_keepalive = Some(slave);
+        self
+    }
+
+    /// Tell the transfer which pane state to claim the pty's read side from.
+    pub fn on_state(mut self, state: Arc<crate::zmodem::state::ZmodemState>) -> Self {
+        self.state = Some(state);
         self
     }
 
@@ -354,22 +386,30 @@ impl Transfer {
             Err(e) => return Outcome::SpawnFailed(e),
         };
 
-        // Start the relay before spawning so no early bytes are lost. It runs
-        // until `stop` is set and the child end closes.
-        // The pane's output parser owns the pty's read side and forwards bytes
-        // to this transfer's socketpair, so the relay must only carry the
-        // child's output back to the pty. A bidirectional relay would race the
-        // parser for the same pty bytes.
+        // The transfer owns the pty for its whole duration. zssh gets this by
+        // allocating its own pty; Faz is layered on a live pane, so the pane's
+        // roundtrip thread has to stand down first — see
+        // `ZmodemState::set_relay_owns_pty`. With two readers the bytes
+        // interleave and a frame arrives split across both, and a fragment is
+        // useless to a protocol that needs whole frames.
+        if let Some(state) = self.state.as_ref() {
+            state.set_relay_owns_pty(true);
+        }
+
+        // Bidirectional, like zssh: the relay now carries both directions, so
+        // the peer's replies travel the same path as the child's data and the
+        // child's pacing follows the link's.
         let relay = match Relay::start_with_mode(
             relay_end,
             self.pty_master_fd,
             self.stop.clone(),
-            crate::zmodem::transfer::RelayMode::ChildToPty,
+            crate::zmodem::transfer::RelayMode::Bidirectional,
         ) {
             Ok(r) => r,
             Err(e) => return Outcome::SpawnFailed(e),
         };
         self.cancel_fd = Some(relay.peer_fd());
+        self.forwarded = Some(Arc::clone(relay.forwarded_handle()));
 
         // Hand the sink fd to the caller before the child starts, so the
         // pane's parser can begin diverting remote bytes here without a gap.
@@ -427,6 +467,24 @@ impl Transfer {
             program.args,
             program.cwd
         );
+
+        // Hold the pty's settings for the life of the transfer: the remote
+        // side re-applies its own terminal modes as the peer switches, and
+        // that reaches our pty through the remote client. Without this the
+        // binary stream is subject to line discipline again and frames arrive
+        // corrupted. The guard also reports whether drift happened at all,
+        // which is the difference between "this was the cause" and "this was
+        // not".
+        let tty_guard = self
+            .pty_slave_fd
+            .and_then(|fd| crate::zmodem::transfer::guard_transfer_tty(fd, self.stop.clone()))
+            .or_else(|| {
+                crate::zmodem::transfer::guard_transfer_tty(
+                    self.pty_master_fd,
+                    self.stop.clone(),
+                )
+            });
+
         let child = match spawner.spawn(&program, child_end.as_raw_fd(), stderr_fd) {
             Ok(c) => c,
             Err(e) => {
@@ -458,12 +516,42 @@ impl Transfer {
         }
         self.stop.store(true, Ordering::SeqCst);
         relay.join();
+        // The guard notices `stop` on its next tick and reports whether the
+        // pty's settings drifted underneath us.
+        if let Some(g) = tty_guard {
+            let _ = g.join();
+        }
         // Stop the progress thread: its last read happens under the stop flag.
         self.progress_stop.store(true, Ordering::SeqCst);
         if let Some(p) = progress_relay {
             p.join();
         }
         self.cancel_fd = None;
+
+        // Tell the peer to stop if this ended any way other than cleanly.
+        //
+        // The child is gone, so nothing else will send an abort; the remote
+        // `rz`/`sz` would sit waiting until its own timeout, which is what
+        // leaves a pane that looks hung. `cancel_fd` cannot be used for this:
+        // it is the socketpair end the child read from, so bytes written there
+        // went to the now-dead child rather than to the peer. Write to the pty
+        // directly, which is the path every byte the child sent took.
+        if !outcome.succeeded() && !self.is_cancelled() {
+            match crate::zmodem::transfer::write_all(
+                self.pty_master_fd,
+                &CANCEL_SEQUENCE,
+            ) {
+                Ok(_) => log::info!("zmodem: sent abort burst to the peer after a failed transfer"),
+                Err(err) => log::warn!("zmodem: could not abort the peer: {err:#}"),
+            }
+        }
+
+        // Give the pty's read side back before anything else runs: the pane's
+        // roundtrip thread resumes parsing, and any bytes the relay did not
+        // consume belong to the shell.
+        if let Some(state) = self.state.as_ref() {
+            state.set_relay_owns_pty(false);
+        }
 
         self.restore();
         outcome
@@ -473,11 +561,22 @@ impl Transfer {
         // Clone the flag up front: `self.child` is borrowed mutably below, so
         // the loop cannot call `self.is_cancelled()`.
         let cancel_requested = self.cancel_requested.clone();
+        // Cloned before the child is borrowed mutably below: the loop needs
+        // both, and they live in the same struct.
+        let forwarded = self.forwarded.clone();
+        let peer_state = self.state.clone();
         let Some(child) = self.child.as_mut() else {
             return Outcome::TimedOut;
         };
 
-        let deadline = Instant::now() + CHILD_TIMEOUT;
+        let mut last_progress = Instant::now();
+        let mut last_bytes = 0u64;
+        let forwarded_now = || {
+            forwarded
+                .as_ref()
+                .map_or(0, |f| f.load(std::sync::atomic::Ordering::Relaxed))
+        };
+        let mut last_progress_bytes = forwarded_now();
         loop {
             match child.try_wait() {
                 Ok(Some(status)) => {
@@ -500,13 +599,27 @@ impl Transfer {
                 return Outcome::Cancelled;
             }
 
-            if Instant::now() >= deadline {
+            // Progress is measured across both directions: the child writing
+            // or the peer answering. Either one moving means the transfer is
+            // alive, however long it takes overall.
+            let moved = peer_state.as_ref().map_or(0, |s| s.peer_bytes_to_child());
+            let fwd = forwarded_now();
+            if moved != last_bytes || fwd != last_progress_bytes {
+                last_bytes = moved;
+                last_progress_bytes = fwd;
+                last_progress = Instant::now();
+            }
+            if last_progress.elapsed() >= STALL_TIMEOUT {
+                log::warn!(
+                    "zmodem: no progress for {:?}; giving up on the transfer",
+                    STALL_TIMEOUT
+                );
                 let _ = child.kill();
                 let _ = child.wait();
                 return Outcome::TimedOut;
             }
 
-            std::thread::sleep(Duration::from_millis(20));
+            std::thread::sleep(Duration::from_millis(50));
         }
     }
 
@@ -535,6 +648,13 @@ impl Drop for Transfer {
         // A caller that bails out before `run` must not leave the pty raw.
         if self.child.is_none() {
             self.restore();
+        }
+        // Every exit path releases the read side, including the early returns
+        // that skip the tail of `run`. Leaving this set would park the pane's
+        // roundtrip thread forever and freeze the terminal long after the
+        // transfer is over.
+        if let Some(state) = self.state.as_ref() {
+            state.set_relay_owns_pty(false);
         }
     }
 }
@@ -629,7 +749,7 @@ mod tests {
             Some(std::path::Path::new("/tmp")),
         );
         assert_eq!(cmd.program, "sz");
-        assert_eq!(cmd.args, vec!["a.txt", "b.txt"]);
+        assert_eq!(cmd.args, vec!["-e", "a.txt", "b.txt"]);
         assert_eq!(cmd.cwd.as_deref(), Some(std::path::Path::new("/tmp")));
     }
 
@@ -791,4 +911,57 @@ mod tests {
         assert_eq!(&buf[..n], b"hello");
     }
 
+}
+
+#[cfg(test)]
+mod stall_timeout_tests {
+    use super::STALL_TIMEOUT;
+
+    #[test]
+    fn the_timeout_is_a_stall_detector_not_a_duration_cap() {
+        // Bounding total time truncates large transfers: a 46 MB file over a
+        // few hundred KB/s takes minutes, and killing it early is
+        // indistinguishable from a hang. The bound applies only to periods with
+        // no movement at all.
+        assert!(
+            STALL_TIMEOUT >= std::time::Duration::from_secs(10),
+            "too short to tell a slow link from a dead one"
+        );
+    }
+}
+
+#[cfg(test)]
+mod escape_flag_tests {
+    use super::{local_command, Direction};
+
+    #[test]
+    fn uploads_escape_every_control_byte() {
+        // The upload channel is read by an ssh client, which acts on escape
+        // sequences in its input. `sz -e` escapes all control characters so no
+        // payload byte can be mistaken for one.
+        let paths = vec!["file.bin".to_string()];
+        let cmd = local_command(Direction::Upload, &paths, None);
+        assert_eq!(cmd.program, "sz");
+        assert!(
+            cmd.args.contains(&"-e".to_string()),
+            "upload must run sz with -e, got {:?}",
+            cmd.args
+        );
+    }
+
+    #[test]
+    fn the_path_is_still_passed_after_the_flag() {
+        let paths = vec!["a b.bin".to_string()];
+        let cmd = local_command(Direction::Upload, &paths, None);
+        assert_eq!(cmd.args.last(), Some(&"a b.bin".to_string()));
+    }
+
+    #[test]
+    fn downloads_are_unaffected() {
+        // `rz` has no equivalent flag and needs none: nothing it writes is a
+        // payload the peer's environment would interpret.
+        let cmd = local_command(Direction::Download, &[], None);
+        assert_eq!(cmd.program, "rz");
+        assert!(!cmd.args.iter().any(|a| a == "-e"));
+    }
 }
