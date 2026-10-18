@@ -35,7 +35,6 @@ mod reset;
 mod shell;
 mod tui_core;
 mod tui_splash;
-mod update;
 mod utils;
 
 #[derive(Debug, Parser)]
@@ -130,12 +129,6 @@ enum SubCommand {
         about = "Check Faz shell integration, environment, and runtime health"
     )]
     Doctor(doctor::DoctorCommand),
-
-    #[command(
-        name = "update",
-        about = "Download and install the latest Faz release automatically"
-    )]
-    Update(update::UpdateCommand),
 
     #[command(
         name = "reset",
@@ -345,7 +338,6 @@ fn run() -> anyhow::Result<()> {
             generate_completion(shell, &mut cmd, name, &mut std::io::stdout());
             Ok(())
         }
-        SubCommand::Update(cmd) => cmd.run(),
         SubCommand::Config(cmd) => cmd.run(
             opts.config_file.as_ref().map(PathBuf::from),
             opts.config_file.clone(),
@@ -381,11 +373,10 @@ fn select_main_menu_command() -> anyhow::Result<Option<SubCommand>> {
         Config,
         Init,
         Doctor,
-        Update,
         Reset,
     }
 
-    const MENU_ITEMS: [(&str, &str, MenuChoice); 5] = [
+    const MENU_ITEMS: [(&str, &str, MenuChoice); 4] = [
         (
             "config",
             "Manage terminal and assistant settings",
@@ -396,11 +387,6 @@ fn select_main_menu_command() -> anyhow::Result<Option<SubCommand>> {
             "doctor",
             "Run diagnostics for shell and runtime health",
             MenuChoice::Doctor,
-        ),
-        (
-            "update",
-            "Check and install latest version",
-            MenuChoice::Update,
         ),
         (
             "reset",
@@ -464,7 +450,6 @@ fn select_main_menu_command() -> anyhow::Result<Option<SubCommand>> {
             MenuChoice::Config => SubCommand::Config(config_cmd::ConfigCommand::default()),
             MenuChoice::Init => SubCommand::Init(init::InitCommand::default()),
             MenuChoice::Doctor => SubCommand::Doctor(doctor::DoctorCommand::default()),
-            MenuChoice::Update => SubCommand::Update(update::UpdateCommand::default()),
             MenuChoice::Reset => SubCommand::Reset(reset::ResetCommand::default()),
         }
     }

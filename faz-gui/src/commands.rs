@@ -2197,39 +2197,13 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
             menubar: &["Shell"],
             icon: None,
         },
-        OpenUri(uri) => match uri.as_ref() {
-            "https://github.com/tw93/Faz" => CommandDef {
-                brief: "Star on GitHub".into(),
-                doc: "Star Faz on GitHub".into(),
-                keys: vec![],
-                args: &[],
-                menubar: &[],
-                icon: None,
-            },
-            "https://github.com/tw93/Faz/discussions/" => CommandDef {
-                brief: "Discuss on GitHub".into(),
-                doc: "Visit Faz's GitHub discussion".into(),
-                keys: vec![],
-                args: &[],
-                menubar: &[],
-                icon: None,
-            },
-            "https://github.com/tw93/Faz/issues/" => CommandDef {
-                brief: "Report Issue".into(),
-                doc: "Submit bug report or feature request".into(),
-                keys: vec![],
-                args: &[],
-                menubar: &[],
-                icon: None,
-            },
-            _ => CommandDef {
-                brief: format!("Open {uri} in your browser").into(),
-                doc: format!("Open {uri} in your browser").into(),
-                keys: vec![],
-                args: &[],
-                menubar: &[],
-                icon: None,
-            },
+        OpenUri(uri) => CommandDef {
+            brief: format!("Open {uri} in your browser").into(),
+            doc: format!("Open {uri} in your browser").into(),
+            keys: vec![],
+            args: &[],
+            menubar: &[],
+            icon: None,
         },
         SendString(text) => CommandDef {
             brief: format!(

@@ -46,7 +46,7 @@ Highest historical yield first. Subsystem guides live in crate `AGENTS.md` files
 
 | Boundary | What to ask | Where it usually lives |
 |---|---|---|
-| Multi-entry destructive actions | Menu, toast, CLI, shell, key binding: do they all confirm the same way before quit/replace/kill? | `faz-gui/src/frontend.rs`, `update.rs`, `overlay/confirm.rs`, `overlay/confirm_close_pane.rs`, `faz-cli/src/update.rs` |
+| Multi-entry destructive actions | Menu, toast, CLI, shell, key binding: do they all confirm the same way before quit/replace/kill? | `faz-gui/src/frontend.rs`, `overlay/confirm.rs`, `overlay/confirm_close_pane.rs` |
 | macOS window geometry | Traffic lights vs tab bar, DPI scale, external display drag, sleep/wake, lock screen, fullscreen first frame | `window/src/os/macos/`, `faz-gui/src/termwindow/resize.rs`, titlebar paint |
 | Tab chrome | Overflow hit targets, rename modal selection, multi-pane title width, top vs bottom bar | `faz-gui/src/tabbar.rs`, `termwindow/tab_rename.rs` |
 | Selection / mouse state | Survives Ctrl+L, modal cancel, mouse-reporting panes, successful terminal input? | `faz-gui/src/termwindow/selection.rs`, mouseevent |

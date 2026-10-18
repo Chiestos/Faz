@@ -38,7 +38,6 @@ ALLOW_FILES=(
   'faz-cli/src/doctor\.rs'
   'faz-cli/src/init\.rs'
   'faz-cli/src/reset\.rs'
-  'faz-cli/src/update\.rs'
   'faz-cli/src/utils\.rs'
   'faz-cli/src/shell\.rs'
     'faz-cli/src/tui_splash\.rs'
@@ -46,7 +45,6 @@ ALLOW_FILES=(
   'faz-gui/src/cli_chat/'
   'faz-gui/src/startup_trace\.rs'
   'faz-gui/src/stats\.rs'
-  'faz-gui/src/update\.rs'
   'faz-gui/src/shapecache\.rs'
   'config/src/config\.rs'          # FAZ_STARTUP_TRACE env-gated trace
   'config/src/lua\.rs'             # FAZ_STARTUP_TRACE env-gated trace

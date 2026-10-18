@@ -26,7 +26,7 @@
 
 - Keep rendering decisions in rendering modules, not scattered across event code.
 - Keep initial window dimension math in `TermWindow::new_window()` consistent with `get_os_border()` behavior.
-- In-app update must confirm before replacing the running app. User-facing paths (menu Check for Updates, menu Restart to Update, toast click) go through `check_for_updates_from_menu()` / `confirm_and_apply_update()` in `src/frontend.rs`, not straight to `restart_to_update()`. Exploratory menu check opens a tab without `FAZ_UPDATE_AUTO_CONFIRM`; only the overlay-confirmed path may auto-confirm. CLI direct and brew paths confirm in `faz-cli/src/update.rs`. Guards: `frontend::tests::user_facing_update_events_route_through_confirm` and `update::imp::tests::brew_and_direct_paths_confirm_before_replace`.
+- There is no in-app update surface. The Help menu, the Check/Restart menu items, the background checker, `faz-gui/src/update.rs`, and the `faz update` subcommand were all removed; do not reintroduce them without an explicit product decision. The Homebrew cask is the update path.
 - Keep `FAZ_CONFIG_CHANGED` fast path in `emit_user_var_event()` before pane ownership checks.
 - Pass fullscreen state into `TabBarState::new()` and preserve fullscreen-specific title button spacing behavior.
 - Wrap macOS worker thread spawns in the existing autorelease-pool helper so shutdown does not reintroduce use-after-free crashes.
