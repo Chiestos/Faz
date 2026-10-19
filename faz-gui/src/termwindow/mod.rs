@@ -6348,6 +6348,14 @@ impl TermWindow {
         if pane.is_zmodem_exclusive() {
             // The local sz/rz owns the pty while a transfer runs; an injected
             // byte would tear a protocol frame. See `Pane::is_zmodem_exclusive`.
+            //
+            // Ctrl+C is the one exception: it is the user's way out of a
+            // transfer that would otherwise run to completion or stall for the
+            // length of the file. It is consumed here rather than forwarded,
+            // because a raw 0x03 in the payload stream would corrupt a frame.
+            if bytes.contains(&0x03) {
+                self.cancel_zmodem_transfer(pane.as_ref());
+            }
             log::debug!(
                 "zmodem: refusing {} injected byte(s) for pane {} during a transfer",
                 bytes.len(),
@@ -6379,6 +6387,17 @@ impl TermWindow {
         if pane.is_zmodem_exclusive() {
             // Kitty/win32 encoding writes straight to the pty, bypassing
             // `key_down`. Same guard, same reason.
+            //
+            // Ctrl+C aborts the transfer instead of being discarded: it is the
+            // documented way to stop one, and the input path is otherwise
+            // sealed for the duration. Only on key-down, so an autorepeat does
+            // not spam the cancel path.
+            if is_down
+                && modifiers.contains(Modifiers::CTRL)
+                && key == ::termwiz::input::KeyCode::Char('c')
+            {
+                self.cancel_zmodem_transfer(pane.as_ref());
+            }
             log::debug!(
                 "zmodem: refusing encoded key for pane {} during a transfer",
                 pane.pane_id()
@@ -6859,6 +6878,27 @@ impl TermWindow {
         // Clear the pending record too, otherwise the re-entry guard would
         // block every later transfer on this pane.
         window.notify(TermWindowNotif::ZmodemFinished(pane_id));
+    }
+
+    /// Abort a transfer that is already running.
+    ///
+    /// Reached from Ctrl+C, which is otherwise swallowed by the transfer's
+    /// input seal. Only the flag is set here: the transfer thread owns the CAN
+    /// burst so it travels the same path as the payload, and it also reaps the
+    /// local `sz`/`rz` child. `zmodem_finish` on the worker thread then clears
+    /// the diversion and returns the pane to normal parsing.
+    fn cancel_zmodem_transfer(&self, pane: &dyn Pane) {
+        let Some(state) = pane.zmodem_state() else {
+            return;
+        };
+        if !state.is_active() {
+            return;
+        }
+        log::info!(
+            "zmodem: Ctrl+C on pane {}; aborting the transfer",
+            pane.pane_id()
+        );
+        state.cancel();
     }
 
     /// Kick off the transfer on a worker thread once the user has chosen a
