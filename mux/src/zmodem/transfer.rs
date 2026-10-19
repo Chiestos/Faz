@@ -110,6 +110,27 @@ pub fn make_socketpair() -> io::Result<(OwnedFd, OwnedFd)> {
     Ok((a, b))
 }
 
+/// Create a one-way pipe.
+///
+/// Returns `(read_end, write_end)`.
+///
+/// ZMODEM needs the child's input and output kept apart. A socketpair is
+/// full-duplex, so both directions share one endpoint, and anything else that
+/// writes to that endpoint (the pane's parser, handing the peer's bytes to the
+/// child) becomes readable by whoever is relaying the child's output. That is
+/// not a race but a mix-up: the peer's own bytes get read back out and written
+/// toward the peer, and an aborted transfer ends with its progress lines being
+/// fed to the remote shell as commands.
+pub fn make_pipe() -> io::Result<(OwnedFd, OwnedFd)> {
+    let mut fds = [0 as libc::c_int; 2];
+    if unsafe { libc::pipe(fds.as_mut_ptr()) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let r = unsafe { OwnedFd::from_raw_fd(fds[0]) };
+    let w = unsafe { OwnedFd::from_raw_fd(fds[1]) };
+    Ok((r, w))
+}
+
 /// Widen a socketpair buffer so a slow reader does not stall the writer.
 ///
 /// Best-effort: the kernel caps the value at `net.local.stream.sendspace`, and
@@ -233,12 +254,18 @@ pub fn guard_transfer_tty(fd: RawFd, stop: Arc<AtomicBool>) -> Option<JoinHandle
         .ok()
 }
 
-/// Read and discard any pending bytes on `fd` without blocking.
+/// Read and discard from `fd` until it has stayed quiet for a full second.
 ///
-/// Used to purge leftover protocol bytes from the pty after a transfer so they
-/// do not leak to the terminal as garbage. Temporarily sets `O_NONBLOCK`,
-/// drains, then restores the flags.
-pub fn drain(fd: RawFd) {
+/// A cancelled peer keeps streaming for as long as its own socket buffers hold
+/// data — a large transfer does not stop on the first CAN byte. Everything that
+/// arrives after we resume normal parsing is fed to the VT parser, which
+/// answers the peer's device queries and writes those answers into the remote
+/// shell's input line.
+///
+/// One full second of silence is the contract: shorter windows let the tail
+/// through on a slow link, and this runs once, on a transfer the user already
+/// interrupted.
+pub fn drain_until_quiet(fd: RawFd) {
     use nix::fcntl::{fcntl, FcntlArg, OFlag};
 
     let Ok(old) = fcntl(fd, FcntlArg::F_GETFL) else {
@@ -249,25 +276,53 @@ pub fn drain(fd: RawFd) {
         return;
     }
 
-    let mut buf = [0u8; 4096];
-    // The remote's trailing bytes may still be in flight when draining starts,
-    // so retry a few times before giving up. This keeps stray protocol bytes
-    // from reaching the terminal without noticeably delaying resume.
-    let mut idle_rounds = 0;
-    while idle_rounds < 4 {
+    const QUIET: std::time::Duration = std::time::Duration::from_secs(1);
+    const SLICE: std::time::Duration = std::time::Duration::from_millis(10);
+
+    let mut buf = [0u8; 64 * 1024];
+    let mut total: u64 = 0;
+    let mut last_data = std::time::Instant::now();
+    loop {
         match unistd::read(fd, &mut buf) {
-            Ok(n) if n > 0 => idle_rounds = 0,
+            Ok(n) if n > 0 => {
+                total += n as u64;
+                last_data = std::time::Instant::now();
+            }
             Ok(_) => break,
             Err(nix::errno::Errno::EINTR) => continue,
             Err(nix::errno::Errno::EAGAIN) => {
-                idle_rounds += 1;
-                std::thread::sleep(std::time::Duration::from_millis(5));
+                if last_data.elapsed() >= QUIET {
+                    break;
+                }
+                std::thread::sleep(SLICE);
             }
             Err(_) => break,
         }
     }
 
+    // Restore the caller's flags; the parser thread owns this fd's mode.
     let _ = fcntl(fd, FcntlArg::F_SETFL(old));
+    log::info!("zmodem: drained {total} byte(s) waiting for the peer to go quiet on fd {fd}");
+}
+
+/// Throw away bytes already queued toward the peer on a pty.
+///
+/// `drain` only reads the peer-to-local direction. The local-to-peer direction
+/// has its own queue — the ssh client has not necessarily read what we wrote —
+/// and anything still sitting there is delivered after the cancel, straight
+/// into the remote shell's input line. `TCFLSH` with `TCOFLUSH` discards it.
+pub fn discard_pending_output(fd: RawFd) {
+    let rc = unsafe { libc::tcflush(fd, libc::TCOFLUSH) };
+    if rc == 0 {
+        log::info!("zmodem: discarded queued output toward the peer on fd {fd}");
+    } else {
+        // A pty with no output queue, or an fd that is not a terminal at all.
+        // Not worth failing the teardown over.
+        log::debug!(
+            "zmodem: could not flush output on fd {fd}: {}",
+            io::Error::last_os_error()
+        );
+    }
 }
 
 /// Which directions the relay copies.
@@ -292,9 +347,9 @@ pub enum RelayMode {
 /// EOF/error.
 pub struct Relay {
     handle: Option<JoinHandle<()>>,
-    /// A dup of the relay end, so the cancel path can inject CAN bytes toward
-    /// the remote through the same channel the child's data uses.
-    peer: OwnedFd,
+    /// The path to the peer. The cancel burst goes out here, not through the
+    /// child's channel: once the child is gone, its pipe leads nowhere.
+    pty_master_fd: RawFd,
     /// Bytes the child has written that the relay has accepted.
     ///
     /// Shared with the supervisor, which uses movement in either direction to
@@ -318,9 +373,6 @@ impl Relay {
         stop: Arc<AtomicBool>,
         mode: RelayMode,
     ) -> io::Result<Relay> {
-        // Dup so the caller (cancel path) can write CAN bytes without racing
-        // ownership with the thread.
-        let peer = relay_end.try_clone()?;
         let forwarded = Arc::new(AtomicU64::new(0));
         let counter = Arc::clone(&forwarded);
 
@@ -330,14 +382,18 @@ impl Relay {
 
         Ok(Relay {
             handle: Some(handle),
-            peer,
+            pty_master_fd,
             forwarded,
         })
     }
 
     /// Fd the cancel path writes CAN bytes to.
+    ///
+    /// This is the pty master, not the child's channel: the CAN burst has to
+    /// reach the peer, and the child's input pipe no longer carries outgoing
+    /// data once the child is gone.
     pub fn peer_fd(&self) -> RawFd {
-        self.peer.as_raw_fd()
+        self.pty_master_fd
     }
 
     /// Bytes the child has written that the relay has passed on.
@@ -631,10 +687,30 @@ fn relay_copy(from: RawFd, to: RawFd, buf: &mut [u8], stop: &AtomicBool) -> Copy
 
 /// The ZMODEM abort sequence: a run of CAN (`0x18`) bytes.
 ///
-/// lrzsz aborts on 5 consecutive CANs; send plenty to be sure. Written to the
-/// relay's peer fd, it travels to the pty master and on to the remote, the
-/// same path the child's data took.
-pub const CANCEL_SEQUENCE: [u8; 32] = [0x18u8; 32];
+/// lrzsz aborts on 5 consecutive CANs; send a couple more to be sure. Written
+/// to the relay's peer fd, it travels to the pty master and on to the remote,
+/// the same path the child's data took.
+///
+/// Kept short on purpose. Every byte of this burst that arrives **after** the
+/// remote `sz`/`rz` has already exited lands in the shell's input queue and is
+/// turned into a command line — 32 CANs became a wall of `Ctrl+X` prefixes that
+/// the shell tried to execute. Five is what the protocol needs.
+pub const CANCEL_SEQUENCE: [u8; 6] = [0x18u8; 6];
+
+/// Sent right after [`CANCEL_SEQUENCE`] to clear whatever survived it.
+///
+/// If the remote peer is still in `sz`/`rz` these are just more abort bytes. If
+/// it has already exited, the shell's line editor sees the CAN run as a
+/// half-typed word and this erases it, so the user gets a clean prompt instead
+/// of a screenful of garbage being executed.
+pub const CANCEL_LINE_CLEAR: [u8; 1] = [0x15]; // Ctrl+U
+
+/// The full abort burst written toward the peer.
+pub fn cancel_burst() -> Vec<u8> {
+    let mut burst = CANCEL_SEQUENCE.to_vec();
+    burst.extend_from_slice(&CANCEL_LINE_CLEAR);
+    burst
+}
 
 #[cfg(test)]
 mod tests {
