@@ -390,24 +390,25 @@ impl Transfer {
             Err(e) => return Outcome::SpawnFailed(e),
         };
 
-        // The transfer owns the pty for its whole duration. zssh gets this by
-        // allocating its own pty; Faz is layered on a live pane, so the pane's
-        // roundtrip thread has to stand down first — see
-        // `ZmodemState::set_relay_owns_pty`. With two readers the bytes
-        // interleave and a frame arrives split across both, and a fragment is
-        // useless to a protocol that needs whole frames.
-        if let Some(state) = self.state.as_ref() {
-            state.set_relay_owns_pty(true);
-        }
+        // The pane's parser keeps reading the pty for the whole transfer and
+        // hands the peer's bytes to the child through the sink; the relay only
+        // carries the child's replies back out. Keeping the two directions on
+        // separate threads is what keeps a slow peer from deadlocking the
+        // transfer: with a single bidirectional relay, a peer that stops
+        // reading fills the socketpair, the relay parks in `poll(POLLOUT)`, and
+        // while it parks it never reads the child's ZACK/ZRPOS — the child
+        // waits for an answer that is sitting unread, and the transfer stalls
+        // at whatever percentage the buffer filled up at.
+        //
+        // Do not claim the read gate here. Claiming it would park the parser,
+        // and with `RelayMode::ChildToPty` nobody would be reading the pty at
+        // all.
 
-        // Bidirectional, like zssh: the relay now carries both directions, so
-        // the peer's replies travel the same path as the child's data and the
-        // child's pacing follows the link's.
         let relay = match Relay::start_with_mode(
             relay_end,
             self.pty_master_fd,
             self.stop.clone(),
-            crate::zmodem::transfer::RelayMode::Bidirectional,
+            crate::zmodem::transfer::RelayMode::ChildToPty,
         ) {
             Ok(r) => r,
             Err(e) => return Outcome::SpawnFailed(e),
@@ -529,24 +530,26 @@ impl Transfer {
         }
         self.cancel_fd = None;
 
-        // Tell the peer to stop if this ended any way other than cleanly.
+        // Tell the peer to stop if this ended any way other than cleanly —
+        // including a user-requested cancel. The child is gone either way, so
+        // nothing else will send an abort; the remote `rz`/`sz` would sit
+        // waiting until its own timeout, which is what leaves a pane that looks
+        // hung and a remote process that outlives the transfer.
         //
-        // The child is gone, so nothing else will send an abort; the remote
-        // `rz`/`sz` would sit waiting until its own timeout, which is what
-        // leaves a pane that looks hung. `cancel_fd` cannot be used for this:
-        // it is the socketpair end the child read from, so bytes written there
-        // went to the now-dead child rather than to the peer. Write to the pty
-        // directly, which is the path every byte the child sent took.
-        if !outcome.succeeded() && !self.is_cancelled() {
+        // `cancel_fd` cannot be used for this: it is the socketpair end the
+        // child read from, so bytes written there went to the now-dead child
+        // rather than to the peer. Write to the pty directly, which is the path
+        // every byte the child sent took.
+        if !outcome.succeeded() {
             match crate::zmodem::transfer::write_all(self.pty_master_fd, &CANCEL_SEQUENCE) {
-                Ok(_) => log::info!("zmodem: sent abort burst to the peer after a failed transfer"),
+                Ok(_) => log::info!("zmodem: sent abort burst to the peer after {:?}", outcome),
                 Err(err) => log::warn!("zmodem: could not abort the peer: {err:#}"),
             }
         }
 
-        // Give the pty's read side back before anything else runs: the pane's
-        // roundtrip thread resumes parsing, and any bytes the relay did not
-        // consume belong to the shell.
+        // Releases the read gate defensively. The relay no longer claims it —
+        // the parser keeps reading the pty throughout — but an earlier phase
+        // or a future caller may have, and release is idempotent.
         if let Some(state) = self.state.as_ref() {
             state.set_relay_owns_pty(false);
         }
@@ -650,10 +653,11 @@ impl Drop for Transfer {
         if self.child.is_none() {
             self.restore();
         }
-        // Every exit path releases the read side, including the early returns
-        // that skip the tail of `run`. Leaving this set would park the pane's
-        // roundtrip thread forever and freeze the terminal long after the
-        // transfer is over.
+        // Every exit path releases the read gate, including the early returns
+        // that skip the tail of `run`. The relay no longer claims it, so this
+        // is a defensive no-op in the normal flow; it still matters for any
+        // path that did claim it, which would otherwise park the pane's
+        // roundtrip thread forever.
         if let Some(state) = self.state.as_ref() {
             state.set_relay_owns_pty(false);
         }
@@ -738,6 +742,7 @@ pub fn lrzsz_available() -> (bool, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nix::unistd;
     use std::os::fd::OwnedFd;
 
     /// A socketpair stands in for the pty master, so tests need no real pty.
@@ -883,6 +888,47 @@ mod tests {
         assert!(!transfer.is_cancelled());
         transfer.cancel();
         assert!(transfer.is_cancelled());
+    }
+
+    /// A cancelled transfer must still tell the remote to stop.
+    ///
+    /// Regression guard: the abort burst used to be skipped whenever the
+    /// transfer was cancelled, on the theory that the peer had already been
+    /// told. It had not — the kill happens locally — so the remote `sz`/`rz`
+    /// kept waiting until its own timeout.
+    #[test]
+    fn cancel_sends_the_can_burst_to_the_peer() {
+        let (pty_master, remote) = fake_pty();
+        let mut transfer = Transfer::start(
+            Direction::Download,
+            pty_master.as_raw_fd(),
+            LocalCommand::new("cat"),
+        )
+        .on_progress(|_: &[u8]| {});
+        transfer.cancel();
+        let outcome = transfer.run();
+        assert!(matches!(outcome, Outcome::Cancelled), "got {outcome:?}");
+
+        // The CAN burst travels the pty toward the peer. Read it back.
+        let mut buf = [0u8; 128];
+        let mut got = Vec::new();
+        loop {
+            match unistd::read(remote.as_raw_fd(), &mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    got.extend_from_slice(&buf[..n]);
+                    if got.len() >= CANCEL_SEQUENCE.len() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        assert!(
+            got.windows(CANCEL_SEQUENCE.len())
+                .any(|w| w == CANCEL_SEQUENCE),
+            "peer never saw the abort burst; got {got:02x?}"
+        );
     }
 
     #[test]

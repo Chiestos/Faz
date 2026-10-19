@@ -398,7 +398,18 @@ fn relay_loop(
     while !stop.load(Ordering::SeqCst) {
         // Wait for writability too when there is queued output, otherwise a
         // backed-up pty costs a full timeout before the next attempt.
-        let pty_events = if pending.is_empty() {
+        // In `ChildToPty` mode the parser owns the pty's read side, so this
+        // thread must not watch it for readability: a readable pty nobody here
+        // drains makes `poll` return immediately on every pass and spins the
+        // loop at full CPU. Only writability matters, and only while output is
+        // queued.
+        let pty_events = if mode == RelayMode::ChildToPty {
+            if pending.is_empty() {
+                PollFlags::empty()
+            } else {
+                PollFlags::POLLOUT
+            }
+        } else if pending.is_empty() {
             PollFlags::POLLIN
         } else {
             PollFlags::POLLIN | PollFlags::POLLOUT
