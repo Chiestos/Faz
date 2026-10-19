@@ -106,20 +106,16 @@ fn call_format_tab_titles_batch_with_lua(
     let lua_config = luahelper::to_lua(lua, (**config).clone())?;
 
     let mut results = Vec::with_capacity(n);
+    let user_owns_titles = has_format_tab_title_callback(lua)?;
     for tab in tab_info {
         // SSH tabs normally skip Lua so the built-in `glyph host` title wins.
         // But when the user's config registers a `format-tab-title` handler,
         // that handler is the user's deliberate styling choice (e.g. a custom
         // fortress prefix) and must be consulted first; falling back to the
         // default title here would silently discard it.
-        if let Some(pane) = &tab.active_pane {
-            if tab.tab_title.is_empty()
-                && ssh_destination_for_pane(pane).is_some()
-                && !has_format_tab_title_callback(lua)?
-            {
-                results.push(None);
-                continue;
-            }
+        if is_builtin_ssh_title(tab, user_owns_titles) {
+            results.push(None);
+            continue;
         }
 
         let result = config::lua::emit_sync_callback(
@@ -328,15 +324,15 @@ fn compute_tab_title_from_precomputed(
     tab: &TabInformation,
     config: &ConfigHandle,
     precomputed: Option<TitleText>,
+    user_owns_titles: bool,
 ) -> TitleText {
     // Only synthesize the built-in `glyph host` title when the user's config
     // did not produce one. A user `format-tab-title` handler owns the title.
-    if precomputed.is_none() {
+    let builtin_ssh = is_builtin_ssh_title(tab, user_owns_titles);
+    if precomputed.is_none() && builtin_ssh {
         if let Some(pane) = &tab.active_pane {
-            if tab.tab_title.is_empty() {
-                if let Some(ssh_host) = ssh_destination_for_pane(pane) {
-                    return build_default_title(tab, config, &ssh_title(&ssh_host), false, true);
-                }
+            if let Some(ssh_host) = ssh_destination_for_pane(pane) {
+                return build_default_title(tab, config, &ssh_title(&ssh_host), false, true);
             }
         }
     }
@@ -354,7 +350,9 @@ fn compute_tab_title_from_precomputed(
                     pane_context_title(pane, config.tab_title_show_foreground_process)
                 {
                     context_title
-                } else if let Some(ssh_host) = ssh_destination_for_pane(pane) {
+                } else if let Some(ssh_host) =
+                    ssh_destination_for_pane(pane).filter(|_| builtin_ssh)
+                {
                     ssh_title(&ssh_host)
                 } else {
                     pane.title.clone()
@@ -479,6 +477,21 @@ const SSH_TITLE_GLYPH: char = '\u{f08c0}';
 
 fn ssh_title(host: &str) -> String {
     format!("{} {}", SSH_TITLE_GLYPH, host)
+}
+
+/// Should this tab render the built-in `glyph host` SSH title?
+///
+/// The built-in title is a fallback, not an override: when the user's config
+/// registers a `format-tab-title` handler, that handler owns the title for
+/// every tab, SSH ones included. Keeping this decision in one function stops
+/// the batch, hover, and precomputed paths from drifting apart.
+fn is_builtin_ssh_title(tab: &TabInformation, callback_present: bool) -> bool {
+    if callback_present || !tab.tab_title.is_empty() {
+        return false;
+    }
+    tab.active_pane
+        .as_ref()
+        .is_some_and(|pane| ssh_destination_for_pane(pane).is_some())
 }
 
 /// Detect the SSH destination for a pane, used to show the remote host in tab titles.
@@ -1079,8 +1092,13 @@ impl TabBarState {
                 .get(tab_idx)
                 .and_then(|t| t.clone());
 
-            let mut tab_title =
-                compute_tab_title_from_precomputed(&tab_info[tab_idx], config, precomputed.clone());
+            let user_owns_titles = precomputed_titles.callback_present;
+            let mut tab_title = compute_tab_title_from_precomputed(
+                &tab_info[tab_idx],
+                config,
+                precomputed.clone(),
+                user_owns_titles,
+            );
             let mut cell_attrs = if active {
                 &active_cell_attrs
             } else {
@@ -1106,18 +1124,10 @@ impl TabBarState {
             let hover = is_tab_hover(mouse_x, x, width);
             if hover {
                 // The normal callback may return nil to opt into the default
-                // title while still customizing the hover state.
-                // SSH tabs skip Lua entirely: compute_tab_title_from_precomputed
-                // returns the SSH default title regardless of hover_precomputed.
-                let is_ssh_tab = tab_info[tab_idx]
-                    .active_pane
-                    .as_ref()
-                    .map(|p| {
-                        tab_info[tab_idx].tab_title.is_empty()
-                            && ssh_destination_for_pane(p).is_some()
-                    })
-                    .unwrap_or(false);
-                let hover_precomputed = if precomputed_titles.callback_present && !is_ssh_tab {
+                // title while still customizing the hover state. A user
+                // handler owns the title even for SSH tabs, so the hover path
+                // must consult it for the same panes the batch path does.
+                let hover_precomputed = if user_owns_titles {
                     call_format_tab_title_hover(
                         &tab_info[tab_idx],
                         tab_info,
@@ -1132,6 +1142,7 @@ impl TabBarState {
                     &tab_info[tab_idx],
                     config,
                     hover_precomputed,
+                    user_owns_titles,
                 );
                 cell_attrs = if active {
                     &active_cell_attrs
@@ -1810,6 +1821,52 @@ mod test {
             .as_ref()
             .expect("user callback must win over the SSH fallback");
         assert_eq!(plain_text(title), "user-title");
+        Ok(())
+    }
+
+    /// The hover path must agree with the batch path about who owns the title.
+    ///
+    /// Regression guard: the hover code carried its own copy of the "SSH tabs
+    /// skip Lua" test, so a tab could show the user's title normally and the
+    /// built-in glyph on hover.
+    #[test]
+    fn ssh_tab_hover_also_consults_user_callback() -> anyhow::Result<()> {
+        let lua = mlua::Lua::new();
+        let callback = lua.create_function(
+            |lua,
+             (_tab, _tabs, _panes, _config, hover, _max_width): (
+                mlua::Value,
+                mlua::Value,
+                mlua::Value,
+                mlua::Value,
+                bool,
+                usize,
+            )| {
+                let text = if hover { "hover-title" } else { "user-title" };
+                Ok(mlua::Value::String(lua.create_string(text)?))
+            },
+        )?;
+        config::lua::register_event(&lua, ("format-tab-title".to_string(), callback))?;
+
+        let config = ConfigHandle::default_config();
+        let mut tab = make_tab(0, 0, true, "");
+        let mut pane = make_pane(0, "host");
+        pane.user_vars.insert(
+            "WEZTERM_PROG".to_string(),
+            "ssh mnet.inwesure.com".to_string(),
+        );
+        tab.active_pane = Some(pane);
+
+        let title = call_format_tab_title_hover_with_lua(
+            &lua,
+            &tab,
+            std::slice::from_ref(&tab),
+            &[],
+            &config,
+            32,
+        )?
+        .expect("hover must reach the user callback on an SSH tab");
+        assert_eq!(plain_text(&title), "hover-title");
         Ok(())
     }
 }
