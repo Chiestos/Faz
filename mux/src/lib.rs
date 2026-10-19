@@ -439,6 +439,22 @@ fn strip_zmodem_residue(bytes: &[u8]) -> Vec<u8> {
             i += 1;
             continue;
         }
+        // A binary frame header is `*` ZDLE <type>. The payload is not framed
+        // here, so only the 3-byte header can be recognised; that is enough to
+        // stop `*`, ZDLE and the type byte from rendering as glyphs, which is
+        // what a peer that missed the cancel keeps spraying.
+        if bytes[i] == b'*'
+            && bytes.get(i + 1) == Some(&crate::zmodem::detect::ZDLE)
+            && bytes.get(i + 2).is_some_and(|b| {
+                matches!(
+                    b,
+                    b'A' | b'C' | b'D' | b'E' | b'F' | b'G' | b'H' | b'I' | b'J' | b'K'
+                )
+            })
+        {
+            i += 3;
+            continue;
+        }
         out.push(bytes[i]);
         i += 1;
     }
@@ -629,12 +645,26 @@ fn parse_buffered_data(
                             }
                         }
                         Err(err) => {
-                            log::warn!("zmodem: diverting pane {pane_id} bytes failed: {err:#}");
-                            // Drop the transfer; the pane returns to normal
-                            // parsing so the user is not left with a frozen
-                            // terminal.
-                            if let Some(pane) = pane.upgrade() {
-                                pane.zmodem_finish();
+                            // The local child is gone (it was killed, or it
+                            // exited), but the peer may still be streaming:
+                            // `sz` writes its whole window before it notices
+                            // anything. Handing the channel back to the normal
+                            // parser at this point renders those payload bytes
+                            // as terminal output, which is exactly the wall of
+                            // garbage that followed an aborted download.
+                            //
+                            // Keep diverting and dropping instead. The transfer
+                            // thread owns the ending: it reaps the child, sends
+                            // the CAN burst, and calls `zmodem_finish` once the
+                            // relay has stopped. The sink is uninstalled there,
+                            // so this loop cannot outlive the session.
+                            if err.kind() != std::io::ErrorKind::BrokenPipe {
+                                log::warn!(
+                                    "zmodem: diverting pane {pane_id} bytes failed: {err:#}"
+                                );
+                                if let Some(pane) = pane.upgrade() {
+                                    pane.zmodem_finish();
+                                }
                             }
                         }
                     }
@@ -2317,6 +2347,25 @@ mod tests {
     fn residue_leaves_ordinary_output_untouched() {
         let chunk = b"plain text, no protocol here\r\n";
         assert_eq!(strip_zmodem_residue(chunk), chunk);
+    }
+
+    #[test]
+    fn residue_strips_binary_frame_headers() {
+        // An aborted download leaves the peer still streaming ZBIN frames
+        // (`*` ZDLE <type>). Only the 3-byte header is recognisable without
+        // framing the payload, but leaving it in is what put a stray `*` and a
+        // ZDLE glyph on screen after every cancelled transfer.
+        assert!(strip_zmodem_residue(b"*\x18C\x04\x00\x00").starts_with(b"\x04"));
+        assert_eq!(strip_zmodem_residue(b"*\x18C"), b"");
+        assert_eq!(strip_zmodem_residue(b"*\x18G"), b"");
+        // Shell output sharing the chunk still survives.
+        let mut chunk = b"root@host:~# ".to_vec();
+        chunk.extend_from_slice(b"*\x18C\x04\x00\x00");
+        chunk.extend_from_slice(b"ls\r\n");
+        assert_eq!(
+            strip_zmodem_residue(&chunk),
+            b"root@host:~# \x04\x00\x00ls\r\n"
+        );
     }
 
     #[test]
