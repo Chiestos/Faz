@@ -1409,6 +1409,41 @@ if [[ \${precmd_functions[(Ie)_faz_reset_mouse_tracking]} -eq 0 ]]; then
     precmd_functions+=(_faz_reset_mouse_tracking)
 fi
 
+# Publish the command line to the terminal as WEZTERM_PROG, the user var that
+# format-tab-title handlers read. The bash integration has always done this;
+# zsh never did, so every Lua handler keyed on the running command (custom SSH
+# titles, wrapper names like "npm run dev") silently saw an empty value and
+# fell through to its idle branch.
+#
+# The value is base64 so the OSC payload stays on one line and survives
+# non-UTF-8 bytes in the command. An empty string at the prompt is deliberate:
+# it tells the handler that nothing is running.
+_faz_set_user_var() {
+    [[ "\${TERM_PROGRAM:-}" == "Faz" || ( -n "\${TMUX:-}" && -n "\${FAZ_SESSION:-}" ) ]] || return 0
+    command -v base64 >/dev/null 2>&1 || return 0
+    local encoded
+    encoded="$(printf '%s' "\$2" | base64 | tr -d '\\n')" || return 0
+    if [[ -z "\${TMUX:-}" ]]; then
+        printf '\033]1337;SetUserVar=%s=%s\007' "\$1" "\$encoded"
+    else
+        printf '\033Ptmux;\033\033]1337;SetUserVar=%s=%s\007\033\\' "\$1" "\$encoded"
+    fi
+}
+
+_faz_publish_prog() {
+    _faz_set_user_var WEZTERM_PROG "\$1"
+}
+
+if [[ \${preexec_functions[(Ie)_faz_publish_prog]} -eq 0 ]]; then
+    preexec_functions+=(_faz_publish_prog)
+fi
+# Clear it at each prompt: preexec does not run for builtins that fail to
+# expand, and it never runs for a command typed at a secondary prompt.
+if [[ \${precmd_functions[(Ie)_faz_clear_prog]} -eq 0 ]]; then
+    _faz_clear_prog() { _faz_set_user_var WEZTERM_PROG '' }
+    precmd_functions+=(_faz_clear_prog)
+fi
+
 
 # Auto-set TERM to xterm-256color for SSH connections when running under faz,
 # since remote hosts typically lack the faz terminfo entry.
