@@ -107,9 +107,16 @@ fn call_format_tab_titles_batch_with_lua(
 
     let mut results = Vec::with_capacity(n);
     for tab in tab_info {
-        // SSH tabs skip Lua; caller will use build_default_title fallback.
+        // SSH tabs normally skip Lua so the built-in `glyph host` title wins.
+        // But when the user's config registers a `format-tab-title` handler,
+        // that handler is the user's deliberate styling choice (e.g. a custom
+        // fortress prefix) and must be consulted first; falling back to the
+        // default title here would silently discard it.
         if let Some(pane) = &tab.active_pane {
-            if tab.tab_title.is_empty() && ssh_destination_for_pane(pane).is_some() {
+            if tab.tab_title.is_empty()
+                && ssh_destination_for_pane(pane).is_some()
+                && !has_format_tab_title_callback(lua)?
+            {
                 results.push(None);
                 continue;
             }
@@ -322,10 +329,14 @@ fn compute_tab_title_from_precomputed(
     config: &ConfigHandle,
     precomputed: Option<TitleText>,
 ) -> TitleText {
-    if let Some(pane) = &tab.active_pane {
-        if tab.tab_title.is_empty() {
-            if let Some(ssh_host) = ssh_destination_for_pane(pane) {
-                return build_default_title(tab, config, &ssh_title(&ssh_host), false, true);
+    // Only synthesize the built-in `glyph host` title when the user's config
+    // did not produce one. A user `format-tab-title` handler owns the title.
+    if precomputed.is_none() {
+        if let Some(pane) = &tab.active_pane {
+            if tab.tab_title.is_empty() {
+                if let Some(ssh_host) = ssh_destination_for_pane(pane) {
+                    return build_default_title(tab, config, &ssh_title(&ssh_host), false, true);
+                }
             }
         }
     }
@@ -1395,6 +1406,25 @@ mod test {
             .collect()
     }
 
+    fn make_pane(pane_id: usize, title: &str) -> PaneInformation {
+        PaneInformation {
+            pane_id: pane_id.into(),
+            pane_index: 0,
+            is_active: true,
+            is_zoomed: false,
+            has_unseen_output: false,
+            left: 0,
+            top: 0,
+            width: 80,
+            height: 24,
+            pixel_width: 800,
+            pixel_height: 480,
+            title: title.to_string(),
+            user_vars: std::collections::HashMap::new(),
+            progress: Progress::None,
+        }
+    }
+
     fn make_tab(tab_id: usize, tab_index: usize, is_active: bool, title: &str) -> TabInformation {
         TabInformation {
             tab_id: tab_id.into(),
@@ -1735,6 +1765,51 @@ mod test {
         .expect("hover callback should produce a title");
 
         assert_eq!(plain_text(&hover), "HOVER");
+        Ok(())
+    }
+
+    /// An SSH tab must not bypass a user `format-tab-title` handler.
+    ///
+    /// Regression guard: skipping Lua whenever the pane looked like an SSH
+    /// session silently replaced the user's deliberate title (e.g. a custom
+    /// fortress prefix) with the built-in `glyph host` fallback.
+    #[test]
+    fn ssh_tab_still_consults_user_callback() -> anyhow::Result<()> {
+        let lua = mlua::Lua::new();
+        let callback = lua.create_function(
+            |lua,
+             (_tab, _tabs, _panes, _config, _hover, _max_width): (
+                mlua::Value,
+                mlua::Value,
+                mlua::Value,
+                mlua::Value,
+                bool,
+                usize,
+            )| Ok(mlua::Value::String(lua.create_string("user-title")?)),
+        )?;
+        config::lua::register_event(&lua, ("format-tab-title".to_string(), callback))?;
+
+        let config = ConfigHandle::default_config();
+        let mut tab = make_tab(0, 0, true, "");
+        let mut pane = make_pane(0, "host");
+        pane.user_vars.insert(
+            "WEZTERM_PROG".to_string(),
+            "ssh mnet.inwesure.com".to_string(),
+        );
+        tab.active_pane = Some(pane);
+
+        let tab_info = vec![tab];
+        assert!(
+            ssh_destination_for_pane(tab_info[0].active_pane.as_ref().unwrap()).is_some(),
+            "fixture must look like an SSH pane"
+        );
+
+        let batch = call_format_tab_titles_batch_with_lua(&lua, &tab_info, &[], &config, 32)?;
+        assert!(batch.callback_present);
+        let title = batch.titles[0]
+            .as_ref()
+            .expect("user callback must win over the SSH fallback");
+        assert_eq!(plain_text(title), "user-title");
         Ok(())
     }
 }
