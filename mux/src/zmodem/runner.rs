@@ -154,11 +154,10 @@ pub fn run_transfer(
                 Ok(owned) => owned,
                 Err(err) => {
                     log::error!("zmodem: could not install transfer sink: {err}");
-                    return;
+                    return None;
                 }
             };
             let cancel = state.begin(owned, direction);
-            let _ = cancel;
 
             // Report what the parser diverted once the transfer is over. The
             // relay cannot answer this: with the parser owning the pty's read
@@ -196,6 +195,9 @@ pub fn run_transfer(
                     buffered.len()
                 );
             }
+            // Hand back the same flag `ZmodemState::cancel` writes, so a
+            // Ctrl+C from the UI reaches this transfer.
+            Some(cancel)
         }
     });
 

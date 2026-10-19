@@ -16,8 +16,6 @@ use std::os::fd::{OwnedFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-use super::transfer::CANCEL_SEQUENCE;
-
 /// How much of a detected session to hold while the user picks a destination.
 ///
 /// The remote's first frames arrive before `rz` can be attached — `rz` needs
@@ -449,7 +447,7 @@ impl ZmodemState {
         // a Pending with no session behind it.
         *self.mode.lock().unwrap() = ZmodemMode::Idle;
         self.read_gate.release();
-        let bytes = CANCEL_SEQUENCE;
+        let bytes = crate::zmodem::transfer::cancel_burst();
         match crate::zmodem::transfer::write_all(pty_master_fd, &bytes) {
             Ok(n) => {
                 *self.last_finished.lock().unwrap() = Some(std::time::Instant::now());
@@ -620,7 +618,10 @@ mod tests {
         let mut buf = [0u8; 64];
         let n = nix::unistd::read(remote_side.as_raw_fd(), &mut buf).expect("read");
         assert!(n >= 5, "lrzsz aborts after 5 CANs, got {n}");
-        assert!(buf[..n].iter().all(|b| *b == 0x18));
+        // A run of CANs, then a line clear so a shell that already owns the
+        // terminal does not execute them as a command.
+        assert!(buf[..n - 1].iter().all(|b| *b == 0x18));
+        assert_eq!(buf[n - 1], 0x15, "burst must end with Ctrl+U");
 
         assert!(!state.is_buffering(), "session is over");
         assert!(state.buffered().is_empty(), "nothing replays later");
@@ -639,7 +640,10 @@ mod tests {
         let mut buf = [0u8; 64];
         let n = nix::unistd::read(remote_side.as_raw_fd(), &mut buf).expect("read");
         assert!(n >= 5, "lrzsz aborts after 5 CANs, got {n}");
-        assert!(buf[..n].iter().all(|b| *b == 0x18));
+        // A run of CANs, then a line clear so a shell that already owns the
+        // terminal does not execute them as a command.
+        assert!(buf[..n - 1].iter().all(|b| *b == 0x18));
+        assert_eq!(buf[n - 1], 0x15, "burst must end with Ctrl+U");
         assert!(state.in_cooldown(), "the peer's replies are ignored");
     }
 
