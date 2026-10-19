@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::transfer::{make_socketpair, prepare_transfer_tty, write_all, Relay, CANCEL_SEQUENCE};
+use super::transfer::{make_pipe, prepare_transfer_tty, write_all, Relay};
 
 /// Which direction a transfer runs in, which decides the local child.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,7 +195,11 @@ pub struct Transfer {
     /// In Faz this installs the fd into the pane's [`ZmodemState`], which is
     /// what makes the parser divert output here instead of feeding it to the
     /// VT parser.
-    on_sink_ready: Option<Box<dyn FnOnce(RawFd) + Send>>,
+    ///
+    /// Returns the flag [`ZmodemState::cancel`] sets, so the transfer polls the
+    /// same object the UI writes. Returning `None` keeps the private flag, for
+    /// callers with no external canceller.
+    on_sink_ready: Option<Box<dyn FnOnce(RawFd) -> Option<Arc<AtomicBool>> + Send>>,
     /// Receives the child's progress text, already stripped of lrzsz's banner.
     /// The caller decides where it appears; a no-op means "do not show it".
     progress_sink: Box<dyn FnMut(&[u8]) + Send>,
@@ -210,6 +214,13 @@ pub struct Transfer {
     /// stays under our control. Dropping it would let the shell's settings
     /// come back mid-session.
     slave_keepalive: Option<std::os::fd::OwnedFd>,
+    /// Write end of the child's input pipe.
+    ///
+    /// Held here so it is closed with the transfer rather than when `run`
+    /// returns to its caller: the pane's parser holds the same fd through the
+    /// sink, and closing our copy is what lets a half-open sink fail cleanly
+    /// instead of accepting writes nobody will read.
+    child_stdin: Option<std::os::fd::OwnedFd>,
 }
 
 /// How to launch the local child. Production uses [`Spawner::Real`]; tests
@@ -225,12 +236,13 @@ impl Spawner {
     fn spawn(
         &self,
         command: &LocalCommand,
-        child_end_fd: RawFd,
+        stdin_fd: RawFd,
+        stdout_fd: RawFd,
         stderr_fd: Option<RawFd>,
     ) -> io::Result<Child> {
         match self {
-            Spawner::Real => spawn_command(command, child_end_fd, stderr_fd),
-            Spawner::Substitute(sub) => spawn_command(sub, child_end_fd, stderr_fd),
+            Spawner::Real => spawn_command(command, stdin_fd, stdout_fd, stderr_fd),
+            Spawner::Substitute(sub) => spawn_command(sub, stdin_fd, stdout_fd, stderr_fd),
         }
     }
 }
@@ -309,6 +321,7 @@ impl Transfer {
             state: None,
             forwarded: None,
             slave_keepalive: None,
+            child_stdin: None,
         }
     }
 
@@ -342,7 +355,10 @@ impl Transfer {
     ///
     /// The fd is the socketpair end the pane's parser must write to. It is
     /// only valid for the duration of the transfer.
-    pub fn on_sink_ready(mut self, cb: impl FnOnce(RawFd) + Send + 'static) -> Self {
+    pub fn on_sink_ready(
+        mut self,
+        cb: impl FnOnce(RawFd) -> Option<Arc<AtomicBool>> + Send + 'static,
+    ) -> Self {
         self.on_sink_ready = Some(Box::new(cb));
         self
     }
@@ -370,7 +386,7 @@ impl Transfer {
     pub fn cancel(&self) {
         self.cancel_requested.store(true, Ordering::SeqCst);
         if let Some(fd) = self.cancel_fd {
-            let _ = write_all(fd, &CANCEL_SEQUENCE);
+            let _ = write_all(fd, &super::transfer::cancel_burst());
         }
         self.stop.store(true, Ordering::SeqCst);
     }
@@ -385,7 +401,20 @@ impl Transfer {
 
     /// Spawn the child, run the relay until it finishes, then restore the tty.
     pub fn run(mut self) -> Outcome {
-        let (relay_end, child_end) = match make_socketpair() {
+        // Two one-way pipes, not one socketpair.
+        //
+        // The child's input and output must not share an endpoint. With a
+        // socketpair they do, and the pane's parser — which writes the peer's
+        // bytes to the child's stdin — becomes a second writer on the endpoint
+        // the relay reads the child's output from. The relay then reads the
+        // peer's own bytes back out and writes them toward the peer. After an
+        // aborted transfer that is a loop: the remote's progress lines come
+        // back to it on its input and the shell runs the numbers as commands.
+        let (to_child_read, to_child_write) = match make_pipe() {
+            Ok(pair) => pair,
+            Err(e) => return Outcome::SpawnFailed(e),
+        };
+        let (from_child_read, from_child_write) = match make_pipe() {
             Ok(pair) => pair,
             Err(e) => return Outcome::SpawnFailed(e),
         };
@@ -395,7 +424,7 @@ impl Transfer {
         // carries the child's replies back out. Keeping the two directions on
         // separate threads is what keeps a slow peer from deadlocking the
         // transfer: with a single bidirectional relay, a peer that stops
-        // reading fills the socketpair, the relay parks in `poll(POLLOUT)`, and
+        // reading fills the channel, the relay parks in `poll(POLLOUT)`, and
         // while it parks it never reads the child's ZACK/ZRPOS — the child
         // waits for an answer that is sitting unread, and the transfer stalls
         // at whatever percentage the buffer filled up at.
@@ -405,7 +434,7 @@ impl Transfer {
         // all.
 
         let relay = match Relay::start_with_mode(
-            relay_end,
+            from_child_read,
             self.pty_master_fd,
             self.stop.clone(),
             crate::zmodem::transfer::RelayMode::ChildToPty,
@@ -418,8 +447,12 @@ impl Transfer {
 
         // Hand the sink fd to the caller before the child starts, so the
         // pane's parser can begin diverting remote bytes here without a gap.
+        // This is the input pipe's write end: the parser supplies the child's
+        // stdin and nothing else.
         if let Some(cb) = self.on_sink_ready.take() {
-            cb(relay.peer_fd());
+            if let Some(cancel) = cb(to_child_write.as_raw_fd()) {
+                self.cancel_requested = cancel;
+            }
         }
 
         // Pick the command and the spawner together: a substitute runs its own
@@ -487,7 +520,12 @@ impl Transfer {
                 crate::zmodem::transfer::guard_transfer_tty(self.pty_master_fd, self.stop.clone())
             });
 
-        let child = match spawner.spawn(&program, child_end.as_raw_fd(), stderr_fd) {
+        let child = match spawner.spawn(
+            &program,
+            to_child_read.as_raw_fd(),
+            from_child_write.as_raw_fd(),
+            stderr_fd,
+        ) {
             Ok(c) => c,
             Err(e) => {
                 self.stop.store(true, Ordering::SeqCst);
@@ -496,27 +534,62 @@ impl Transfer {
                 return Outcome::SpawnFailed(e);
             }
         };
-        // The child holds its own dup of child_end; drop ours so the socketpair
-        // reports EOF once the child exits.
-        drop(child_end);
+        // The child holds its own dups of both pipe ends; drop ours so the
+        // output pipe reports EOF once the child exits.
+        drop(to_child_read);
+        drop(from_child_write);
+        // The write end of the child's input must outlive the child being
+        // reaped: closing it early would deliver EOF to a child that is still
+        // starting up.
+        self.child_stdin = Some(to_child_write);
         self.child = Some(child);
 
         let outcome = self.supervise();
 
-        // Let the relay run a little longer after the child exits.
-        //
-        // `sz` writes its terminating ZFIN just before exiting, and the remote
-        // `rz` will not finish until it sees that frame. Stopping the relay the
-        // instant the child is reaped races that write: the frame can still be
-        // in the socketpair, or in the pty's buffer, or in flight to the peer.
-        // A short grace period lets the relay forward it and lets the pty flush.
-        //
-        // Not unbounded: a peer that never reads would otherwise hold the
-        // thread, and the pane with it.
-        if !self.is_cancelled() {
+        if self.is_cancelled() {
+            // Ordered teardown for a cancel. Each step exists because skipping
+            // it left bytes on some buffer that later reached the remote shell
+            // as input — the daisy-chain of device-attribute replies typed into
+            // the user's command line after every interrupted download.
+            //
+            // 1. Stop the child's output before anything else. The relay is
+            //    the only path from the child to the peer; halting it here
+            //    means no further child bytes can be forwarded.
+            self.stop.store(true, Ordering::SeqCst);
+
+            // 2. Tell the peer to stop. This goes out on the pty, the channel
+            //    the payload used, because the child's pipe leads nowhere now.
+            match crate::zmodem::transfer::write_all(
+                self.pty_master_fd,
+                &crate::zmodem::transfer::cancel_burst(),
+            ) {
+                Ok(_) => log::info!("zmodem: sent abort burst to the peer after {:?}", outcome),
+                Err(err) => log::warn!("zmodem: could not abort the peer: {err:#}"),
+            }
+
+            // 3. Keep consuming until the peer has actually gone quiet. A
+            //    cancelled sz keeps draining its socket buffers for as long as
+            //    the link lets it, and everything that arrives after we resume
+            //    normal parsing is rendered as terminal output.
+            crate::zmodem::transfer::drain_until_quiet(self.pty_master_fd);
+
+            // 4. Drop what is still queued toward the peer. The pty's output
+            //    buffer holds bytes the ssh client has not read yet; left in
+            //    place, the next thing the remote shell sees is that debris.
+            crate::zmodem::transfer::discard_pending_output(self.pty_master_fd);
+        } else {
+            // Let the relay run a little longer after a clean exit.
+            //
+            // `sz` writes its terminating ZFIN just before exiting, and the
+            // remote `rz` will not finish until it sees that frame. Stopping
+            // the relay the instant the child is reaped races that write: the
+            // frame can still be in the pipe, or in the pty's buffer, or in
+            // flight to the peer. A short grace period lets it through.
             std::thread::sleep(RELAY_GRACE);
+            self.stop.store(true, Ordering::SeqCst);
+            crate::zmodem::transfer::drain_until_quiet(self.pty_master_fd);
         }
-        self.stop.store(true, Ordering::SeqCst);
+
         relay.join();
         // The guard notices `stop` on its next tick and reports whether the
         // pty's settings drifted underneath us.
@@ -536,12 +609,15 @@ impl Transfer {
         // waiting until its own timeout, which is what leaves a pane that looks
         // hung and a remote process that outlives the transfer.
         //
-        // `cancel_fd` cannot be used for this: it is the socketpair end the
-        // child read from, so bytes written there went to the now-dead child
-        // rather than to the peer. Write to the pty directly, which is the path
-        // every byte the child sent took.
-        if !outcome.succeeded() {
-            match crate::zmodem::transfer::write_all(self.pty_master_fd, &CANCEL_SEQUENCE) {
+        // `cancel_fd` cannot be used for this: it is the pipe end the child
+        // read from, so bytes written there went to the now-dead child rather
+        // than to the peer. Write to the pty directly, which is the path every
+        // byte the child sent took.
+        if !outcome.succeeded() && !self.is_cancelled() {
+            match crate::zmodem::transfer::write_all(
+                self.pty_master_fd,
+                &crate::zmodem::transfer::cancel_burst(),
+            ) {
                 Ok(_) => log::info!("zmodem: sent abort burst to the peer after {:?}", outcome),
                 Err(err) => log::warn!("zmodem: could not abort the peer: {err:#}"),
             }
@@ -666,7 +742,8 @@ impl Drop for Transfer {
 
 fn spawn_command(
     command: &LocalCommand,
-    child_end_fd: RawFd,
+    stdin_fd: RawFd,
+    stdout_fd: RawFd,
     stderr_fd: Option<RawFd>,
 ) -> io::Result<Child> {
     use std::os::unix::process::CommandExt;
@@ -678,7 +755,10 @@ fn spawn_command(
     }
     unsafe {
         cmd.pre_exec(move || {
-            if libc::dup2(child_end_fd, 0) < 0 || libc::dup2(child_end_fd, 1) < 0 {
+            // stdin and stdout are different pipes on purpose: see the
+            // comment in `run`. Sharing one endpoint lets the pane's parser
+            // and the relay read each other's traffic.
+            if libc::dup2(stdin_fd, 0) < 0 || libc::dup2(stdout_fd, 1) < 0 {
                 return Err(io::Error::last_os_error());
             }
             // stderr carries lrzsz's progress display. A private pty keeps it
@@ -742,6 +822,7 @@ pub fn lrzsz_available() -> (bool, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::zmodem::transfer::{make_socketpair, CANCEL_SEQUENCE};
     use nix::unistd;
     use std::os::fd::OwnedFd;
 
@@ -844,6 +925,7 @@ mod tests {
             // Prove the fd is usable: write through it, then hand it to the
             // test thread to read the child's reply.
             tx.send(fd).expect("send fd");
+            None
         });
 
         let outcome = transfer.run();
@@ -899,7 +981,7 @@ mod tests {
     #[test]
     fn cancel_sends_the_can_burst_to_the_peer() {
         let (pty_master, remote) = fake_pty();
-        let mut transfer = Transfer::start(
+        let transfer = Transfer::start(
             Direction::Download,
             pty_master.as_raw_fd(),
             LocalCommand::new("cat"),
@@ -929,6 +1011,33 @@ mod tests {
                 .any(|w| w == CANCEL_SEQUENCE),
             "peer never saw the abort burst; got {got:02x?}"
         );
+        // The burst ends with a line-clear so a shell that has already taken
+        // the terminal back does not execute the CAN run as a command.
+        assert_eq!(got.last(), Some(&0x15), "burst must end with Ctrl+U");
+    }
+
+    /// A cancel flag owned by someone else must reach the transfer.
+    ///
+    /// Regression guard: `run_transfer` used to discard the `Arc` that
+    /// `ZmodemState::begin` returned, so `ZmodemState::cancel` set a flag no
+    /// one was polling and Ctrl+C during a transfer did nothing.
+    #[test]
+    fn an_external_cancel_flag_stops_the_transfer() {
+        let (pty_master, _remote) = fake_pty();
+        let external = Arc::new(AtomicBool::new(false));
+        let flag_for_callback = Arc::clone(&external);
+
+        let transfer = Transfer::start(
+            Direction::Download,
+            pty_master.as_raw_fd(),
+            LocalCommand::new("cat"),
+        )
+        .on_progress(|_: &[u8]| {})
+        .on_sink_ready(move |_fd| Some(flag_for_callback));
+
+        // What `ZmodemState::cancel` does from the UI thread.
+        external.store(true, Ordering::SeqCst);
+        assert!(matches!(transfer.run(), Outcome::Cancelled));
     }
 
     #[test]

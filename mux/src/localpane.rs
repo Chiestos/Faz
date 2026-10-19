@@ -443,7 +443,7 @@ impl Pane for LocalPane {
         // so `is_active` is false and the leftover would escape.
         if self.zmodem.mode() != crate::zmodem::state::ZmodemMode::Idle {
             if let Some(fd) = self.pty.lock().as_raw_fd() {
-                crate::zmodem::transfer::drain(fd);
+                crate::zmodem::transfer::drain_until_quiet(fd);
             }
         }
         self.zmodem.finish()
