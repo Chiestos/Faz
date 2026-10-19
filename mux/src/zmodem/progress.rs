@@ -15,7 +15,7 @@
 //!
 //! ## What the output looks like
 //!
-//! ```
+//! ```text
 //! Sending: report.pdf
 //! Bytes Sent:   1024/   5120   BPS:1234567   ETA 00:03
 //! ```
