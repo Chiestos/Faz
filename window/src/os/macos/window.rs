@@ -4760,11 +4760,7 @@ impl WindowView {
         }
     }
 
-    extern "C" fn faz_perform_key_assignment(
-        this: &mut Object,
-        _sel: Sel,
-        menu_item: *mut Object,
-    ) {
+    extern "C" fn faz_perform_key_assignment(this: &mut Object, _sel: Sel, menu_item: *mut Object) {
         let menu_item = MenuItem::with_menu_item(menu_item);
         // Safe because fazPerformKeyAssignment: is only used with RepresentedItem
         let action = menu_item.get_represented_item();

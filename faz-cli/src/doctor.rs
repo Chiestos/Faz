@@ -769,8 +769,7 @@ fn zsh_init_has_autosuggest_provider_marker(content: &str, provider: &str) -> bo
 }
 
 fn zsh_init_loads_bundled_autosuggestions(content: &str) -> bool {
-    content
-        .contains(r#"source "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh""#)
+    content.contains(r#"source "$FAZ_ZSH_DIR/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh""#)
 }
 
 fn zsh_init_defers_autosuggestions_to_provider(content: &str, provider: &str) -> bool {
@@ -936,9 +935,8 @@ impl ZshrcSourceCheck {
             details.push("zshrc does not exist yet".to_string());
         }
         if !self.has_active_lines() {
-            details.push(
-                "Expected an active line that sources ~/.config/faz/zsh/faz.zsh".to_string(),
-            );
+            details
+                .push("Expected an active line that sources ~/.config/faz/zsh/faz.zsh".to_string());
         } else {
             details.push(format!(
                 "Active source lines: {} total",

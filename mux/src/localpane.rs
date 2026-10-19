@@ -1198,18 +1198,13 @@ impl LocalPane {
         if text.is_empty() {
             return;
         }
-        let visible: String = text
-            .chars()
-            .filter(|c| !c.is_control())
-            .collect();
+        let visible: String = text.chars().filter(|c| !c.is_control()).collect();
         if visible.is_empty() {
             // A control key (Enter, Tab, Escape) has no printable form. Say so
             // rather than leaving the user wondering whether it registered.
             self.terminal
                 .lock()
-                .perform_actions(vec![termwiz::escape::Action::PrintString(
-                    "^G".to_string(),
-                )]);
+                .perform_actions(vec![termwiz::escape::Action::PrintString("^G".to_string())]);
             return;
         }
         self.terminal

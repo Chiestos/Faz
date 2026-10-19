@@ -14,8 +14,7 @@
 
 use std::os::fd::{OwnedFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Condvar;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use super::transfer::CANCEL_SEQUENCE;
 
@@ -261,7 +260,9 @@ impl ZmodemState {
     pub fn sink(&self) -> Option<RawFd> {
         use std::os::fd::AsRawFd;
         let guard = self.inner.lock().unwrap();
-        guard.as_ref().and_then(|t| t.sink.as_ref().map(|fd| fd.as_raw_fd()))
+        guard
+            .as_ref()
+            .and_then(|t| t.sink.as_ref().map(|fd| fd.as_raw_fd()))
     }
 
     /// Count bytes the parser diverted to the child.
@@ -313,7 +314,10 @@ impl ZmodemState {
     /// remote's opening frames are not lost while the destination is chosen.
     pub fn buffered(&self) -> Vec<u8> {
         let guard = self.inner.lock().unwrap();
-        guard.as_ref().map(|t| t.buffered.clone()).unwrap_or_default()
+        guard
+            .as_ref()
+            .map(|t| t.buffered.clone())
+            .unwrap_or_default()
     }
 
     /// Record bytes that arrived before a sink existed.

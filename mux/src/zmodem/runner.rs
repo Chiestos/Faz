@@ -256,11 +256,7 @@ mod tests {
 
     #[test]
     fn transfer_command_for_upload_targets_sz_with_the_paths() {
-        let cmd = transfer_command(
-            Direction::Upload,
-            &["/tmp/a.bin".to_string()],
-            None,
-        );
+        let cmd = transfer_command(Direction::Upload, &["/tmp/a.bin".to_string()], None);
         // Resolved to an absolute path: the app's PATH omits Homebrew, so a
         // bare name would fail to exec even after the availability check.
         assert!(
@@ -287,7 +283,8 @@ mod tests {
     #[test]
     fn start_errors_have_readable_messages() {
         assert!(StartError::NoPty.to_string().contains("no local terminal"));
-        assert!(StartError::AlreadyActive.to_string().contains("already running"));
+        assert!(StartError::AlreadyActive
+            .to_string()
+            .contains("already running"));
     }
-
 }

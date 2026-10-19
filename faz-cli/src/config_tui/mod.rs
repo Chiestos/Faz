@@ -1880,8 +1880,7 @@ return config
 
     #[test]
     fn dynamic_color_scheme_expression_is_not_parsed_as_writable_value() {
-        let content =
-            "config.color_scheme = appearance == 'Dark' and 'Faz Dark' or 'Faz Light'\n";
+        let content = "config.color_scheme = appearance == 'Dark' and 'Faz Dark' or 'Faz Light'\n";
 
         assert_eq!(App::extract_lua_value(content, "color_scheme"), None);
         assert!(App::has_config_line(content, "color_scheme"));

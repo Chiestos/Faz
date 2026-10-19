@@ -683,9 +683,7 @@ impl Modal for CharSelector {
                 }
                 if let Some(pane) = term_window.get_active_pane_or_overlay() {
                     if pane.is_zmodem_exclusive() {
-                        log::debug!(
-                            "zmodem: refusing char-selector glyph during a transfer"
-                        );
+                        log::debug!("zmodem: refusing char-selector glyph during a transfer");
                     } else {
                         let result = pane.writer().write_all(glyph.as_bytes());
                         if let Err(err) = term_window.finish_terminal_input(&pane, result) {

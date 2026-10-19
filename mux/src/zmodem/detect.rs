@@ -51,10 +51,7 @@ pub enum ScanResult {
     /// A header begins at this offset within the chunk (the offset of the
     /// first `*`). Bytes before the offset are ordinary terminal output;
     /// bytes from the offset on belong to the ZMODEM session.
-    Started {
-        offset: usize,
-        initiator: Initiator,
-    },
+    Started { offset: usize, initiator: Initiator },
 }
 
 /// Streaming scanner for the ZMODEM header prefix.
@@ -240,7 +237,10 @@ mod tests {
         let mut d = Detector::new();
         assert_eq!(
             d.scan(b"**\x18"),
-            ScanResult::Started { offset: 0, initiator: Initiator::Unknown }
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::Unknown
+            }
         );
     }
 
@@ -249,7 +249,10 @@ mod tests {
         let mut d = Detector::new();
         assert_eq!(
             d.scan(b"**\x18B0"),
-            ScanResult::Started { offset: 0, initiator: Initiator::Unknown }
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::Unknown
+            }
         );
     }
 
@@ -259,7 +262,10 @@ mod tests {
         let mut d = Detector::new();
         assert_eq!(
             d.scan(b"**\x18B04"),
-            ScanResult::Started { offset: 0, initiator: Initiator::Unknown }
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::Unknown
+            }
         );
     }
 
@@ -282,7 +288,13 @@ mod tests {
         let mut d = Detector::new();
         assert_eq!(d.scan(b"*"), ScanResult::NotStarted);
         assert_eq!(d.scan(b"*"), ScanResult::NotStarted);
-        assert_eq!(d.scan(&[ZDLE]), ScanResult::Started { offset: 0, initiator: Initiator::Unknown });
+        assert_eq!(
+            d.scan(&[ZDLE]),
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::Unknown
+            }
+        );
     }
 
     #[test]
@@ -303,14 +315,26 @@ mod tests {
         // The `**Zdle` triple is enough to know a session started; the frame
         // type byte after it belongs to the transfer, not to the detection.
         let mut d = Detector::new();
-        assert_eq!(d.scan(b"**\x18"), ScanResult::Started { offset: 0, initiator: Initiator::Unknown });
+        assert_eq!(
+            d.scan(b"**\x18"),
+            ScanResult::Started {
+                offset: 0,
+                initiator: Initiator::Unknown
+            }
+        );
     }
 
     #[test]
     fn stray_single_star_before_a_real_header() {
         let mut d = Detector::new();
         // `*x` is not a prefix, but the `**Zdle` right after it is a header.
-        assert_eq!(d.scan(b"*x**\x18"), ScanResult::Started { offset: 2, initiator: Initiator::Unknown });
+        assert_eq!(
+            d.scan(b"*x**\x18"),
+            ScanResult::Started {
+                offset: 2,
+                initiator: Initiator::Unknown
+            }
+        );
     }
 
     #[test]
@@ -332,7 +356,13 @@ mod tests {
         let mut d = Detector::new();
         let mut data = b"***".to_vec();
         data.push(ZDLE);
-        assert_eq!(d.scan(&data), ScanResult::Started { offset: 1, initiator: Initiator::Unknown });
+        assert_eq!(
+            d.scan(&data),
+            ScanResult::Started {
+                offset: 1,
+                initiator: Initiator::Unknown
+            }
+        );
     }
 
     #[test]

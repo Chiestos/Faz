@@ -11,5 +11,4 @@
 #![allow(clippy::redundant_closure)]
 
 #[doc(hidden)]
-
 pub mod thread_util;

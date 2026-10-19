@@ -3,7 +3,6 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-
 pub fn write_atomic(path: &Path, contents: &[u8]) -> anyhow::Result<()> {
     let parent = path
         .parent()
@@ -155,10 +154,6 @@ mod tests {
     use super::*;
     use serde_json::json;
     use tempfile::tempdir;
-
-
-
-
 
     #[test]
     fn atomic_write_replaces_existing_file() {

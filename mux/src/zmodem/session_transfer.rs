@@ -15,8 +15,8 @@
 //! substitute a program that behaves like `sz`/`rz` without installing lrzsz.
 
 use std::io;
-use std::path::{Path, PathBuf};
 use std::os::fd::{AsRawFd, RawFd};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -110,7 +110,11 @@ impl LocalCommand {
 ///
 /// `paths` are the local files for an upload or the destination path for a
 /// download.
-pub fn local_command(direction: Direction, paths: &[String], cwd: Option<&std::path::Path>) -> LocalCommand {
+pub fn local_command(
+    direction: Direction,
+    paths: &[String],
+    cwd: Option<&std::path::Path>,
+) -> LocalCommand {
     // \`sz -e\` escapes every control character in the payload.
     //
     // Without it, lrzsz only escapes the bytes ZMODEM itself needs. Everything
@@ -245,11 +249,7 @@ impl Transfer {
     ///
     /// Switches the pty into byte-transparent mode immediately; call
     /// [`Transfer::restore`] or drop the value to put it back.
-    pub fn start(
-        direction: Direction,
-        pty_master_fd: RawFd,
-        command: LocalCommand,
-    ) -> Transfer {
+    pub fn start(direction: Direction, pty_master_fd: RawFd, command: LocalCommand) -> Transfer {
         Transfer::start_with(direction, pty_master_fd, None, command, Spawner::Real)
     }
 
@@ -280,13 +280,10 @@ impl Transfer {
     ) -> Transfer {
         use nix::sys::termios::tcgetattr;
 
-        let saved_termios = tcgetattr(unsafe {
-            std::os::fd::BorrowedFd::borrow_raw(pty_master_fd)
-        })
-        .ok();
-        let saved_slave_termios = pty_slave_fd.and_then(|fd| {
-            tcgetattr(unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) }).ok()
-        });
+        let saved_termios =
+            tcgetattr(unsafe { std::os::fd::BorrowedFd::borrow_raw(pty_master_fd) }).ok();
+        let saved_slave_termios = pty_slave_fd
+            .and_then(|fd| tcgetattr(unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) }).ok());
 
         prepare_transfer_tty(pty_master_fd);
         if let Some(fd) = pty_slave_fd {
@@ -486,10 +483,7 @@ impl Transfer {
             .pty_slave_fd
             .and_then(|fd| crate::zmodem::transfer::guard_transfer_tty(fd, self.stop.clone()))
             .or_else(|| {
-                crate::zmodem::transfer::guard_transfer_tty(
-                    self.pty_master_fd,
-                    self.stop.clone(),
-                )
+                crate::zmodem::transfer::guard_transfer_tty(self.pty_master_fd, self.stop.clone())
             });
 
         let child = match spawner.spawn(&program, child_end.as_raw_fd(), stderr_fd) {
@@ -544,10 +538,7 @@ impl Transfer {
         // went to the now-dead child rather than to the peer. Write to the pty
         // directly, which is the path every byte the child sent took.
         if !outcome.succeeded() && !self.is_cancelled() {
-            match crate::zmodem::transfer::write_all(
-                self.pty_master_fd,
-                &CANCEL_SEQUENCE,
-            ) {
+            match crate::zmodem::transfer::write_all(self.pty_master_fd, &CANCEL_SEQUENCE) {
                 Ok(_) => log::info!("zmodem: sent abort burst to the peer after a failed transfer"),
                 Err(err) => log::warn!("zmodem: could not abort the peer: {err:#}"),
             }
@@ -590,7 +581,10 @@ impl Transfer {
                     if cancel_requested.load(Ordering::SeqCst) {
                         return Outcome::Cancelled;
                     }
-                    log::info!("zmodem: child exited with {status:?} (code {:?})", status.code());
+                    log::info!(
+                        "zmodem: child exited with {status:?} (code {:?})",
+                        status.code()
+                    );
                     return Outcome::Finished(status);
                 }
                 Ok(None) => {}
@@ -666,7 +660,11 @@ impl Drop for Transfer {
     }
 }
 
-fn spawn_command(command: &LocalCommand, child_end_fd: RawFd, stderr_fd: Option<RawFd>) -> io::Result<Child> {
+fn spawn_command(
+    command: &LocalCommand,
+    child_end_fd: RawFd,
+    stderr_fd: Option<RawFd>,
+) -> io::Result<Child> {
     use std::os::unix::process::CommandExt;
 
     let mut cmd = Command::new(&command.program);
@@ -777,7 +775,6 @@ mod tests {
         assert_eq!(cmd.args, vec!["-e", "a.txt", "b.txt"]);
         assert_eq!(cmd.cwd.as_deref(), Some(std::path::Path::new("/tmp")));
     }
-
 
     #[test]
     fn spawn_failure_is_reported_not_panicked() {
@@ -935,7 +932,6 @@ mod tests {
         let n = nix::unistd::read(remote_side.as_raw_fd(), &mut buf).unwrap_or(0);
         assert_eq!(&buf[..n], b"hello");
     }
-
 }
 
 #[cfg(test)]
@@ -1006,7 +1002,10 @@ mod program_lookup_tests {
     #[test]
     fn a_program_on_path_resolves() {
         let found = resolve_program("sh").expect("sh must resolve");
-        assert!(found.is_absolute(), "expected an absolute path, got {found:?}");
+        assert!(
+            found.is_absolute(),
+            "expected an absolute path, got {found:?}"
+        );
         assert!(program_available("sh"));
     }
 

@@ -99,8 +99,7 @@ pub const SOCKETPAIR_BUFFER: usize = 32 * 1024;
 /// `child_end` is dup'd onto the local `sz`/`rz` child's stdin and stdout.
 pub fn make_socketpair() -> io::Result<(OwnedFd, OwnedFd)> {
     let mut fds = [0 as libc::c_int; 2];
-    let ret =
-        unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) };
+    let ret = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) };
     if ret < 0 {
         return Err(io::Error::last_os_error());
     }
@@ -696,8 +695,6 @@ mod tests {
         relay.join();
     }
 
-
-
     #[test]
     fn child_to_pty_mode_carries_child_output_only() {
         // This is the mode Faz uses: the pane's parser owns the pty's read
@@ -738,7 +735,10 @@ mod tests {
         // Nothing should have reached the child through the relay. `child_end`
         // is a blocking fd with no data on it, so use a zero-timeout poll
         // rather than a read that would hang forever on a passing test.
-        let mut pfd = [PollFd::new(borrow(child_end.as_raw_fd()), PollFlags::POLLIN)];
+        let mut pfd = [PollFd::new(
+            borrow(child_end.as_raw_fd()),
+            PollFlags::POLLIN,
+        )];
         let ready = nix::poll::poll(&mut pfd, PollTimeout::from(0u16)).unwrap_or(0);
         assert_eq!(ready, 0, "child received bytes it should not have");
 
@@ -777,7 +777,6 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod relay_ordering_tests {
     use super::{make_socketpair, relay_copy};
@@ -794,18 +793,13 @@ mod relay_ordering_tests {
         let (from, from_peer) = make_socketpair().expect("from pair");
         let (to, to_peer) = make_socketpair().expect("to pair");
         let payload = b"hello relay";
-        unistd::write(&from_peer, payload)
-            .expect("seed");
+        unistd::write(&from_peer, payload).expect("seed");
         let mut buf = [0u8; 64];
         let moved = relay_copy(fd_of(&from), fd_of(&to), &mut buf, &AtomicBool::new(false));
         assert_eq!(moved.bytes(), payload.len() as u64);
 
         let mut got = [0u8; 64];
-        let n = unistd::read(fd_of(&to_peer), &mut got)
-            .expect("read");
+        let n = unistd::read(fd_of(&to_peer), &mut got).expect("read");
         assert_eq!(&got[..n], payload);
     }
-
 }
-
-

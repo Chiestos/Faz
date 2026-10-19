@@ -239,7 +239,10 @@ impl BrowserState {
                 attr.set_reverse(true);
             }
             changes.push(Change::AllAttributes(attr));
-            changes.push(Change::Text(truncate(&format!("  {}", entry.label()), width)));
+            changes.push(Change::Text(truncate(
+                &format!("  {}", entry.label()),
+                width,
+            )));
             changes.push(Change::AllAttributes(CellAttributes::default()));
             changes.push(Change::Text("\r\n".to_string()));
         }
@@ -286,58 +289,57 @@ impl BrowserState {
     fn handle_event(&mut self, event: InputEvent) -> EventAction {
         match event {
             InputEvent::Resized { .. } => {}
-                // Ctrl chords match UPPERCASE letters. `TermWizTerminal::poll_input`
-                // normalizes CTRL+lowercase to CTRL+uppercase before overlays see
-                // it (see `mux/src/termwiztermtab.rs`), and `overlay::selector`
-                // matches the same way. Matching lowercase here silently never
-                // fires.
-
-                InputEvent::Key(KeyEvent {
-                    key: KeyCode::UpArrow,
-                    ..
-                }) => self.move_up(),
-                InputEvent::Key(KeyEvent {
-                    key: KeyCode::DownArrow,
-                    ..
-                }) => self.move_down(),
-                InputEvent::Key(KeyEvent {
-                    key,
-                    modifiers: mods,
-                }) if ctrl_chord(&key, mods) == Some('k') => self.move_up(),
-                InputEvent::Key(KeyEvent {
-                    key,
-                    modifiers: mods,
-                }) if ctrl_chord(&key, mods) == Some('j') => self.move_down(),
-                InputEvent::Key(KeyEvent {
-                    key: KeyCode::Enter,
-                    ..
-                }) => self.activate(),
-                // Space confirms the current directory in Directory mode. A
-                // bare key: it still works when the Ctrl modifier is dropped
-                // somewhere between AppKit and here.
-                InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char(' '),
-                    modifiers: Modifiers::NONE,
-                }) => self.choose_current_dir(),
-                InputEvent::Key(KeyEvent {
-                    key,
-                    modifiers: mods,
-                }) if ctrl_chord(&key, mods) == Some('s') => {
-                    log::info!(
-                        "filebrowser: Ctrl-S ({}) confirmed {}",
-                        describe_ctrl_chord(&key, mods),
-                        self.dir.display()
-                    );
-                    self.choose_current_dir();
-                }
-                InputEvent::Key(KeyEvent {
-                    key: KeyCode::Backspace,
-                    ..
-                })
-                | InputEvent::Key(KeyEvent {
-                    key: KeyCode::LeftArrow,
-                    ..
-                }) => self.go_up(),
+            // Ctrl chords match UPPERCASE letters. `TermWizTerminal::poll_input`
+            // normalizes CTRL+lowercase to CTRL+uppercase before overlays see
+            // it (see `mux/src/termwiztermtab.rs`), and `overlay::selector`
+            // matches the same way. Matching lowercase here silently never
+            // fires.
+            InputEvent::Key(KeyEvent {
+                key: KeyCode::UpArrow,
+                ..
+            }) => self.move_up(),
+            InputEvent::Key(KeyEvent {
+                key: KeyCode::DownArrow,
+                ..
+            }) => self.move_down(),
+            InputEvent::Key(KeyEvent {
+                key,
+                modifiers: mods,
+            }) if ctrl_chord(&key, mods) == Some('k') => self.move_up(),
+            InputEvent::Key(KeyEvent {
+                key,
+                modifiers: mods,
+            }) if ctrl_chord(&key, mods) == Some('j') => self.move_down(),
+            InputEvent::Key(KeyEvent {
+                key: KeyCode::Enter,
+                ..
+            }) => self.activate(),
+            // Space confirms the current directory in Directory mode. A
+            // bare key: it still works when the Ctrl modifier is dropped
+            // somewhere between AppKit and here.
+            InputEvent::Key(KeyEvent {
+                key: KeyCode::Char(' '),
+                modifiers: Modifiers::NONE,
+            }) => self.choose_current_dir(),
+            InputEvent::Key(KeyEvent {
+                key,
+                modifiers: mods,
+            }) if ctrl_chord(&key, mods) == Some('s') => {
+                log::info!(
+                    "filebrowser: Ctrl-S ({}) confirmed {}",
+                    describe_ctrl_chord(&key, mods),
+                    self.dir.display()
+                );
+                self.choose_current_dir();
+            }
+            InputEvent::Key(KeyEvent {
+                key: KeyCode::Backspace,
+                ..
+            })
+            | InputEvent::Key(KeyEvent {
+                key: KeyCode::LeftArrow,
+                ..
+            }) => self.go_up(),
             InputEvent::Key(KeyEvent {
                 key: KeyCode::Escape,
                 ..
@@ -525,7 +527,10 @@ mod tests {
         let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
         // Index 2 is `a.txt` (after adir/ and zdir/).
         state.cursor = 2;
-        assert_eq!(state.current().map(|e| e.name.clone()), Some("a.txt".into()));
+        assert_eq!(
+            state.current().map(|e| e.name.clone()),
+            Some("a.txt".into())
+        );
         state.activate();
         assert_eq!(
             state.outcome,
@@ -720,7 +725,10 @@ mod tests {
     fn enter_descends_and_backspace_goes_up() {
         let dir = fixture();
         let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
-        assert_eq!(state.handle_event(arrow(KeyCode::Enter)), EventAction::Continue);
+        assert_eq!(
+            state.handle_event(arrow(KeyCode::Enter)),
+            EventAction::Continue
+        );
         assert_eq!(state.dir, dir.path().join("adir"));
         state.handle_event(arrow(KeyCode::Backspace));
         assert_eq!(state.dir, dir.path());

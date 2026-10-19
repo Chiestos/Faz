@@ -428,10 +428,7 @@ fn lookup_faz_toast(event_name: &str) -> Option<&'static str> {
             "faz-toast-lazygit-no-cwd",
             "Lazygit: Cannot detect current directory",
         ),
-        (
-            "faz-toast-lazygit-not-git",
-            "Lazygit: Not a git repository",
-        ),
+        ("faz-toast-lazygit-not-git", "Lazygit: Not a git repository"),
         (
             "faz-toast-lazygit-missing",
             "Lazygit not found. Run faz init",
@@ -2632,10 +2629,7 @@ impl TermWindow {
                     self.resize_overlays();
                     self.update_title_post_status();
                 }
-                MuxNotification::ZmodemDetected {
-                    pane_id,
-                    direction,
-                } => {
+                MuxNotification::ZmodemDetected { pane_id, direction } => {
                     self.on_zmodem_detected(pane_id, direction);
                 }
                 MuxNotification::WorkspaceRenamed { .. }
@@ -4845,8 +4839,7 @@ impl TermWindow {
                     if pane.is_zmodem_exclusive() {
                         log::debug!("zmodem: refusing CLI injection during a transfer");
                     } else {
-                        let command =
-                            format!("{}\n", crate::frontend::faz_cli_shell_invocation());
+                        let command = format!("{}\n", crate::frontend::faz_cli_shell_invocation());
                         let result = pane.writer().write_all(command.as_bytes());
                         self.finish_terminal_input(pane, result)?;
                     }
@@ -6730,11 +6723,7 @@ impl TermWindow {
     /// Both directions need a different kind of path, which is why the picker
     /// mode is derived from the direction rather than chosen by the user:
     /// receiving writes into a directory, sending reads a file.
-    fn open_zmodem_picker(
-        &mut self,
-        pane_id: PaneId,
-        direction: mux::zmodem::Direction,
-    ) {
+    fn open_zmodem_picker(&mut self, pane_id: PaneId, direction: mux::zmodem::Direction) {
         let mux = Mux::get();
         let Some(window) = mux.get_window(self.mux_window_id) else {
             return;
@@ -6783,12 +6772,7 @@ impl TermWindow {
                         // Every picked path has a live peer behind it: a
                         // detected session, or a menu-initiated send that
                         // starts the remote receiver itself.
-                        TermWindow::start_zmodem_transfer(
-                            window.clone(),
-                            pane_id,
-                            direction,
-                            path,
-                        );
+                        TermWindow::start_zmodem_transfer(window.clone(), pane_id, direction, path);
                     }
                     Ok(crate::overlay::filebrowser::PickResult::Cancelled) => {
                         log::info!("zmodem: picker cancelled for pane {pane_id}");

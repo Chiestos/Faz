@@ -274,12 +274,10 @@ mod imp {
         // With XDG_CONFIG_HOME set, GUI processes launched outside the shell
         // may have written state to the default location as well; clean both.
         if home_faz_dir() != config_home() {
-            for (name, label) in [
-                (
-                    "state.json",
-                    "removed persisted Faz state (default location)",
-                ),
-            ] {
+            for (name, label) in [(
+                "state.json",
+                "removed persisted Faz state (default location)",
+            )] {
                 remove_file_if_exists(home_faz_dir().join(name), label, &mut report)?;
             }
         }

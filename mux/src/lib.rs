@@ -418,10 +418,7 @@ fn strip_zmodem_residue(bytes: &[u8]) -> Vec<u8> {
             i += 3;
             if bytes.get(i) == Some(&b'B') {
                 i += 1;
-                while bytes
-                    .get(i)
-                    .is_some_and(|b| b.is_ascii_hexdigit())
-                {
+                while bytes.get(i).is_some_and(|b| b.is_ascii_hexdigit()) {
                     i += 1;
                 }
                 // `\r`, then `\n` or `\x8a`, then optionally `\x11`.
@@ -988,7 +985,11 @@ fn read_from_pane_pty(
         let _pane_read = read_gate.as_ref().map(|state| state.enter_pane_read());
         #[cfg(unix)]
         if let Some(fd) = reader_fd {
-            let mut pfd = [pollfd { fd, events: POLLIN, revents: 0 }];
+            let mut pfd = [pollfd {
+                fd,
+                events: POLLIN,
+                revents: 0,
+            }];
             match poll(&mut pfd, Some(Duration::ZERO)) {
                 Ok(0) => {
                     // Nothing after all: the gate must drop so a waiting claim
@@ -2280,8 +2281,7 @@ impl wezterm_term::DownloadHandler for MuxDownloader {
 
 #[cfg(test)]
 mod tests {
-    use super::strip_zmodem_residue;
-    use super::SynchronizedOutputState;
+    use super::{strip_zmodem_residue, SynchronizedOutputState};
     use std::time::{Duration, Instant};
 
     #[test]

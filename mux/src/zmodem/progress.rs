@@ -250,5 +250,4 @@ mod tests {
         let n = unistd::read(capture.master.as_raw_fd(), &mut buf).expect("read master");
         assert_eq!(&buf[..n], b"hello");
     }
-
 }
