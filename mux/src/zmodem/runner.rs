@@ -27,6 +27,7 @@ use std::sync::Arc;
 use crate::pane::Pane;
 use crate::zmodem::session_transfer::{Direction, LocalCommand, Outcome, Transfer};
 use crate::zmodem::state::ZmodemState;
+use crate::{Mux, MuxNotification};
 
 /// Why a transfer could not be started.
 #[derive(Debug)]
@@ -131,6 +132,15 @@ pub fn run_transfer(
             parser.parse(bytes, |action| actions.push(action));
             if !actions.is_empty() {
                 progress_pane.perform_actions(actions);
+                // `perform_actions` only edits the terminal buffer; it does not
+                // ask anyone to draw it. Without this the progress line sits
+                // invisible until some unrelated event (a keystroke, a mouse
+                // move) happens to wake the GUI's event loop, which reads as
+                // "the counter only updates when I type".
+                let pane_id = progress_pane.pane_id();
+                if let Some(mux) = Mux::try_get() {
+                    mux.notify(MuxNotification::PaneOutput(pane_id));
+                }
             }
         })
         .on_sink_ready({
