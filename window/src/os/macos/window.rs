@@ -1781,12 +1781,24 @@ impl WindowOps for Window {
                 if superview.is_null() {
                     return None;
                 }
-                // `frame` is in the button's superview (the titlebar
-                // container), whose origin is the window's top-left in
-                // flipped coordinates.
                 let container: NSRect = msg_send![superview, frame];
-                let bottom_in_container = frame.origin.y + frame.size.height;
-                let from_top = container.size.height - bottom_in_container;
+                // NSView coordinates are bottom-up unless the view is flipped;
+                // the titlebar container is not. Ask rather than assume, or the
+                // result is off by the container height.
+                let flipped: bool = msg_send![superview, isFlipped];
+                let from_top = if flipped {
+                    frame.origin.y + frame.size.height
+                } else {
+                    container.size.height - frame.origin.y
+                };
+                log::debug!(
+                    "titlebar: button=({:.1},{:.1} {:.1}x{:.1}) container_h={:.1} flipped={flipped} from_top={from_top:.1}",
+                    frame.origin.x,
+                    frame.origin.y,
+                    frame.size.width,
+                    frame.size.height,
+                    container.size.height
+                );
                 (!from_top.is_nan() && from_top > 0.0)
                     .then(|| ULength::new(from_top.ceil() as usize))
             })

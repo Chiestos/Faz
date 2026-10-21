@@ -478,10 +478,11 @@ impl CommandPalette {
 
     fn palette_bounds(term_window: &TermWindow, metrics: &RenderMetrics) -> PaletteBounds {
         let top_bar_height = if term_window.show_tab_bar && !term_window.config.tab_bar_at_bottom {
-            term_window.tab_bar_pixel_height().unwrap_or_else(|e| {
+            let h = term_window.tab_bar_pixel_height().unwrap_or_else(|e| {
                 log::debug!("Failed to get tab bar height, using 0: {}", e);
                 0.0
-            })
+            });
+            h + term_window.tab_bar_top_offset(h)
         } else {
             0.0
         };
@@ -996,7 +997,8 @@ impl Modal for CommandPalette {
 
     fn mouse_event(&self, event: MouseEvent, term_window: &mut TermWindow) -> anyhow::Result<()> {
         let top_bar_height = if term_window.show_tab_bar && !term_window.config.tab_bar_at_bottom {
-            term_window.tab_bar_pixel_height().unwrap_or(0.0)
+            let h = term_window.tab_bar_pixel_height().unwrap_or(0.0);
+            h + term_window.tab_bar_top_offset(h)
         } else {
             0.0
         };

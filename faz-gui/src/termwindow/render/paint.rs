@@ -568,7 +568,9 @@ impl crate::TermWindow {
                 let top_bar_height = if self.config.tab_bar_at_bottom {
                     0.0
                 } else {
-                    tab_bar_height
+                    // The bar may itself be pushed down to clear the window
+                    // buttons; content starts below wherever it ends.
+                    tab_bar_height + self.tab_bar_top_offset(tab_bar_height)
                 };
                 let top_pixel_y = top_bar_height + padding_top + border.top.get() as f32;
 

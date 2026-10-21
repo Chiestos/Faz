@@ -12,25 +12,11 @@ impl crate::TermWindow {
     pub fn paint_tab_bar(&mut self, layers: &mut TripleLayerQuadAllocator) -> anyhow::Result<()> {
         let border = self.get_os_border();
         let tab_bar_height = self.tab_bar_pixel_height()?;
-        // Sit directly under the standard window buttons rather than at the
-        // very top of the window. The buttons are centred in the titlebar, so
-        // their bottom edge is not the tab bar's height — the tab bar keeps its
-        // one-line height and is pushed down instead, leaving the strip above
-        // it as window-drag space.
-        let title_bar_height = self
-            .os_parameters
-            .as_ref()
-            .and_then(|p| p.title_bar.height)
-            .map(|h| h.get() as f32)
-            .unwrap_or(0.);
         let tab_bar_y = if self.config.tab_bar_at_bottom {
             ((self.dimensions.pixel_height as f32) - tab_bar_height - border.bottom.get() as f32)
                 .max(0.)
         } else {
-            // Offset below the OS top inset so cells aren't clipped by the
-            // macOS rounded corner / integrated buttons window mask.
-            let under_buttons = (title_bar_height - tab_bar_height).max(0.);
-            (border.top.get() as f32).max(under_buttons)
+            self.tab_bar_top_offset(tab_bar_height)
         };
         let panes = self.get_panes_to_render();
         let force_opaque_tab_bar_background = forces_opaque_faz_tui_window_background(&panes);
@@ -189,5 +175,28 @@ impl crate::TermWindow {
 
     pub fn tab_bar_pixel_height(&self) -> anyhow::Result<f32> {
         Self::tab_bar_pixel_height_impl(&self.config, &self.fonts, &self.render_metrics)
+    }
+
+    /// Top edge of a top-positioned tab bar, in device pixels.
+    ///
+    /// The bar sits directly under the standard window buttons rather than at
+    /// the very top of the window: the buttons are centred in the titlebar, so
+    /// their bottom edge is not the bar's height. The bar keeps its one-line
+    /// height and is pushed down, leaving the strip above it as drag space.
+    ///
+    /// AppKit reports the button frame in points while this layer works in
+    /// device pixels; without the conversion the two never overlapped (22pt of
+    /// buttons against a 34px bar on a 2x display) and the bar did not move.
+    pub(crate) fn tab_bar_top_offset(&self, tab_bar_height: f32) -> f32 {
+        let border = self.get_os_border();
+        let dpi_scale = self.dimensions.dpi as f32 / 96.0;
+        let title_bar_height = self
+            .os_parameters
+            .as_ref()
+            .and_then(|p| p.title_bar.height)
+            .map(|h| h.get() as f32 * dpi_scale)
+            .unwrap_or(0.);
+        let under_buttons = (title_bar_height - tab_bar_height).max(0.);
+        (border.top.get() as f32).max(under_buttons)
     }
 }
