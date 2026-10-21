@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/common.sh"
 
 echo "starship_rprompt: starting (zsh=$(command -v zsh 2>/dev/null || echo MISSING), bash=$BASH_VERSION)" >&2
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-starship-rprompt.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-starship-rprompt.XXXXXX")"
 cleanup() {
   rm -rf "$tmp_dir"
 }
@@ -58,10 +58,10 @@ setup_out="$(
   PATH="$tmp_dir/bin:$PATH" \
   HOME="$HOME" \
   ZDOTDIR="$ZDOTDIR" \
-  KAKU_INIT_INTERNAL=1 \
-  KAKU_SKIP_TOOL_BOOTSTRAP=1 \
-  KAKU_SKIP_TERMINFO_BOOTSTRAP=1 \
-  KAKU_VENDOR_DIR="$vendor_dir" \
+  FAZ_INIT_INTERNAL=1 \
+  FAZ_SKIP_TOOL_BOOTSTRAP=1 \
+  FAZ_SKIP_TERMINFO_BOOTSTRAP=1 \
+  FAZ_VENDOR_DIR="$vendor_dir" \
   bash "$REPO_ROOT/assets/shell-integration/setup_zsh.sh" --update-only 2>&1
 )" || setup_status=$?
 if [[ "$setup_status" -ne 0 ]]; then
@@ -70,25 +70,25 @@ if [[ "$setup_status" -ne 0 ]]; then
   exit 1
 fi
 
-kaku_zsh="$HOME/.config/kaku/zsh/kaku.zsh"
-if [[ ! -f "$kaku_zsh" ]]; then
-  echo "starship_rprompt: kaku.zsh not created at $kaku_zsh" >&2
+faz_zsh="$HOME/.config/faz/zsh/faz.zsh"
+if [[ ! -f "$faz_zsh" ]]; then
+  echo "starship_rprompt: faz.zsh not created at $faz_zsh" >&2
   exit 1
 fi
-echo "starship_rprompt: kaku.zsh created ok, running zsh" >&2
+echo "starship_rprompt: faz.zsh created ok, running zsh" >&2
 
 output=""
 if ! output="$(
   TERM=xterm-256color \
-  TERM_PROGRAM=Kaku \
+  TERM_PROGRAM=Faz \
   PATH="$tmp_dir/bin:$PATH" \
   HOME="$HOME" \
   ZDOTDIR="$ZDOTDIR" \
   zsh -f -c '
-source "$HOME/.config/kaku/zsh/kaku.zsh"
+source "$HOME/.config/faz/zsh/faz.zsh"
 RPROMPT='\''$(starship prompt --right)'\''
-_kaku_fix_starship_rprompt
-print -r -- "__KAKU_RPROMPT__:$RPROMPT"
+_faz_fix_starship_rprompt
+print -r -- "__FAZ_RPROMPT__:$RPROMPT"
 ' 2>&1
 )"; then
   echo "starship_rprompt: zsh exited non-zero:" >&2
@@ -102,7 +102,7 @@ if [[ -z "$output" ]]; then
 fi
 
 case "$output" in
-  *__KAKU_RPROMPT__:* ) ;;
+  *__FAZ_RPROMPT__:* ) ;;
   * )
     echo "starship_rprompt: sentinel not found in output:" >&2
     echo "$output" >&2
@@ -121,16 +121,16 @@ esac
 seeded_output=""
 if ! seeded_output="$(
   TERM=xterm-256color \
-  TERM_PROGRAM=Kaku \
+  TERM_PROGRAM=Faz \
   PATH="$tmp_dir/bin:$PATH" \
   HOME="$HOME" \
   ZDOTDIR="$ZDOTDIR" \
   zsh -f -c '
-source "$HOME/.config/kaku/zsh/kaku.zsh"
+source "$HOME/.config/faz/zsh/faz.zsh"
 RPROMPT='\''$(echo fake-right-prompt)'\''
-_kaku_starship_rprompt_cmd="$RPROMPT"
-_kaku_fix_starship_rprompt
-print -r -- "__KAKU_SEEDED__:$RPROMPT"
+_faz_starship_rprompt_cmd="$RPROMPT"
+_faz_fix_starship_rprompt
+print -r -- "__FAZ_SEEDED__:$RPROMPT"
 ' 2>&1
 )"; then
   echo "starship_rprompt: seeded zsh exited non-zero:" >&2
@@ -139,7 +139,7 @@ print -r -- "__KAKU_SEEDED__:$RPROMPT"
 fi
 
 case "$seeded_output" in
-  *__KAKU_SEEDED__:fake-right-prompt* ) ;;
+  *__FAZ_SEEDED__:fake-right-prompt* ) ;;
   * )
     echo "starship_rprompt: seeded sentinel missing or wrong output:" >&2
     echo "$seeded_output" >&2

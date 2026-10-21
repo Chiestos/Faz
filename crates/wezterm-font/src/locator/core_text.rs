@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn objc_string_array_bridge_retains_autoreleased_value() {
         let (array, weak) = autoreleasepool(|| {
-            let item = CFString::new("Kaku ownership probe");
+            let item = CFString::new("Faz ownership probe");
             let raw: id =
                 unsafe { msg_send![class!(NSArray), arrayWithObject:item.as_concrete_TypeRef()] };
             let tracked = unsafe { StrongPtr::retain(raw) };

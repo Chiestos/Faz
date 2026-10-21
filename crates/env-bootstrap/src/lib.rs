@@ -188,7 +188,7 @@ fn register_panic_hook() {
 }
 
 fn register_lua_modules() {
-    // Essential modules needed by kaku.lua during config evaluation
+    // Essential modules needed by faz.lua during config evaluation
     for func in [
         color_funcs::register,
         termwiz_funcs::register,

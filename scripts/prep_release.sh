@@ -73,10 +73,10 @@ if [[ "$DRY_RUN" == "0" ]]; then
 fi
 
 current_version=$(get_cargo_version "$REPO_ROOT")
-gui_version=$(get_kaku_gui_version "$REPO_ROOT")
+gui_version=$(get_faz_gui_version "$REPO_ROOT")
 
 if [[ "$current_version" != "$gui_version" ]]; then
-    die "Cargo.toml versions are inconsistent: kaku=$current_version, kaku-gui=$gui_version. Fix before bumping."
+    die "Cargo.toml versions are inconsistent: faz-cli=$current_version, faz-gui=$gui_version. Fix before bumping."
 fi
 
 case "$TARGET_BUMP" in
@@ -151,7 +151,7 @@ emit_section() {
     fi
 }
 
-draft_path=$(mktemp -t kaku-release-notes-draft.XXXXXX)
+draft_path=$(mktemp -t faz-release-notes-draft.XXXXXX)
 # shellcheck disable=SC2064
 trap "rm -f '$draft_path'" EXIT
 
@@ -160,8 +160,8 @@ trap "rm -f '$draft_path'" EXIT
 # V${new_version} <emoji TBD>
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/tw93/Kaku/main/assets/logo.png" alt="Kaku Logo" width="120" height="120" />
-  <h1 style="margin: 12px 0 6px;">Kaku V${new_version}</h1>
+  <img src="https://raw.githubusercontent.com/tw93/Faz/main/assets/logo.png" alt="Faz Logo" width="120" height="120" />
+  <h1 style="margin: 12px 0 6px;">Faz V${new_version}</h1>
   <p><em>A fast, out-of-the-box terminal built for AI coding.</em></p>
 </div>
 
@@ -204,14 +204,14 @@ TAIL
 
 Special thanks to <contributors> for their contributions to this release.
 
-> https://github.com/tw93/Kaku
+> https://github.com/tw93/Faz
 FOOTER
 } > "$draft_path"
 
 if [[ "$DRY_RUN" == "1" ]]; then
     log_info "=== Dry run ==="
     log_info "Would bump version: $current_version → $new_version"
-    log_info "Would write: kaku/Cargo.toml, kaku-gui/Cargo.toml, .github/RELEASE_NOTES.md, Cargo.lock"
+    log_info "Would write: faz-cli/Cargo.toml, faz-gui/Cargo.toml, .github/RELEASE_NOTES.md, Cargo.lock"
     if [[ "$BUMP_CONFIG" == "1" ]]; then
         log_info "Would also bump config_version.txt and append 2 highlight stubs to config_update_highlights.tsv"
     fi
@@ -229,14 +229,14 @@ log_info "Wrote RELEASE_NOTES.md draft (recoverable from git if needed)"
 
 # Bump Cargo.toml versions. macOS sed requires the empty `''` after -i.
 # Anchor on full line to avoid hitting dependency lines like `version = "1.0"`.
-sed -i '' "s|^version = \"${current_version}\"$|version = \"${new_version}\"|" "$REPO_ROOT/kaku/Cargo.toml"
-sed -i '' "s|^version = \"${current_version}\"$|version = \"${new_version}\"|" "$REPO_ROOT/kaku-gui/Cargo.toml"
+sed -i '' "s|^version = \"${current_version}\"$|version = \"${new_version}\"|" "$REPO_ROOT/faz-cli/Cargo.toml"
+sed -i '' "s|^version = \"${current_version}\"$|version = \"${new_version}\"|" "$REPO_ROOT/faz-gui/Cargo.toml"
 
 # Verify both files were actually updated.
-new_in_kaku=$(get_cargo_version "$REPO_ROOT")
-new_in_gui=$(get_kaku_gui_version "$REPO_ROOT")
-if [[ "$new_in_kaku" != "$new_version" || "$new_in_gui" != "$new_version" ]]; then
-    die "Cargo.toml bump failed (kaku=$new_in_kaku, kaku-gui=$new_in_gui). Restore: git checkout kaku/Cargo.toml kaku-gui/Cargo.toml"
+new_in_faz=$(get_cargo_version "$REPO_ROOT")
+new_in_gui=$(get_faz_gui_version "$REPO_ROOT")
+if [[ "$new_in_faz" != "$new_version" || "$new_in_gui" != "$new_version" ]]; then
+    die "Cargo.toml bump failed (faz=, faz-gui=$new_in_gui). Restore: git checkout faz-cli/Cargo.toml faz-gui/Cargo.toml"
 fi
 
 # Refresh Cargo.lock so the prep commit ships with a consistent lockfile.
@@ -245,7 +245,7 @@ log_info "Refreshing Cargo.lock via cargo metadata..."
 if ! cargo metadata --format-version 1 --offline >/dev/null 2>&1; then
     log_warn "cargo metadata --offline failed; retrying online (may fetch indexes)"
     if ! cargo metadata --format-version 1 >/dev/null; then
-        die "cargo metadata failed after version bump. Restore: git checkout kaku/Cargo.toml kaku-gui/Cargo.toml Cargo.lock"
+        die "cargo metadata failed after version bump. Restore: git checkout faz-cli/Cargo.toml faz-gui/Cargo.toml Cargo.lock"
     fi
 fi
 
@@ -285,8 +285,8 @@ log_info "Running scripts/check_release_config.sh..."
 
 # Stage and commit.
 files_to_add=(
-    "$REPO_ROOT/kaku/Cargo.toml"
-    "$REPO_ROOT/kaku-gui/Cargo.toml"
+    "$REPO_ROOT/faz-cli/Cargo.toml"
+    "$REPO_ROOT/faz-gui/Cargo.toml"
     "$REPO_ROOT/Cargo.lock"
     "$release_notes_path"
 )

@@ -24,16 +24,6 @@ The key regression guard is `update_titlebar_background()` in
 opaque windows, otherwise `NSTitlebarContainerView` can cover the Metal-rendered
 top tab bar.
 
-## Window Drag Regression Checks
-
-After the backend drag-decision tests pass, check the built app on macOS:
-single click must not restore a maximized window; dragging must restore and
-move it; double-click must zoom according to the system preference. Repeat
-across displays, with a manually screen-filling window, and in fullscreen.
-The automated matrix covers disagreements between cached maximized state,
-native zoom state, and screen-filling geometry; it does not prove AppKit's
-interactive tracking behavior.
-
 ## Repeatable Performance Checks
 
 Use the same release build, display scale, window size, power mode, and machine
@@ -42,7 +32,7 @@ builds prove the harness works but are not release latency baselines.
 
 | Scenario | Fixed workload | Evidence |
 | --- | --- | --- |
-| Startup | `RUNS=10 WARMUP=2 scripts/measure_startup_kaku.sh > startup.json` | Window and shell-ready mean, median and P95; cold resets only the fixture app cache. |
+| Startup | `RUNS=10 WARMUP=2 scripts/measure_startup_faz.sh > startup.json` | Window and shell-ready mean, median and P95; cold resets only the fixture app cache. |
 | Sustained output | One 80x24 pane, 100,000 lines of 79 ASCII characters plus newline, repeated three times | PTY byte rate, mux action latency, paint P95, peak RSS. |
 | Multiple panes | Four panes at the same total window size, each printing the same output workload | Per-process CPU/RSS and paint P95; confirm input remains responsive in a fifth idle pane. |
 | AI streaming | A local OpenAI-compatible fixture emitting 20 fixed-size deltas/second for 30 seconds, repeated three times | Paint P95 and CPU/RSS during streaming; cancel halfway once and confirm work stops. Network/provider latency is excluded. |

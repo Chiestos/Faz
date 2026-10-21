@@ -68,7 +68,7 @@ dhat-heap.json
 /nix/result
 /dist/
 /dist-min/
-/Kaku.app/
+/Faz.app/
 /assets/vendor/*
 !/assets/vendor/starship.toml
 .ace-tool/

@@ -353,7 +353,7 @@ end
             )
             .context("set wezterm.config_dir")?;
 
-        lua.set_named_registry_value("kaku-watch-paths", Vec::<String>::new())?;
+        lua.set_named_registry_value("faz-watch-paths", Vec::<String>::new())?;
         wezterm_mod.set(
             "add_to_config_reload_watch_list",
             lua.create_function(add_to_config_reload_watch_list)?,
@@ -950,9 +950,9 @@ pub fn add_to_config_reload_watch_list<'lua>(
     lua: &'lua Lua,
     args: Variadic<String>,
 ) -> mlua::Result<()> {
-    let mut watch_paths: Vec<String> = lua.named_registry_value("kaku-watch-paths")?;
+    let mut watch_paths: Vec<String> = lua.named_registry_value("faz-watch-paths")?;
     watch_paths.extend_from_slice(&args);
-    lua.set_named_registry_value("kaku-watch-paths", watch_paths)?;
+    lua.set_named_registry_value("faz-watch-paths", watch_paths)?;
     Ok(())
 }
 
@@ -1088,9 +1088,9 @@ assert(wezterm.emit('bar', 42, 'woot') == true)
     }
 
     #[test]
-    fn bundled_kaku_lua_compiles() -> anyhow::Result<()> {
+    fn bundled_faz_lua_compiles() -> anyhow::Result<()> {
         let config_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let lua = make_lua_context(&config_path)?;
 
         let source = std::fs::read_to_string(&config_path)?;

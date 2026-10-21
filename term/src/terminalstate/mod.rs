@@ -39,12 +39,21 @@ use crate::terminalstate::kitty::*;
 
 lazy_static::lazy_static! {
     static ref DB: Database = {
-        let data = include_bytes!("../../../termwiz/data/kaku");
+        let data = include_bytes!("../../../termwiz/data/faz");
         Database::from_buffer(&data[..]).unwrap()
     };
 }
 
 const PTY_ERROR_LOG_THROTTLE_MS: u64 = 5_000;
+
+/// Title a terminal starts with, before any OSC 0/1/2 arrives.
+///
+/// Exposed so `LocalPane::get_title` can recognise it and substitute the
+/// foreground process name. The two used to disagree — the sentinel was a
+/// stale upstream string and the value a pre-rename one — which silently
+/// disabled that substitution and put the old name in every tab that had not
+/// yet been retitled by its shell.
+pub const DEFAULT_TITLE: &str = "Faz";
 static PTY_WRITE_ALL_LAST_LOG_MS: AtomicU64 = AtomicU64::new(0);
 static PTY_WRITE_ALL_SUPPRESSED: AtomicU64 = AtomicU64::new(0);
 static PTY_WRITE_FMT_LAST_LOG_MS: AtomicU64 = AtomicU64::new(0);
@@ -622,7 +631,7 @@ impl TerminalState {
             newline_mode: false,
             current_mouse_buttons: vec![],
             tabs: TabStop::new(size.cols, 8),
-            title: "kaku".to_string(),
+            title: DEFAULT_TITLE.to_string(),
             icon_title: None,
             palette: None,
             pixel_height: size.pixel_height,

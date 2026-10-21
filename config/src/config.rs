@@ -263,9 +263,9 @@ pub struct Config {
     #[dynamic(default)]
     pub set_environment_variables: HashMap<String, String>,
 
-    /// Controls how the Tab key behaves in zsh inside Kaku sessions.
-    /// The environment variables `KAKU_SMART_TAB_DISABLE` and
-    /// `KAKU_TAB_ACCEPT_SUGGEST_FIRST` are set automatically based on this.
+    /// Controls how the Tab key behaves in zsh inside Faz sessions.
+    /// The environment variables `FAZ_SMART_TAB_DISABLE` and
+    /// `FAZ_TAB_ACCEPT_SUGGEST_FIRST` are set automatically based on this.
     #[dynamic(default)]
     pub smart_tab_mode: SmartTabMode,
 
@@ -293,7 +293,7 @@ pub struct Config {
     #[dynamic(default = "default_hyperlink_rules")]
     pub hyperlink_rules: Vec<hyperlink::Rule>,
 
-    /// Optional command used to open local file links. Kaku appends the
+    /// Optional command used to open local file links. Faz appends the
     /// resolved path and, when present, its line and column.
     pub file_link_editor: Option<String>,
 
@@ -480,7 +480,7 @@ pub struct Config {
     #[dynamic(default)]
     pub disable_default_mouse_bindings: bool,
     /// When false, completing a mouse text selection will not copy text
-    /// to the clipboard. Kaku may show a one-time in-window hint so the
+    /// to the clipboard. Faz may show a one-time in-window hint so the
     /// selection behavior is less surprising.
     #[dynamic(default = "default_true")]
     pub copy_on_select: bool,
@@ -497,7 +497,7 @@ pub struct Config {
     #[dynamic(default = "default_macos_forward_mods")]
     pub macos_forward_to_ime_modifier_mask: Modifiers,
 
-    /// Global hotkey to show or hide Kaku on macOS.
+    /// Global hotkey to show or hide Faz on macOS.
     /// Set this to nil to disable the system-wide hotkey.
     #[dynamic(default = "default_macos_global_hotkey")]
     pub macos_global_hotkey: Option<KeyNoAction>,
@@ -517,9 +517,6 @@ pub struct Config {
     /// active tab.  Clicking on a tab activates it.
     #[dynamic(default = "default_true")]
     pub enable_tab_bar: bool,
-    #[dynamic(default = "default_true")]
-    pub use_fancy_tab_bar: bool,
-
     #[dynamic(default)]
     pub tab_bar_at_bottom: bool,
 
@@ -567,7 +564,7 @@ pub struct Config {
     pub enable_scroll_bar: bool,
 
     /// When true, mouse wheel events in alternate-screen apps such as nano
-    /// and vim are sent to the app instead of scrolling Kaku's primary
+    /// and vim are sent to the app instead of scrolling Faz's primary
     /// scrollback peek.
     #[dynamic(default)]
     pub alternate_screen_wheel_scrolls_terminal: bool,
@@ -580,19 +577,19 @@ pub struct Config {
     ///   so it follows the cursor across screens.
     /// - `ScrollOnly`: scroll the scrollback but leave the selection range
     ///   unchanged.
-    /// - `Ignore`: drop the wheel event entirely. Restores the legacy Kaku
+    /// - `Ignore`: drop the wheel event entirely. Restores the legacy Faz
     ///   behavior from v0.10 and earlier, which kept the selection stable but
     ///   blocked cross-screen text selection.
     #[dynamic(default)]
     pub selection_wheel_scroll_behavior: SelectionWheelScrollBehavior,
 
-    /// Deprecated and ignored. The i18n support was removed and Kaku's
+    /// Deprecated and ignored. The i18n support was removed and Faz's
     /// built-in UI is English-only. Kept as a deprecated field (rather than
-    /// dropped) so that `kaku.lua` files carrying `config.language` from
+    /// dropped) so that `faz.lua` files carrying `config.language` from
     /// V0.11.0 still load on upgrade with a warning instead of a hard error.
     #[dynamic(
         default,
-        deprecated = "the language option was removed; Kaku's built-in UI is English-only"
+        deprecated = "the language option was removed; Faz's built-in UI is English-only"
     )]
     pub language: String,
 
@@ -825,15 +822,23 @@ pub struct Config {
     #[dynamic(default = "default_true")]
     pub automatically_reload_config: bool,
 
-    #[dynamic(default = "default_check_for_updates")]
+    /// Kept for config compatibility only. There is no in-app update
+    /// surface, so nothing reads these; a user config that still sets them
+    /// keeps loading.
+    #[dynamic(
+        default,
+        deprecated = "no longer does anything; Faz does not check for updates"
+    )]
     pub check_for_updates: bool,
     #[dynamic(
         default,
-        deprecated = "this option no longer does anything and will be removed in a future release"
+        deprecated = "no longer does anything; Faz does not check for updates"
     )]
     pub show_update_window: bool,
-
-    #[dynamic(default = "default_update_interval")]
+    #[dynamic(
+        default,
+        deprecated = "no longer does anything; Faz does not check for updates"
+    )]
     pub check_for_updates_interval_seconds: u64,
 
     /// When set to true, use the CSI-U encoding scheme as described
@@ -1017,71 +1022,8 @@ pub struct Config {
 
     #[dynamic(default = "default_ulimit_nproc")]
     pub ulimit_nproc: u64,
-
-    /// Configuration for the Kaku Remote iOS bridge.
-    /// When enabled, a WebSocket server is started so the iOS app can
-    /// view and control panes over the local network.
-    #[dynamic(default)]
-    pub remote: RemoteConfig,
 }
 impl_lua_conversion_dynamic!(Config);
-
-#[derive(Debug, Clone, FromDynamic, ToDynamic, ConfigMeta)]
-pub struct RemoteConfig {
-    /// Whether the remote bridge is enabled.
-    #[dynamic(default = "default_remote_enabled")]
-    pub enabled: bool,
-
-    /// The TCP port to listen on.
-    #[dynamic(default = "default_remote_port")]
-    pub port: u16,
-
-    /// The address to bind. Use "0.0.0.0" for all interfaces (LAN access)
-    /// or "127.0.0.1" for local-only.
-    #[dynamic(default = "default_remote_bind")]
-    pub bind: String,
-
-    /// Enable outbound relay tunnel so the phone can connect from outside LAN.
-    #[dynamic(default = "default_remote_tunnel")]
-    pub tunnel: bool,
-
-    /// Relay server WebSocket URL.
-    #[dynamic(default = "default_tunnel_url")]
-    pub tunnel_url: String,
-}
-impl_lua_conversion_dynamic!(RemoteConfig);
-
-fn default_remote_enabled() -> bool {
-    false
-}
-
-fn default_remote_port() -> u16 {
-    9988
-}
-
-fn default_remote_bind() -> String {
-    "127.0.0.1".to_string()
-}
-
-fn default_tunnel_url() -> String {
-    "wss://kaku-relay.fly.dev".to_string()
-}
-
-fn default_remote_tunnel() -> bool {
-    true
-}
-
-impl Default for RemoteConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            port: default_remote_port(),
-            bind: default_remote_bind(),
-            tunnel: default_remote_tunnel(),
-            tunnel_url: default_tunnel_url(),
-        }
-    }
-}
 
 fn default_one() -> usize {
     1
@@ -1202,7 +1144,7 @@ impl Config {
 
         let mut paths = vec![];
         for dir in CONFIG_DIRS.iter() {
-            paths.push(PathPossibility::optional(dir.join("kaku.lua")))
+            paths.push(PathPossibility::optional(dir.join("faz.lua")))
         }
 
         if cfg!(windows) {
@@ -1216,7 +1158,7 @@ impl Config {
             // dir as the executable that will take precedence.
             if let Ok(exe_name) = std::env::current_exe() {
                 if let Some(exe_dir) = exe_name.parent() {
-                    paths.insert(0, PathPossibility::optional(exe_dir.join("kaku.lua")));
+                    paths.insert(0, PathPossibility::optional(exe_dir.join("faz.lua")));
                 }
             }
         }
@@ -1225,7 +1167,7 @@ impl Config {
             if let Ok(exe_name) = std::env::current_exe() {
                 if let Some(contents_dir) = exe_name.parent().and_then(|p| p.parent()) {
                     paths.push(PathPossibility::optional(
-                        contents_dir.join("Resources").join("kaku.lua"),
+                        contents_dir.join("Resources").join("faz.lua"),
                     ));
                 }
             }
@@ -1255,11 +1197,11 @@ impl Config {
             }
         }
 
-        // We didn't find (or were asked to skip) a kaku.lua file, so
+        // We didn't find (or were asked to skip) a faz.lua file, so
         // update the environment to make it simpler to understand this
         // state.
-        std::env::remove_var("KAKU_CONFIG_FILE");
-        std::env::remove_var("KAKU_CONFIG_DIR");
+        std::env::remove_var("FAZ_CONFIG_FILE");
+        std::env::remove_var("FAZ_CONFIG_DIR");
 
         match Self::try_default() {
             Err(err) => LoadedConfig {
@@ -1288,9 +1230,9 @@ impl Config {
     }
 
     /// Runtime signature embedded in every cache entry.
-    /// Changing the Kaku version automatically invalidates all cached bytecode,
+    /// Changing the Faz version automatically invalidates all cached bytecode,
     /// preventing cross-version mismatches.
-    const CACHE_SIGNATURE: &'static str = concat!("kaku/", env!("CARGO_PKG_VERSION"), "/lua54");
+    const CACHE_SIGNATURE: &'static str = concat!("faz/", env!("CARGO_PKG_VERSION"), "/lua54");
 
     /// Magic header for the bytecode cache file format.
     const CACHE_MAGIC: &'static [u8; 4] = b"KLBC";
@@ -1414,7 +1356,7 @@ impl Config {
 
         let mut s = String::new();
         file.read_to_string(&mut s)?;
-        let trace = std::env::var_os("KAKU_STARTUP_TRACE").is_some();
+        let trace = std::env::var_os("FAZ_STARTUP_TRACE").is_some();
         let t0 = std::time::Instant::now();
         let lua = make_lua_context(p)?;
         if trace {
@@ -1448,7 +1390,7 @@ impl Config {
                         anyhow::anyhow!(
                             "Config error: You may have forgotten to define the config variable.\n\
                              \n\
-                             In kaku.lua, you need to create the config table first:\n\
+                             In faz.lua, you need to create the config table first:\n\
                              \n\
                              local wezterm = require 'wezterm'\n\
                              local config = {{}}  -- or wezterm.config_builder()\n\
@@ -1521,9 +1463,9 @@ impl Config {
                 }
                 cfg.check_consistency()?;
 
-                std::env::set_var("KAKU_CONFIG_FILE", p);
+                std::env::set_var("FAZ_CONFIG_FILE", p);
                 if let Some(dir) = p.parent() {
-                    std::env::set_var("KAKU_CONFIG_DIR", dir);
+                    std::env::set_var("FAZ_CONFIG_DIR", dir);
                 }
                 Ok(cfg)
             });
@@ -2025,8 +1967,8 @@ impl Config {
 
         if !smart_tab_env_is_explicit(cmd) {
             match self.smart_tab_mode {
-                SmartTabMode::Off => cmd.env(KAKU_SMART_TAB_DISABLE, "1"),
-                SmartTabMode::SuggestionFirst => cmd.env(KAKU_TAB_ACCEPT_SUGGEST_FIRST, "1"),
+                SmartTabMode::Off => cmd.env(FAZ_SMART_TAB_DISABLE, "1"),
+                SmartTabMode::SuggestionFirst => cmd.env(FAZ_TAB_ACCEPT_SUGGEST_FIRST, "1"),
                 SmartTabMode::CompletionFirst => {}
             }
         }
@@ -2043,7 +1985,7 @@ impl Config {
         #[cfg(unix)]
         cmd.umask(umask::UmaskSaver::saved_umask());
         cmd.env("TERM", &self.term);
-        if self.term == "kaku" {
+        if self.term == "faz" {
             if let Some(terminfo_dir) = bundled_terminfo_dir() {
                 if let Some(terminfo_dirs) =
                     merged_terminfo_dirs(std::env::var_os("TERMINFO_DIRS"), &terminfo_dir)
@@ -2055,11 +1997,11 @@ impl Config {
         cmd.env("COLORTERM", "truecolor");
         // TERM_PROGRAM and TERM_PROGRAM_VERSION are an emerging
         // de-facto standard for identifying the terminal.
-        cmd.env("TERM_PROGRAM", "Kaku");
+        cmd.env("TERM_PROGRAM", "Faz");
         cmd.env("TERM_PROGRAM_VERSION", crate::wezterm_version());
         // Sync East Asian Ambiguous width with go-runewidth (used by bubbletea/lipgloss
         // Go TUI programs). Without this, go-runewidth auto-detects CJK locale and treats
-        // ambiguous-width chars as wide=2, while Kaku defaults to narrow=1, causing
+        // ambiguous-width chars as wide=2, while Faz defaults to narrow=1, causing
         // character misalignment and missing text in Go TUI apps.
         cmd.env(
             "RUNEWIDTH_EASTASIAN",
@@ -2083,10 +2025,6 @@ impl Config {
             );
         }
     }
-}
-
-fn default_check_for_updates() -> bool {
-    cfg!(not(feature = "distro-defaults"))
 }
 
 fn default_pane_select_fg_color() -> RgbaColor {
@@ -2210,12 +2148,12 @@ pub fn default_hyperlink_rules() -> Vec<hyperlink::Rule> {
         hyperlink::Rule::new(r"\b\w+@[\w-]+(\.[\w-]+)+\b", "mailto:$0").unwrap(),
         // Bare domains without an explicit scheme: www.-prefixed hosts, and
         // hosts ending in a curated TLD allowlist. These must come before the
-        // file-path rule: on equal-length overlaps (github.com/tw93/kaku) the
+        // file-path rule: on equal-length overlaps (github.com/tw93/Faz) the
         // earlier rule wins, and the web interpretation is the useful one.
         // Emails and scheme'd URLs are longer matches and keep priority.
         // The allowlist deliberately excludes TLDs that collide with common
         // file suffixes (sh, md, rs, py, js, go, cc, so, in, pl, pm, ml, tf,
-        // zip, mov, app) so deploy.sh or dist/Kaku.app never become web
+        // zip, mov, app) so deploy.sh or dist/Faz.app never become web
         // links; .app in particular is wall-to-wall macOS bundle names in a
         // terminal. Lookarounds are ASCII-only so domains adjacent to CJK
         // text stay clickable, and a sentence-final dot stays out of the
@@ -2236,7 +2174,7 @@ pub fn default_hyperlink_rules() -> Vec<hyperlink::Rule> {
         )
         .unwrap(),
         // File paths: support absolute paths, common relative prefixes, and
-        // bare relative paths like `kaku/src/main.rs`.
+        // bare relative paths like `faz-cli/src/main.rs`.
         // Supports file:line and file:line:col formats.
         //
         // The trailing character class is intentionally restricted to ASCII
@@ -2296,25 +2234,23 @@ mod tests {
     fn file_hyperlink_rule_matches_bare_relative_paths() {
         let rules = default_hyperlink_rules();
 
-        assert!(Rule::match_hyperlinks("kaku/src/kaku_theme.rs", &rules)
+        let input = "faz-cli/src/faz_theme.rs";
+        assert!(Rule::match_hyperlinks(input, &rules)
             .into_iter()
-            .any(|m| m.range == (0..22)
-                && m.link == Arc::new(Hyperlink::new_implicit("file://kaku/src/kaku_theme.rs"))));
+            .any(|m| m.range == (0..input.len())
+                && m.link == Arc::new(Hyperlink::new_implicit(format!("file://{input}")))));
     }
 
     #[test]
     fn file_hyperlink_rule_does_not_override_urls() {
         let rules = default_hyperlink_rules();
 
+        let input = "https://example.com/faz-cli/src/faz_theme.rs";
         assert_eq!(
-            Rule::match_hyperlinks("https://example.com/kaku/src/kaku_theme.rs", &rules)
-                .into_iter()
-                .next(),
+            Rule::match_hyperlinks(input, &rules).into_iter().next(),
             Some(RuleMatch {
-                range: 0..42,
-                link: Arc::new(Hyperlink::new_implicit(
-                    "https://example.com/kaku/src/kaku_theme.rs",
-                )),
+                range: 0..input.len(),
+                link: Arc::new(Hyperlink::new_implicit(input)),
             })
         );
     }
@@ -2435,18 +2371,18 @@ mod tests {
                 .map(|m| m.link.uri().to_string())
         };
 
-        assert_eq!(uri("visit kaku.fun."), Some("https://kaku.fun".to_string()));
+        assert_eq!(uri("visit faz.fun."), Some("https://faz.fun".to_string()));
         assert_eq!(
-            uri("\u{53BB} kaku.fun\u{3002}"),
-            Some("https://kaku.fun".to_string())
+            uri("\u{53BB} faz.fun\u{3002}"),
+            Some("https://faz.fun".to_string())
         );
         assert_eq!(
             uri("www.example.org rocks"),
             Some("https://www.example.org".to_string())
         );
         assert_eq!(
-            uri("released at github.com/tw93/kaku today"),
-            Some("https://github.com/tw93/kaku".to_string())
+            uri("released at github.com/tw93/Faz today"),
+            Some("https://github.com/tw93/Faz".to_string())
         );
         assert_eq!(
             uri("dev server on demo.example.com:8080/index"),
@@ -2460,11 +2396,11 @@ mod tests {
         // Both the bare-domain rule and the file-path rule match this whole
         // span. After the length sort the earlier rule comes first, and the
         // first match is the one whose link wins when applied to cells.
-        let first = Rule::match_hyperlinks("github.com/tw93/kaku", &rules)
+        let first = Rule::match_hyperlinks("github.com/tw93/Faz", &rules)
             .into_iter()
             .next()
             .unwrap();
-        assert_eq!(first.link.uri(), "https://github.com/tw93/kaku");
+        assert_eq!(first.link.uri(), "https://github.com/tw93/Faz");
     }
 
     #[test]
@@ -2476,8 +2412,8 @@ mod tests {
             "building main.rs",
             "loaded libfoo.so",
             "regenerated Makefile.in",
-            "open dist/Kaku.app",
-            "plain Kaku.app name",
+            "open dist/Faz.app",
+            "plain Faz.app name",
             // Method calls and namespace identifiers, not domains.
             "tensor model.to(device) done",
             "print df.info() output",
@@ -2508,7 +2444,7 @@ mod tests {
     #[test]
     fn deprecated_language_field_still_loads() {
         // V0.11.0 shipped `config.language`; the i18n revert (b4d779a) removed
-        // the field. It must remain a tolerated deprecated field so a kaku.lua
+        // the field. It must remain a tolerated deprecated field so a faz.lua
         // carrying `config.language` still loads on upgrade with a warning
         // instead of failing config validation with a hard error.
         use std::collections::BTreeMap;
@@ -2541,7 +2477,7 @@ mod tests {
 
         let options = FromDynamicOptions::default();
 
-        // snake_case variants (written by kaku config TUI)
+        // snake_case variants (written by faz config TUI)
         let val = Value::String("completion_first".into());
         assert_eq!(
             super::SmartTabMode::from_dynamic(&val, options).unwrap(),
@@ -2689,8 +2625,8 @@ mod tests {
 
     fn smart_tab_test_command() -> portable_pty::CommandBuilder {
         let mut cmd = portable_pty::CommandBuilder::new_default_prog();
-        cmd.env_remove(super::KAKU_SMART_TAB_DISABLE);
-        cmd.env_remove(super::KAKU_TAB_ACCEPT_SUGGEST_FIRST);
+        cmd.env_remove(super::FAZ_SMART_TAB_DISABLE);
+        cmd.env_remove(super::FAZ_TAB_ACCEPT_SUGGEST_FIRST);
         cmd
     }
 
@@ -2703,14 +2639,14 @@ mod tests {
         config.apply_cmd_defaults(&mut cmd, None, None);
 
         assert_eq!(
-            cmd.get_env("KAKU_SMART_TAB_DISABLE"),
+            cmd.get_env("FAZ_SMART_TAB_DISABLE"),
             Some(std::ffi::OsStr::new("1")),
-            "SmartTabMode::Off must set KAKU_SMART_TAB_DISABLE=1"
+            "SmartTabMode::Off must set FAZ_SMART_TAB_DISABLE=1"
         );
         assert_eq!(
-            cmd.get_env("KAKU_TAB_ACCEPT_SUGGEST_FIRST"),
+            cmd.get_env("FAZ_TAB_ACCEPT_SUGGEST_FIRST"),
             None,
-            "SmartTabMode::Off must not set KAKU_TAB_ACCEPT_SUGGEST_FIRST"
+            "SmartTabMode::Off must not set FAZ_TAB_ACCEPT_SUGGEST_FIRST"
         );
     }
 
@@ -2723,14 +2659,14 @@ mod tests {
         config.apply_cmd_defaults(&mut cmd, None, None);
 
         assert_eq!(
-            cmd.get_env("KAKU_TAB_ACCEPT_SUGGEST_FIRST"),
+            cmd.get_env("FAZ_TAB_ACCEPT_SUGGEST_FIRST"),
             Some(std::ffi::OsStr::new("1")),
-            "SmartTabMode::SuggestionFirst must set KAKU_TAB_ACCEPT_SUGGEST_FIRST=1"
+            "SmartTabMode::SuggestionFirst must set FAZ_TAB_ACCEPT_SUGGEST_FIRST=1"
         );
         assert_eq!(
-            cmd.get_env("KAKU_SMART_TAB_DISABLE"),
+            cmd.get_env("FAZ_SMART_TAB_DISABLE"),
             None,
-            "SmartTabMode::SuggestionFirst must not set KAKU_SMART_TAB_DISABLE"
+            "SmartTabMode::SuggestionFirst must not set FAZ_SMART_TAB_DISABLE"
         );
     }
 
@@ -2743,14 +2679,14 @@ mod tests {
         config.apply_cmd_defaults(&mut cmd, None, None);
 
         assert_eq!(
-            cmd.get_env("KAKU_SMART_TAB_DISABLE"),
+            cmd.get_env("FAZ_SMART_TAB_DISABLE"),
             None,
-            "SmartTabMode::CompletionFirst must not set KAKU_SMART_TAB_DISABLE"
+            "SmartTabMode::CompletionFirst must not set FAZ_SMART_TAB_DISABLE"
         );
         assert_eq!(
-            cmd.get_env("KAKU_TAB_ACCEPT_SUGGEST_FIRST"),
+            cmd.get_env("FAZ_TAB_ACCEPT_SUGGEST_FIRST"),
             None,
-            "SmartTabMode::CompletionFirst must not set KAKU_TAB_ACCEPT_SUGGEST_FIRST"
+            "SmartTabMode::CompletionFirst must not set FAZ_TAB_ACCEPT_SUGGEST_FIRST"
         );
     }
 
@@ -2760,14 +2696,14 @@ mod tests {
         config.smart_tab_mode = super::SmartTabMode::SuggestionFirst;
 
         let mut cmd = smart_tab_test_command();
-        cmd.env(super::KAKU_SMART_TAB_DISABLE, "1");
+        cmd.env(super::FAZ_SMART_TAB_DISABLE, "1");
         config.apply_cmd_defaults(&mut cmd, None, None);
 
         assert_eq!(
-            cmd.get_env(super::KAKU_SMART_TAB_DISABLE),
+            cmd.get_env(super::FAZ_SMART_TAB_DISABLE),
             Some(std::ffi::OsStr::new("1"))
         );
-        assert_eq!(cmd.get_env(super::KAKU_TAB_ACCEPT_SUGGEST_FIRST), None);
+        assert_eq!(cmd.get_env(super::FAZ_TAB_ACCEPT_SUGGEST_FIRST), None);
     }
 
     #[test]
@@ -2776,12 +2712,12 @@ mod tests {
         config.smart_tab_mode = super::SmartTabMode::Off;
 
         let mut cmd = smart_tab_test_command();
-        cmd.env(super::KAKU_TAB_ACCEPT_SUGGEST_FIRST, "1");
+        cmd.env(super::FAZ_TAB_ACCEPT_SUGGEST_FIRST, "1");
         config.apply_cmd_defaults(&mut cmd, None, None);
 
-        assert_eq!(cmd.get_env(super::KAKU_SMART_TAB_DISABLE), None);
+        assert_eq!(cmd.get_env(super::FAZ_SMART_TAB_DISABLE), None);
         assert_eq!(
-            cmd.get_env(super::KAKU_TAB_ACCEPT_SUGGEST_FIRST),
+            cmd.get_env(super::FAZ_TAB_ACCEPT_SUGGEST_FIRST),
             Some(std::ffi::OsStr::new("1"))
         );
     }
@@ -2790,7 +2726,7 @@ mod tests {
     fn colorfgbg_matches_final_resolved_palette() {
         // (background rgb, expected COLORFGBG, stale value pre-seeded via
         // set_environment_variables that the palette must override — mirrors
-        // the bundled kaku.lua line that hard-codes COLORFGBG from the scheme
+        // the bundled faz.lua line that hard-codes COLORFGBG from the scheme
         // name and may disagree with the final resolved background.)
         let cases = [
             ((232, 240, 232), "0;15", "15;0"),
@@ -2819,7 +2755,7 @@ mod tests {
 }
 
 fn default_term() -> String {
-    // WezTerm sets `wezterm` here, but `kaku` causes SSH issues since its
+    // WezTerm sets `wezterm` here, but `faz` causes SSH issues since its
     // terminfo doesn't exist on remote servers. So we default to `xterm-256color`.
     "xterm-256color".into()
 }
@@ -2859,26 +2795,26 @@ fn default_font_size() -> f64 {
 
 pub(crate) fn compute_cache_dir() -> anyhow::Result<PathBuf> {
     if let Some(runtime) = dirs_next::cache_dir() {
-        return Ok(runtime.join("kaku"));
+        return Ok(runtime.join("faz"));
     }
 
-    Ok(crate::HOME_DIR.join(".local/share/kaku"))
+    Ok(crate::HOME_DIR.join(".local/share/faz"))
 }
 
 pub(crate) fn compute_data_dir() -> anyhow::Result<PathBuf> {
     if let Some(runtime) = dirs_next::data_dir() {
-        return Ok(runtime.join("kaku"));
+        return Ok(runtime.join("faz"));
     }
 
-    Ok(crate::HOME_DIR.join(".local/share/kaku"))
+    Ok(crate::HOME_DIR.join(".local/share/faz"))
 }
 
 pub(crate) fn compute_runtime_dir() -> anyhow::Result<PathBuf> {
     if let Some(runtime) = dirs_next::runtime_dir() {
-        return Ok(runtime.join("kaku"));
+        return Ok(runtime.join("faz"));
     }
 
-    Ok(crate::HOME_DIR.join(".local/share/kaku"))
+    Ok(crate::HOME_DIR.join(".local/share/faz"))
 }
 
 pub fn pki_dir() -> anyhow::Result<PathBuf> {
@@ -3007,10 +2943,6 @@ fn default_tab_max_width() -> usize {
     16
 }
 
-fn default_update_interval() -> u64 {
-    10800
-}
-
 fn default_prefer_egl() -> bool {
     // MetalANGLE via EGL is the preferred path on macOS in general, but
     // older Intel Macs can abort during startup inside the bundled ANGLE
@@ -3119,12 +3051,12 @@ pub enum VerticalWindowContentAlignment {
 pub enum SelectionWheelScrollBehavior {
     /// Scroll the viewport and stretch the selection so its endpoint tracks
     /// the cursor under the new viewport. This is the macOS `NSTextView`
-    /// idiom and the new Kaku default.
+    /// idiom and the new Faz default.
     #[default]
     Extend,
     /// Scroll the viewport but do not update the selection endpoint.
     ScrollOnly,
-    /// Drop the wheel event. Equivalent to Kaku v0.10 and earlier behavior.
+    /// Drop the wheel event. Equivalent to Faz v0.10 and earlier behavior.
     Ignore,
 }
 
@@ -3334,15 +3266,15 @@ impl FromDynamic for BoldBrightening {
     }
 }
 
-const KAKU_SMART_TAB_DISABLE: &str = "KAKU_SMART_TAB_DISABLE";
-const KAKU_TAB_ACCEPT_SUGGEST_FIRST: &str = "KAKU_TAB_ACCEPT_SUGGEST_FIRST";
+const FAZ_SMART_TAB_DISABLE: &str = "FAZ_SMART_TAB_DISABLE";
+const FAZ_TAB_ACCEPT_SUGGEST_FIRST: &str = "FAZ_TAB_ACCEPT_SUGGEST_FIRST";
 
 fn smart_tab_env_is_explicit(cmd: &CommandBuilder) -> bool {
-    cmd.get_env(KAKU_SMART_TAB_DISABLE).is_some()
-        || cmd.get_env(KAKU_TAB_ACCEPT_SUGGEST_FIRST).is_some()
+    cmd.get_env(FAZ_SMART_TAB_DISABLE).is_some()
+        || cmd.get_env(FAZ_TAB_ACCEPT_SUGGEST_FIRST).is_some()
 }
 
-/// Controls how the Tab key behaves in zsh inside Kaku sessions.
+/// Controls how the Tab key behaves in zsh inside Faz sessions.
 #[derive(Debug, ToDynamic, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SmartTabMode {
     /// Tab shows the completion list; use arrow keys to accept autosuggestions.

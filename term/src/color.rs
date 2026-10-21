@@ -110,6 +110,23 @@ impl ColorPalette {
             }
         }
     }
+
+    /// Resolve a foreground colour for interface chrome rather than for
+    /// terminal output.
+    ///
+    /// Same as [`Self::resolve_fg`] but skips `foreground_color_overrides`.
+    /// Those overrides exist so dark text a *program* prints stays readable on
+    /// a dark background. Chrome is not program output: a tab whose configured
+    /// text colour is `#1a1a1a` on a yellow background should keep that
+    /// colour, not be rewritten to the override's pale value.
+    pub fn resolve_chrome_fg(&self, color: ColorAttribute) -> SrgbaTuple {
+        match color {
+            ColorAttribute::Default => self.foreground,
+            ColorAttribute::PaletteIndex(idx) => self.colors.0[idx as usize],
+            ColorAttribute::TrueColorWithPaletteFallback(color, _)
+            | ColorAttribute::TrueColorWithDefaultFallback(color) => color,
+        }
+    }
     pub fn resolve_bg(&self, color: ColorAttribute) -> SrgbaTuple {
         match color {
             ColorAttribute::Default => self.background,
@@ -120,6 +137,19 @@ impl ColorPalette {
             | ColorAttribute::TrueColorWithDefaultFallback(color) => {
                 Self::apply_override(&self.color_overrides, color)
             }
+        }
+    }
+
+    /// Resolve a background colour for interface chrome.
+    ///
+    /// Companion to [`Self::resolve_chrome_fg`]: skips `color_overrides` so a
+    /// configured tab background keeps exactly the colour that was written.
+    pub fn resolve_chrome_bg(&self, color: ColorAttribute) -> SrgbaTuple {
+        match color {
+            ColorAttribute::Default => self.background,
+            ColorAttribute::PaletteIndex(idx) => self.colors.0[idx as usize],
+            ColorAttribute::TrueColorWithPaletteFallback(color, _)
+            | ColorAttribute::TrueColorWithDefaultFallback(color) => color,
         }
     }
 }

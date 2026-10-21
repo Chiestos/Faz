@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/check_startup_budget.sh
 #
-# Read a JSON report from scripts/measure_startup_kaku.sh and check the
+# Read a JSON report from scripts/measure_startup_faz.sh and check the
 # numbers against the budget defined in scripts/startup_budget.toml. Exit 1 if
 # any measurement exceeds budget; exit 0 if within budget; exit 2 if input
 # is malformed.
@@ -14,7 +14,7 @@
 #   cold_start_budget_ms = <number>
 #   warm_start_budget_ms = <number>
 #
-# Budgets are derived from the hyperfine *mean* (see measure_startup_kaku.sh),
+# Budgets are derived from the hyperfine *mean* (see measure_startup_faz.sh),
 # not a P95. This is a local-only helper; the CI gate is intentionally not
 # wired up yet (no committed baseline).
 
@@ -49,7 +49,7 @@ if [[ ! "$cold_max" =~ ^[0-9]+$ || ! "$warm_max" =~ ^[0-9]+$ ]]; then
 fi
 
 if [[ "$cold_max" =~ ^0+$ && "$warm_max" =~ ^0+$ ]]; then
-  echo "WARN: budget is 0 (placeholder). Run scripts/measure_startup_kaku.sh"
+  echo "WARN: budget is 0 (placeholder). Run scripts/measure_startup_faz.sh"
   echo "      locally over ~10 runs, take the reported mean, multiply by 1.5,"
   echo "      and write the result into $budget_file before turning this gate hard."
   exit 0

@@ -1,6 +1,6 @@
 # Config Agent Guide
 
-The `config` crate owns config loading, Lua integration, schema behavior, proxy settings, versioned defaults, and AI configuration.
+The `config` crate owns config loading, Lua integration, schema behavior, proxy settings, and versioned defaults.
 
 ## Scope
 
@@ -9,7 +9,7 @@ The `config` crate owns config loading, Lua integration, schema behavior, proxy 
 - Lua execution and binding lifecycle
 - schema mapping between Lua and Rust
 - config subscriptions and reload behavior
-- AI model, fast-model, and proxy settings consumed by GUI and CLI flows
+- proxy settings consumed by the update paths and network-facing flows
 - versioned default config and release readiness checks
 
 ## Where to Look
@@ -17,50 +17,41 @@ The `config` crate owns config loading, Lua integration, schema behavior, proxy 
 - `config/src/config.rs`: load/parse flow
 - `config/src/lib.rs`: config API and subscriptions
 - `config/src/proxy.rs`: proxy configuration used by AI and network-facing flows
-- `config/src/version.rs`: app version and target-triple accessors (`wezterm_version()`), not `config_version`; that number lives only in `assets/shell-integration/config_version.txt`, read by `kaku/src/init.rs` and the bundled `kaku.lua`
-- `assets/macos/Kaku.app/Contents/Resources/kaku.lua`: bundled fallback config
+- `config/src/version.rs`: build version and target triple strings
+- `assets/macos/Faz.app/Contents/Resources/faz.lua`: bundled fallback config
 
-## Config TUI (`kaku/src/config_tui/` and `kaku/src/tui_core/`)
+## Config TUI (`faz-cli/src/config_tui/` and `faz-cli/src/tui_core/`)
 
-The config TUI is the interactive terminal UI for editing Kaku config. It lives in the `kaku` CLI crate, not the `config` crate.
+The config TUI is the interactive terminal UI for editing Faz config. It lives in the `faz-cli` crate, not the `config` crate.
 
-- `kaku/src/config_tui/` - TUI app: `mod.rs` (form state and main loop), `ui.rs` (rendering)
-- `kaku/src/tui_core/` - shared TUI primitives, currently `theme.rs` only (`accent`, `bg`, `muted`, `panel`, `primary`, `red`, `success`, `text_fg`)
-- `tui_core::theme` is consumed by `config_tui/ui.rs`, `ai_config/tui/ui.rs`, and `tui_splash.rs`. New primitives shared by more than one TUI flow belong in `tui_core`, not copied per feature.
-
-## AI Config TUI (`kaku/src/ai_config/`)
-
-The AI config TUI lives in the `kaku` CLI crate and shares terminal UI primitives with `config_tui`.
-
-- Keep `fast_model`, primary model, and proxy settings aligned between CLI config, GUI AI chat, and documentation.
-- Do not duplicate form widgets or debounce behavior outside `kaku/src/tui_core/`.
-- Verify AI config changes against both config parsing and the visible TUI flow.
+- `faz-cli/src/config_tui/` - TUI app: `mod.rs` (form state and main loop), `ui.rs` (rendering)
+- `faz-cli/src/tui_core/` - shared TUI primitives, currently `theme.rs` only (`accent`, `bg`, `muted`, `panel`, `primary`, `red`, `success`, `text_fg`)
+- `tui_core::theme` is consumed by `config_tui/ui.rs` and `tui_splash.rs`. New primitives shared by more than one TUI flow belong in `tui_core`, not copied per feature.
 
 ## Practical Rules
 
 - Loading priority: user config first, bundled config second.
 - Keep reload-safe behavior for startup hooks and subscriptions.
-- `KAKU_CONFIG_FILE` is an output, not an input. Config loading exports it (`config/src/config.rs`) and `effective_config_file_path()` (`config/src/lib.rs`), the GUI single-instance check (`kaku-gui/src/main.rs`), `assets/shell-integration/setup_{zsh,fish}.sh`, and the bundled `kaku.lua` all read it back. Do not turn it into a config path override; the only supported override is `--config-file` (`CONFIG_FILE_OVERRIDE`).
-- Keep bundled fallback config authoritative at `assets/macos/Kaku.app/Contents/Resources/kaku.lua`.
-- Kaku Dark, Kaku Light, and the Kaku Theme alias must also resolve for standalone user configs that do not load the bundled Lua defaults. Their `src/scheme_data.rs` mirrors are checked against every bundled palette field by `builtin_kaku_scheme_mirrors_match_complete_bundled_palettes`; synchronize both when changing a Kaku palette.
+- Avoid introducing config paths that bypass existing precedence rules.
+- `FAZ_CONFIG_FILE` is an output, not an input. Config loading exports it (`config/src/config.rs`) and `effective_config_file_path()` (`config/src/lib.rs`), the GUI single-instance check (`faz-gui/src/main.rs`), `assets/shell-integration/setup_{zsh,fish}.sh`, and the bundled `faz.lua` all read it back. Do not turn it into a config path override; the only supported override is `--config-file` (`CONFIG_FILE_OVERRIDE`).
+- Keep bundled fallback config authoritative at `assets/macos/Faz.app/Contents/Resources/faz.lua`.
+- Faz Dark, Faz Light, and the Faz Theme alias must also resolve for standalone user configs that do not load the bundled Lua defaults. Their `src/scheme_data.rs` mirrors are checked against every bundled palette field by `builtin_faz_scheme_mirrors_match_complete_bundled_palettes`; synchronize both when changing a Faz palette.
 - Preserve compatibility with runtime reload callers that trigger `config::reload()` from GUI-side signals.
-- The current `config_version` is whatever `assets/shell-integration/config_version.txt` says; never trust a number written in a doc. Any version bump must update bundled config, release checks, docs, and migration expectations together, and add a row to `docs/config-versions.md`.
+- The current `config_version` is whatever `assets/shell-integration/config_version.txt` says; never trust a number written in a doc (this line once said 24 while the release was at 26). Any version bump must update bundled config, release checks, and docs together, and add a row to `docs/config-versions.md`. Removed keys are tolerated as `deprecated` fields, never migrated: there is no historical config migration.
 - New config fields are user-facing behavior. Keep them out of pure cleanup/refactor patches unless the maintainer explicitly approved the product change, and update bundled defaults plus documentation in the same change when they do land.
 - Keep alternate-screen wheel scroll behavior configurable; terminal and GUI defaults must not diverge.
 
-## Bundled kaku.lua Pitfalls
+## Bundled faz.lua Pitfalls
 
 - **200-locals hard limit.** LuaJIT caps a chunk at 200 local variables, and the top-level
-  chunk of `assets/macos/Kaku.app/Contents/Resources/kaku.lua` is already at capacity.
+  chunk of `assets/macos/Faz.app/Contents/Resources/faz.lua` is already at capacity.
   Adding one more top-level `local` makes the whole config fail to load at startup. New
   helper functions and values must be nested inside existing functions or tables. After any
   edit, verify the file still loads:
 
   ```bash
-  luajit -e "assert(loadfile('assets/macos/Kaku.app/Contents/Resources/kaku.lua'))"
+  luajit -e "assert(loadfile('assets/macos/Faz.app/Contents/Resources/faz.lua'))"
   ```
-
-  `scripts/check_kaku_lua_loads.sh <path>` wraps the same check and doubles as a PostToolUse hook for edits to this file.
 
 - **PaneInformation is fields-only.** In title-formatting paths (`format-tab-title`,
   `format-window-title`), the `pane` object is a `PaneInformation` userdata that exposes
@@ -72,6 +63,6 @@ The AI config TUI lives in the `kaku` CLI crate and shares terminal UI primitive
 
 ## Cross-References
 
-- [`kaku-gui/AGENTS.md`](../kaku-gui/AGENTS.md) - GUI config consumers and reload signals.
+- [`faz-gui/AGENTS.md`](../faz-gui/AGENTS.md) - GUI config consumers and reload signals.
 - [`lua-api-crates/AGENTS.md`](../lua-api-crates/AGENTS.md) - Lua APIs that expose config values.
 - [`mux/AGENTS.md`](../mux/AGENTS.md) - Alert propagation for config changes.

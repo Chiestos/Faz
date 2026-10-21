@@ -542,8 +542,8 @@ pub fn user_config_path() -> PathBuf {
     CONFIG_DIRS
         .first()
         .cloned()
-        .unwrap_or_else(|| HOME_DIR.join(".config").join("kaku"))
-        .join("kaku.lua")
+        .unwrap_or_else(|| HOME_DIR.join(".config").join("faz"))
+        .join("faz.lua")
 }
 
 fn effective_config_file_path_from(
@@ -564,13 +564,13 @@ fn effective_config_file_path_from(
 ///
 /// Priority:
 /// 1) explicit `--config-file` override
-/// 2) path of the loaded config (`KAKU_CONFIG_FILE`)
+/// 2) path of the loaded config (`FAZ_CONFIG_FILE`)
 /// 3) default user config path
 pub fn effective_config_file_path() -> PathBuf {
     let config_file_override = CONFIG_FILE_OVERRIDE.lock().unwrap().clone();
     effective_config_file_path_from(
         config_file_override,
-        std::env::var_os("KAKU_CONFIG_FILE"),
+        std::env::var_os("FAZ_CONFIG_FILE"),
         user_config_path(),
     )
 }
@@ -705,21 +705,21 @@ fn minimal_user_config_template() -> &'static str {
 
 local function resolve_bundled_config()
   local resource_dir = wezterm.executable_dir:gsub('MacOS/?$', 'Resources')
-  local bundled = resource_dir .. '/kaku.lua'
+  local bundled = resource_dir .. '/faz.lua'
   local f = io.open(bundled, 'r')
   if f then
     f:close()
     return bundled
   end
 
-  local dev_bundled = wezterm.executable_dir .. '/../../assets/macos/Kaku.app/Contents/Resources/kaku.lua'
+  local dev_bundled = wezterm.executable_dir .. '/../../assets/macos/Faz.app/Contents/Resources/faz.lua'
   f = io.open(dev_bundled, 'r')
   if f then
     f:close()
     return dev_bundled
   end
 
-  local app_bundled = '/Applications/Kaku.app/Contents/Resources/kaku.lua'
+  local app_bundled = '/Applications/Faz.app/Contents/Resources/faz.lua'
   f = io.open(app_bundled, 'r')
   if f then
     f:close()
@@ -727,7 +727,7 @@ local function resolve_bundled_config()
   end
 
   local home = os.getenv('HOME') or ''
-  local home_bundled = home .. '/Applications/Kaku.app/Contents/Resources/kaku.lua'
+  local home_bundled = home .. '/Applications/Faz.app/Contents/Resources/faz.lua'
   f = io.open(home_bundled, 'r')
   if f then
     f:close()
@@ -745,21 +745,21 @@ if bundled then
   if ok and type(loaded) == 'table' then
     config = loaded
   else
-    wezterm.log_error('Kaku: failed to load bundled defaults from ' .. bundled)
+    wezterm.log_error('Faz: failed to load bundled defaults from ' .. bundled)
   end
 else
-  wezterm.log_error('Kaku: bundled defaults not found')
+  wezterm.log_error('Faz: bundled defaults not found')
 end
 
--- Kaku follows macOS appearance by default. Uncomment one line to force a theme:
--- config.color_scheme = 'Kaku Dark'
--- config.color_scheme = 'Kaku Light'
+-- Faz follows macOS appearance by default. Uncomment one line to force a theme:
+-- config.color_scheme = 'Faz Dark'
+-- config.color_scheme = 'Faz Light'
 
 -- User overrides:
--- Kaku intentionally keeps WezTerm-compatible Lua API names
+-- Faz intentionally keeps WezTerm-compatible Lua API names
 -- for maximum compatibility, so `wezterm.*` here is expected.
 -- Full API docs: https://wezfurlong.org/wezterm/config/lua/
--- Kaku options:  https://github.com/tw93/Kaku/blob/main/docs/configuration.md
+-- Faz options:  https://github.com/tw93/Faz/blob/main/docs/configuration.md
 --
 -- Changes apply automatically when you save this file.
 -- Every example below differs from the default, so uncommenting it takes effect.
@@ -810,7 +810,7 @@ end
 --
 -- 11) Split pane
 -- config.split_pane_gap = 6                          -- default 2
--- config.inactive_pane_hsb = { hue = 0.95, saturation = 1.0, brightness = 0.9 }
+-- config.inactive_pane_hsb = { saturation = 1.0, brightness = 0.9 }
 --
 -- 12) Fullscreen (set false if you use yabai/AeroSpace tiling)
 -- config.native_macos_fullscreen_mode = false
@@ -822,8 +822,6 @@ end
 --   action = wezterm.action.ClearScrollback('ScrollbackAndViewport'),
 -- })
 --
--- AI assistant settings (provider, model, API key) live in
--- ~/.config/kaku/assistant.toml, not in this file.
 
 return config
 "#
@@ -835,7 +833,7 @@ fn xdg_config_home_from(home_dir: &Path, xdg_config_home: Option<OsString>) -> P
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| home_dir.join(".config"))
-        .join("kaku")
+        .join("faz")
 }
 
 fn config_dirs_from(
@@ -851,7 +849,7 @@ fn config_dirs_from(
             std::env::split_paths(&d)
                 // `XDG_CONFIG_DIRS` may contain empty segments (e.g. `::`).
                 .filter(|path| !path.as_os_str().is_empty())
-                .map(|path| path.join("kaku")),
+                .map(|path| path.join("faz")),
         );
     }
 
@@ -870,29 +868,29 @@ fn config_dirs() -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn builtin_kaku_scheme_mirrors_match_complete_bundled_palettes() {
-        let source = include_str!("../../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
+    fn builtin_faz_scheme_mirrors_match_complete_bundled_palettes() {
+        let source = include_str!("../../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let constants = source
-            .split_once("local KAKU = {")
-            .expect("Kaku constants")
+            .split_once("local FAZ_PALETTE = {")
+            .expect("Faz constants")
             .1
             .split_once("\n}")
-            .expect("end of Kaku constants")
+            .expect("end of Faz constants")
             .0;
         let schemes = source
             .split_once("config.color_schemes = config.color_schemes or {}")
-            .expect("Kaku schemes")
+            .expect("Faz schemes")
             .1
-            .split_once("config.color_scheme = resolve_kaku_color_scheme")
-            .expect("end of Kaku schemes")
+            .split_once("config.color_scheme = resolve_faz_color_scheme")
+            .expect("end of Faz schemes")
             .0;
         // Evaluate only palette literals, without startup handlers or user config.
         let lua = mlua::Lua::new();
         let palettes: std::collections::HashMap<String, crate::Palette> = lua.load(format!(
-            "local config = {{ color_schemes = {{}} }}\nlocal KAKU = {{{constants}\n}}\n{schemes}\nreturn config.color_schemes"
+            "local config = {{ color_schemes = {{}} }}\nlocal FAZ_PALETTE = {{{constants}\n}}\n{schemes}\nreturn config.color_schemes"
         )).eval().expect("bundled palette literals");
-        for name in ["Kaku Dark", "Kaku Light", "Kaku Theme"] {
-            let expected = palettes.get(name).expect("bundled Kaku palette");
+        for name in ["Faz Dark", "Faz Light", "Faz Theme"] {
+            let expected = palettes.get(name).expect("bundled Faz palette");
             assert_eq!(
                 crate::ColorSchemeRegistry::new().get(name),
                 Some(expected.clone()),
@@ -902,15 +900,15 @@ mod tests {
     }
 
     #[test]
-    fn builtin_kaku_schemes_work_without_loading_bundled_defaults() {
+    fn builtin_faz_schemes_work_without_loading_bundled_defaults() {
         for (name, background) in [
-            ("Kaku Dark", (0x15, 0x14, 0x1b)),
-            ("Kaku Light", (0xff, 0xfc, 0xf0)),
-            ("Kaku Theme", (0x15, 0x14, 0x1b)),
+            ("Faz Dark", (0x15, 0x14, 0x1b)),
+            ("Faz Light", (0xff, 0xfc, 0xf0)),
+            ("Faz Theme", (0x15, 0x14, 0x1b)),
         ] {
             let mut config = crate::Config::default();
             config.color_scheme = Some(name.to_string());
-            let palette = config.resolve_color_scheme().expect("built-in Kaku scheme");
+            let palette = config.resolve_color_scheme().expect("built-in Faz scheme");
             assert_eq!(palette.background, Some(background.into()));
             assert_eq!(
                 config
@@ -919,7 +917,7 @@ mod tests {
                     .background,
                 Some(background.into())
             );
-            if name != "Kaku Theme" {
+            if name != "Faz Theme" {
                 assert!(crate::ColorSchemeRegistry::available_schemes().contains(&name));
             }
             assert_eq!(crate::build_default_schemes().get(name), Some(&palette));
@@ -927,16 +925,16 @@ mod tests {
     }
 
     #[test]
-    fn user_kaku_scheme_definition_takes_priority_over_builtin() {
+    fn user_faz_scheme_definition_takes_priority_over_builtin() {
         let mut config = crate::Config::default();
-        config.color_scheme = Some("Kaku Light".to_string());
+        config.color_scheme = Some("Faz Light".to_string());
         let palette = crate::Palette {
             background: Some((0x12, 0x34, 0x56).into()),
             ..Default::default()
         };
         config
             .color_schemes
-            .insert("Kaku Light".into(), palette.clone());
+            .insert("Faz Light".into(), palette.clone());
         assert_eq!(config.resolve_color_scheme(), Some(palette));
     }
 
@@ -944,29 +942,29 @@ mod tests {
 
     #[test]
     fn empty_xdg_config_home_uses_default_home_config_dir() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let path = xdg_config_home_from(&home, Some(OsString::new()));
-        assert_eq!(path, home.join(".config").join("kaku"));
+        assert_eq!(path, home.join(".config").join("faz"));
     }
 
     #[test]
     fn missing_xdg_config_home_uses_default_home_config_dir() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let path = xdg_config_home_from(&home, None);
-        assert_eq!(path, home.join(".config").join("kaku"));
+        assert_eq!(path, home.join(".config").join("faz"));
     }
 
     #[test]
     fn valid_xdg_config_home_is_used() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let path = xdg_config_home_from(&home, Some(OsString::from("/custom/config")));
-        assert_eq!(path, PathBuf::from("/custom/config").join("kaku"));
+        assert_eq!(path, PathBuf::from("/custom/config").join("faz"));
     }
 
     #[cfg(unix)]
     #[test]
     fn empty_xdg_config_dirs_entries_are_ignored() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let dirs = config_dirs_from(
             &home,
             Some(OsString::new()),
@@ -975,9 +973,9 @@ mod tests {
         assert_eq!(
             dirs,
             vec![
-                home.join(".config").join("kaku"),
-                PathBuf::from("/etc/xdg").join("kaku"),
-                PathBuf::from("/usr/local/etc/xdg").join("kaku"),
+                home.join(".config").join("faz"),
+                PathBuf::from("/etc/xdg").join("faz"),
+                PathBuf::from("/usr/local/etc/xdg").join("faz"),
             ]
         );
     }
@@ -985,60 +983,60 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn missing_xdg_config_dirs_returns_primary_only() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let dirs = config_dirs_from(&home, Some(OsString::from("/custom/config")), None);
-        assert_eq!(dirs, vec![PathBuf::from("/custom/config").join("kaku")]);
+        assert_eq!(dirs, vec![PathBuf::from("/custom/config").join("faz")]);
     }
 
     #[cfg(unix)]
     #[test]
     fn empty_xdg_config_dirs_returns_primary_only() {
-        let home = PathBuf::from("/tmp/kaku-home");
+        let home = PathBuf::from("/tmp/faz-home");
         let dirs = config_dirs_from(
             &home,
             Some(OsString::from("/custom/config")),
             Some(OsString::new()),
         );
-        assert_eq!(dirs, vec![PathBuf::from("/custom/config").join("kaku")]);
+        assert_eq!(dirs, vec![PathBuf::from("/custom/config").join("faz")]);
     }
 
     #[test]
     fn effective_config_file_path_prefers_override() {
         let path = effective_config_file_path_from(
-            Some(PathBuf::from("/override/kaku.lua")),
-            Some(OsString::from("/loaded/kaku.lua")),
-            PathBuf::from("/default/kaku.lua"),
+            Some(PathBuf::from("/override/faz.lua")),
+            Some(OsString::from("/loaded/faz.lua")),
+            PathBuf::from("/default/faz.lua"),
         );
-        assert_eq!(path, PathBuf::from("/override/kaku.lua"));
+        assert_eq!(path, PathBuf::from("/override/faz.lua"));
     }
 
     #[test]
     fn effective_config_file_path_uses_loaded_when_no_override() {
         let path = effective_config_file_path_from(
             None,
-            Some(OsString::from("/loaded/kaku.lua")),
-            PathBuf::from("/default/kaku.lua"),
+            Some(OsString::from("/loaded/faz.lua")),
+            PathBuf::from("/default/faz.lua"),
         );
-        assert_eq!(path, PathBuf::from("/loaded/kaku.lua"));
+        assert_eq!(path, PathBuf::from("/loaded/faz.lua"));
     }
 
     #[test]
     fn effective_config_file_path_falls_back_to_default() {
-        let path = effective_config_file_path_from(None, None, PathBuf::from("/default/kaku.lua"));
-        assert_eq!(path, PathBuf::from("/default/kaku.lua"));
+        let path = effective_config_file_path_from(None, None, PathBuf::from("/default/faz.lua"));
+        assert_eq!(path, PathBuf::from("/default/faz.lua"));
     }
 
     #[test]
-    fn bundled_kaku_lua_defaults_missing_theme_to_appearance() {
+    fn bundled_faz_lua_defaults_missing_theme_to_appearance() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains(
                 "if not scheme or scheme == '' then\n    return resolve_appearance_color_scheme()"
             ),
-            "bundled kaku.lua should resolve a missing color_scheme via appearance"
+            "bundled faz.lua should resolve a missing color_scheme via appearance"
         );
     }
 
@@ -1047,49 +1045,37 @@ mod tests {
         let content = minimal_user_config_template();
 
         assert!(
-            content.contains("Kaku follows macOS appearance by default"),
+            content.contains("Faz follows macOS appearance by default"),
             "generated user config should explain the default theme behavior"
         );
         assert!(
-            !content.contains("\nconfig.color_scheme = 'Kaku Dark'\n"),
+            !content.contains("\nconfig.color_scheme = 'Faz Dark'\n"),
             "generated user config must not pin first-run users to dark mode"
         );
         assert!(
-            content.contains("-- config.color_scheme = 'Kaku Dark'")
-                && content.contains("-- config.color_scheme = 'Kaku Light'"),
+            content.contains("-- config.color_scheme = 'Faz Dark'")
+                && content.contains("-- config.color_scheme = 'Faz Light'"),
             "generated user config should still show explicit theme examples"
         );
     }
 
     #[test]
-    fn minimal_user_config_documents_inactive_pane_hue() {
-        let content = minimal_user_config_template();
-
-        assert!(
-            content.contains(
-                "config.inactive_pane_hsb = { hue = 0.95, saturation = 1.0, brightness = 0.9 }"
-            ),
-            "generated user config should expose every inactive-pane HSB component"
-        );
-    }
-
-    #[test]
-    fn bundled_kaku_lua_uses_config_for_remember_last_cwd() {
+    fn bundled_faz_lua_uses_config_for_remember_last_cwd() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("return config.remember_last_cwd ~= false"),
-            "bundled kaku.lua should read remember_last_cwd from the parsed config table"
+            "bundled faz.lua should read remember_last_cwd from the parsed config table"
         );
     }
 
     #[test]
-    fn bundled_kaku_lua_multi_pane_titles_keep_full_segments() {
+    fn bundled_faz_lua_multi_pane_titles_keep_full_segments() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content
@@ -1099,7 +1085,7 @@ mod tests {
                 && content.contains("local w = (#segs - 1) * sep_width")
                 && content
                     .contains("local avail = budget - math.max(0, #segments - 1) * sep_width"),
-            "bundled kaku.lua should keep the multi-pane tab title path"
+            "bundled faz.lua should keep the multi-pane tab title path"
         );
         assert!(
             !content.contains("local w = (#segs - 1) * 3")
@@ -1113,9 +1099,9 @@ mod tests {
     }
 
     #[test]
-    fn bundled_kaku_lua_tab_titles_fit_narrow_width_budgets() -> anyhow::Result<()> {
+    fn bundled_faz_lua_tab_titles_fit_narrow_width_budgets() -> anyhow::Result<()> {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
         let source = std::fs::read_to_string(&bundled)?;
         let lua = crate::lua::make_lua_context(&bundled)?;
         let wezterm: mlua::Table = lua.load("return require 'wezterm'").eval()?;
@@ -1290,40 +1276,40 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_foreground_process_tab_titles_default_to_off() {
+    fn bundled_faz_lua_foreground_process_tab_titles_default_to_off() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("config.tab_title_show_foreground_process = false")
                 && content.contains("tab_title_show_foreground_process == true"),
-            "foreground process tab titles should stay opt-in in bundled kaku.lua"
+            "foreground process tab titles should stay opt-in in bundled faz.lua"
         );
     }
 
     #[test]
-    fn bundled_kaku_lua_maps_claude_versioned_executables() {
+    fn bundled_faz_lua_maps_claude_versioned_executables() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("is_version_like_process_name(name)")
                 && content.contains("lowered:find('/claude/versions/', 1, true)")
                 && content.contains("return 'claude'"),
-            "bundled kaku.lua should title Claude Code versioned executables as claude"
+            "bundled faz.lua should title Claude Code versioned executables as claude"
         );
     }
 
     #[test]
-    fn bundled_kaku_lazygit_dispatch_does_not_require_outer_pane_git_cwd() {
+    fn bundled_faz_lazygit_dispatch_does_not_require_outer_pane_git_cwd() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
         let launch_start = content
             .find("local function launch_lazygit(window, pane)")
-            .expect("bundled kaku.lua should define launch_lazygit");
+            .expect("bundled faz.lua should define launch_lazygit");
         let launch = &content[launch_start..];
         let launch_end = launch
             .find("\nlocal function launch_yazi")
@@ -1335,7 +1321,7 @@ return tab, {{ tab }}, panes, effective_config
             "lazygit dispatch must not reject an outer pane cwd; nested shells own their real PWD"
         );
         assert!(
-            !launch.contains("kaku-toast-lazygit-not-git"),
+            !launch.contains("faz-toast-lazygit-not-git"),
             "lazygit dispatch must let lazygit report non-git directories itself"
         );
         assert!(
@@ -1345,10 +1331,10 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_sets_colorfgbg_from_user_theme_scan() {
+    fn bundled_faz_lua_sets_colorfgbg_from_user_theme_scan() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("local initial_is_light_theme = is_user_light_theme()")
@@ -1360,10 +1346,10 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_closes_fullscreen_last_window_on_cmd_w() {
+    fn bundled_faz_lua_closes_fullscreen_last_window_on_cmd_w() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("local is_full_screen = dims and dims.is_full_screen")
@@ -1373,68 +1359,68 @@ return tab, {{ tab }}, panes, effective_config
     }
 
     #[test]
-    fn bundled_kaku_lua_defaults_close_confirmation_to_smart_prompt() {
+    fn bundled_faz_lua_defaults_close_confirmation_to_smart_prompt() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("config.tab_close_confirmation = 'SmartPrompt'")
                 && content.contains("config.pane_close_confirmation = 'SmartPrompt'")
                 && content.contains("config.window_close_confirmation = 'SmartPrompt'"),
-            "bundled kaku.lua should default tab, pane, and window close confirmation to SmartPrompt"
+            "bundled faz.lua should default tab, pane, and window close confirmation to SmartPrompt"
         );
     }
 
     #[test]
-    fn bundled_kaku_lua_defaults_smart_tab_to_suggestion_first() {
+    fn bundled_faz_lua_defaults_smart_tab_to_suggestion_first() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("config.smart_tab_mode = 'suggestion_first'"),
-            "bundled kaku.lua should default Smart Tab to suggestion-first"
+            "bundled faz.lua should default Smart Tab to suggestion-first"
         );
     }
 
     #[test]
-    fn bundled_kaku_lua_enables_minimum_text_contrast() {
+    fn bundled_faz_lua_enables_minimum_text_contrast() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("config.text_min_contrast_ratio = 3.0"),
-            "bundled kaku.lua should guard against low-contrast terminal text"
+            "bundled faz.lua should guard against low-contrast terminal text"
         );
     }
 
     #[test]
-    fn bundled_kaku_dark_maps_black_foregrounds_to_readable_text() {
+    fn bundled_faz_dark_maps_black_foregrounds_to_readable_text() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("ANSI_BLACK = '#c8c6cc'")
-                && content.contains("[KAKU.ANSI_BLACK] = KAKU.BLACK")
-                && content.contains("['#000000'] = KAKU.WHITE")
-                && content.contains("['#15141b'] = KAKU.WHITE")
-                && content.contains("['#1c1c1c'] = KAKU.WHITE"),
-            "Kaku Dark should render Hermes black foregrounds as readable light text"
+                && content.contains("[FAZ_PALETTE.ANSI_BLACK] = FAZ_PALETTE.BLACK")
+                && content.contains("['#000000'] = FAZ_PALETTE.WHITE")
+                && content.contains("['#15141b'] = FAZ_PALETTE.WHITE")
+                && content.contains("['#1c1c1c'] = FAZ_PALETTE.WHITE"),
+            "Faz Dark should render Hermes black foregrounds as readable light text"
         );
     }
 
     #[test]
-    fn bundled_kaku_light_keeps_claude_selection_visibly_blue() {
+    fn bundled_faz_light_keeps_claude_selection_visibly_blue() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/macos/Kaku.app/Contents/Resources/kaku.lua");
-        let content = std::fs::read_to_string(&bundled).expect("read bundled kaku.lua");
+            .join("../assets/macos/Faz.app/Contents/Resources/faz.lua");
+        let content = std::fs::read_to_string(&bundled).expect("read bundled faz.lua");
 
         assert!(
             content.contains("['#205EA6'] = '#C9DDF0'"),
-            "Kaku Light should not flatten Claude Code's blue selected row into the cream background"
+            "Faz Light should not flatten Claude Code's blue selected row into the cream background"
         );
     }
 }
@@ -1757,7 +1743,7 @@ impl ConfigInner {
     }
 
     fn accumulate_watch_paths(lua: &Lua, watch_paths: &mut Vec<PathBuf>) {
-        if let Ok(mlua::Value::Table(tbl)) = lua.named_registry_value("kaku-watch-paths") {
+        if let Ok(mlua::Value::Table(tbl)) = lua.named_registry_value("faz-watch-paths") {
             for path in tbl.sequence_values::<String>() {
                 if let Ok(path) = path {
                     watch_paths.push(PathBuf::from(path));

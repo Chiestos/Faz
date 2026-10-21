@@ -2,14 +2,14 @@
 
 ## Is there a Windows or Linux version?
 
-Not currently. Kaku is macOS-only while the macOS experience is being polished. Windows and Linux may come later.
+Not currently. Faz is macOS-only while the macOS experience is being polished. Windows and Linux may come later.
 
 ## Can I use a transparent window?
 
-Yes. Add to `~/.config/kaku/kaku.lua`:
+Yes. Add to `~/.config/faz/faz.lua`:
 
 ```lua
-local config = require("kaku").config
+local config = require("faz").config
 config.window_background_opacity = 0.92
 config.macos_window_background_blur = 20  -- optional blur, 0–100
 return config
@@ -47,55 +47,40 @@ config.split_pane_inherit_working_directory = true
 
 All are enabled by default.
 
-## How do I disable Kaku Assistant?
-
-Run `kaku ai`, open Kaku Assistant settings, and set Enabled to Off. Or edit `~/.config/kaku/assistant.toml` directly:
-
-```toml
-enabled = false
-```
-
-## How do I use a custom LLM provider?
-
-Run `kaku ai`, keep Auth Type set to API key, and enter your Base URL, API Key,
-Simple Model, and Deep Model manually. Choose **API Mode** `chat_completions`
-for `/v1/chat/completions`, or `responses` for `/v1/responses`. If the Responses
-provider supports hosted search, set **Native Web Search** to On; no separate
-search provider or search API key is required.
 
 ## How do I restore default config?
 
 ```bash
-kaku reset
+faz reset
 ```
 
-This removes Kaku-managed shell and tmux integration, Kaku-managed git delta
-defaults, selected Kaku state, and managed theme blocks in
-`~/.config/kaku/kaku.lua`. User-authored Lua outside managed blocks is
-preserved. Run `kaku init` again if you want shell integration back.
+This removes Faz-managed shell and tmux integration, Faz-managed git delta
+defaults, selected Faz state, and managed theme blocks in
+`~/.config/faz/faz.lua`. User-authored Lua outside managed blocks is
+preserved. Run `faz init` again if you want shell integration back.
 
-## The `kaku` command is missing. How do I recover it?
+## The `faz` command is missing. How do I recover it?
 
 ```bash
-/Applications/Kaku.app/Contents/MacOS/kaku init --update-only
+/Applications/Faz.app/Contents/MacOS/faz init --update-only
 exec zsh -l
 ```
 
-Then run `kaku doctor` to verify everything is healthy.
+Then run `faz doctor` to verify everything is healthy.
 
-## How do I use Kaku's CLI from scripts?
+## How do I use Faz's CLI from scripts?
 
 ```bash
-kaku cli split-pane
-kaku cli split-pane -- bash -c "echo hello"
-kaku cli --help
+faz cli split-pane
+faz cli split-pane -- bash -c "echo hello"
+faz cli --help
 ```
 
 See [cli.md](cli.md) for full reference.
 
 ## How do I enable the scrollbar?
 
-Open `kaku config` and toggle the scrollbar option, or add to `~/.config/kaku/kaku.lua`:
+Open `faz config` and toggle the scrollbar option, or add to `~/.config/faz/faz.lua`:
 
 ```lua
 config.enable_scroll_bar = true
@@ -117,7 +102,7 @@ Font changes require explicitly setting `config.font` in your config:
 config.font = wezterm.font('Your Font Name')
 ```
 
-Note: Kaku's theme-aware font weight system only applies to the default JetBrains Mono stack. Once you set a custom font, Kaku will no longer override its weight automatically.
+Note: Faz's theme-aware font weight system only applies to the default JetBrains Mono stack. Once you set a custom font, Faz will no longer override its weight automatically.
 
 ## My `window_padding` change isn't working.
 
@@ -135,37 +120,27 @@ This is a known interaction between trackpad scroll and Claude Code's streaming 
 
 ## Cmd+Shift+Y sends a local path when inside an SSH session.
 
-The yazi remote-files feature (`Cmd+Shift+R`) is designed for SSH sessions and mounts the remote filesystem via sshfs. `Cmd+Shift+Y` is for local yazi. Use `Cmd+Shift+R` when you are inside an SSH pane.
+Yazi (`Cmd+Shift+Y`) opens the file manager for the active pane's directory. Inside an SSH pane it runs the remote `y`, so it browses the remote filesystem directly.
 
-## Kaku's prompt shows up in other terminals, or is missing from them.
+## Faz's prompt shows up in other terminals, or is missing from them.
 
-Kaku's shell integration is loaded by every zsh and fish, but the Starship prompt and Smart Tab only start inside Kaku, including tmux sessions started from Kaku. Other terminals keep whatever prompt you already had.
+Faz's shell integration is loaded by every zsh and fish, but the Starship prompt and Smart Tab only start inside Faz, including tmux sessions started from Faz. Other terminals keep whatever prompt you already had.
 
-If you use Kaku's Starship as your one prompt everywhere, add this before the Kaku line in your `.zshrc` (`set -gx KAKU_PROMPT_EVERYWHERE 1` in `config.fish`):
+If you use Faz's Starship as your one prompt everywhere, add this before the Faz line in your `.zshrc` (`set -gx FAZ_PROMPT_EVERYWHERE 1` in `config.fish`):
 
 ```sh
-export KAKU_PROMPT_EVERYWHERE=1
+export FAZ_PROMPT_EVERYWHERE=1
 ```
 
-Smart Tab stays Kaku-only; `KAKU_SMART_TAB_DISABLE=1` turns it off.
+Smart Tab stays Faz-only; `FAZ_SMART_TAB_DISABLE=1` turns it off.
 
 ## The `y` shell wrapper doesn't sync my directory on exit.
 
-Make sure the Kaku fish/zsh shell integration is sourced. Check with `kaku doctor`. The `y` wrapper requires the shell init to be loaded. A bare `yazi` call will not sync the directory.
-
-## Homebrew can't find the binary / wrong Kaku gets updated.
-
-There is an older unrelated package named `kaku` on Homebrew. Install Kaku with the tap to avoid conflicts:
-
-```bash
-brew install tw93/tap/kakuku
-```
-
-If you see checksum errors with `kaku update`, use `brew upgrade tw93/tap/kakuku` directly.
+Make sure the Faz fish/zsh shell integration is sourced. Check with `faz doctor`. The `y` wrapper requires the shell init to be loaded. A bare `yazi` call will not sync the directory.
 
 ## Claude Code notifications don't appear.
 
-Kaku's notification permission may not be granted. Go to System Settings > Notifications > Kaku and enable Allow Notifications. Then restart Kaku.
+Faz's notification permission may not be granted. Go to System Settings > Notifications > Faz and enable Allow Notifications. Then restart Faz.
 
 ## The global hotkey doesn't work on non-QWERTY keyboards (e.g. Colemak).
 
@@ -181,9 +156,9 @@ table.insert(config.keys, {
 
 ## QR codes and terminal graphics look vertically stretched.
 
-Kaku's default `line_height = 1.28` favors comfortable text spacing. Terminal graphics built from characters, such as QR codes, `neofetch` logos, and TUI bar charts, scale with the row height, so they render about 28% taller than in terminals with no extra line spacing. This is a typography trade-off, not a rendering bug: block characters must fill the whole cell so TUI borders and progress bars stay seamless.
+Faz's default `line_height = 1.28` favors comfortable text spacing. Terminal graphics built from characters, such as QR codes, `neofetch` logos, and TUI bar charts, scale with the row height, so they render about 28% taller than in terminals with no extra line spacing. This is a typography trade-off, not a rendering bug: block characters must fill the whole cell so TUI borders and progress bars stay seamless.
 
-If you want near-square graphics, lower the line height in `~/.config/kaku/kaku.lua`:
+If you want near-square graphics, lower the line height in `~/.config/faz/faz.lua`:
 
 ```lua
 config.line_height = 1.1  -- or 1.0 to match terminals without extra spacing
@@ -191,6 +166,6 @@ config.line_height = 1.1  -- or 1.0 to match terminals without extra spacing
 
 Note that no terminal renders half-block QR codes perfectly square: with common monospace fonts the cell is naturally a bit taller than 2:1 even at `line_height = 1.0`.
 
-## Can I use Kaku with tiling window managers (yabai, AeroSpace)?
+## Can I use Faz with tiling window managers (yabai, AeroSpace)?
 
-Kaku is compatible with yabai and AeroSpace. If you see continuous flickering, it is usually caused by the tiling WM fighting with Kaku's fullscreen/resize logic. Disabling Kaku's native fullscreen (`config.native_macos_fullscreen_mode = false`) or excluding Kaku from the tiling WM's managed window list typically resolves it.
+Faz is compatible with yabai and AeroSpace. If you see continuous flickering, it is usually caused by the tiling WM fighting with Faz's fullscreen/resize logic. Disabling Faz's native fullscreen (`config.native_macos_fullscreen_mode = false`) or excluding Faz from the tiling WM's managed window list typically resolves it.

@@ -40,6 +40,8 @@ All keybindings use macOS-native modifier keys. `Opt` = Option/Alt, `Ctrl` = Con
 | Zoom / unzoom pane | `Cmd + Shift + Enter` |
 | Navigate panes | `Cmd + Opt + Arrows` |
 | Resize pane | `Cmd + Ctrl + Arrows` |
+| Broadcast input to current tab | `Cmd + Opt + I` |
+| Broadcast input to all tabs | `Cmd + Shift + I` |
 
 ## Shell Editing
 
@@ -59,7 +61,7 @@ All keybindings use macOS-native modifier keys. `Opt` = Option/Alt, `Ctrl` = Con
 | Decrease | `Cmd + -` |
 | Reset | `Cmd + 0` |
 
-## Kaku Features
+## Faz Features
 
 | Action | Shortcut |
 | :--- | :--- |
@@ -67,12 +69,10 @@ All keybindings use macOS-native modifier keys. `Opt` = Option/Alt, `Ctrl` = Con
 | Open Settings panel | `Cmd + ,` (type to filter model lists inside the panel) |
 | Open Command Palette | `Cmd + Shift + P` |
 | Open AI panel | `Cmd + Shift + A` |
-| Open AI Chat | `Cmd + L` |
-| Apply Kaku Assistant suggestion | `Cmd + Shift + E` |
+| Apply Faz Assistant suggestion | `Cmd + Shift + E` |
 | Restore previous window snapshot | `Cmd + Opt + Shift + T` |
 | Open lazygit | `Cmd + Shift + G` |
 | Open yazi file manager | `Cmd + Shift + Y` |
-| Browse remote files (SSH) | `Cmd + Shift + R` |
 | Open Doctor panel | `Ctrl + Shift + L` |
 
 > The Command Palette is the quickest way to find built-in commands when you do not remember a shortcut.
@@ -87,10 +87,10 @@ All keybindings use macOS-native modifier keys. `Opt` = Option/Alt, `Ctrl` = Con
 
 ## Custom Keybindings
 
-Add bindings to `~/.config/kaku/kaku.lua` by **appending** to `config.keys`. Do not assign a new table, this would erase Kaku's defaults.
+Add bindings to `~/.config/faz/faz.lua` by **appending** to `config.keys`. Do not assign a new table, this would erase Faz's defaults.
 
 ```lua
--- ~/.config/kaku/kaku.lua (after loading bundled config)
+-- ~/.config/faz/faz.lua (after loading bundled config)
 table.insert(config.keys, {
   key = 'RightArrow',
   mods = 'CMD|SHIFT',
@@ -101,7 +101,7 @@ table.insert(config.keys, {
 table.insert(config.keys, {
   key = 'Space',
   mods = 'CMD|SHIFT',
-  action = wezterm.action.EmitEvent('kaku-ai-chat'),
+  action = wezterm.action.EmitEvent('faz-ai-chat'),
 })
 ```
 

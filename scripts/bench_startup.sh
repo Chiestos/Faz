@@ -15,12 +15,12 @@ fi
 
 # Format: DisplayName:AppNameForOpen:ProcessNameForPgrep
 declare -a TERMINALS=(
-	"Kaku:Kaku:kaku-gui"
+	"Faz:Faz:faz-gui"
 	"Ghostty:Ghostty:ghostty"
 	"Alacritty:Alacritty:alacritty"
 )
 
-BENCH_DIR=$(mktemp -d "${TMPDIR:-/tmp}/kaku-compare.XXXXXX")
+BENCH_DIR=$(mktemp -d "${TMPDIR:-/tmp}/faz-compare.XXXXXX")
 cleanup_run() {
 	local pid
 	if [[ -f "$BENCH_DIR/pid" ]]; then

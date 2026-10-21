@@ -102,6 +102,7 @@ pub mod tmux;
 pub mod tmux_commands;
 mod tmux_pty;
 pub mod window;
+pub mod zmodem;
 
 use crate::activity::Activity;
 
@@ -148,6 +149,18 @@ pub enum MuxNotification {
     WorkspaceRenamed {
         old_workspace: String,
         new_workspace: String,
+    },
+    /// A ZMODEM header appeared in this pane's output, so the remote is asking
+    /// to send or receive a file.
+    ///
+    /// The GUI decides what to do — prompt for a destination, then start a
+    /// transfer — and until it does, the pane's parser holds the bytes rather
+    /// than feeding them to the VT parser. See `zmodem` for the handshake.
+    ZmodemDetected {
+        pane_id: PaneId,
+        /// Whether the remote is sending (we receive) or asking to receive
+        /// (we send), inferred from which header arrived.
+        direction: crate::zmodem::Direction,
     },
 }
 
@@ -338,6 +351,161 @@ fn rescue_user_var_actions(pane_id: PaneId, actions: &[Action]) {
     }
 }
 
+/// Read the fd a pane's output should be diverted to during a ZMODEM transfer.
+///
+/// Kept as a free function so the parser thread's hot path does not need the
+/// concrete pane type; `Pane::zmodem_sink` defaults to `None`.
+fn pane_zmodem_sink(pane: &Weak<dyn Pane>) -> Option<std::os::fd::RawFd> {
+    pane.upgrade().and_then(|p| p.zmodem_sink())
+}
+
+/// Tell the GUI that a ZMODEM header arrived on this pane.
+///
+/// The pane's parser has already stopped feeding these bytes to the VT parser.
+/// The GUI decides what to do next; see the `zmodem` module docs.
+fn notify_zmodem_detected(
+    pane: &Weak<dyn Pane>,
+    pane_id: PaneId,
+    initiator: crate::zmodem::detect::Initiator,
+) {
+    use crate::zmodem::detect::Initiator;
+    let direction = match initiator {
+        // The remote opened with ZRQINIT: it has a file to send, so we receive.
+        Initiator::RemoteSends => crate::zmodem::Direction::Download,
+        // The remote opened with ZRINIT: it is ready to receive from us.
+        Initiator::RemoteReceives => crate::zmodem::Direction::Upload,
+        // A binary first frame, or a frame type we did not get to decode yet.
+        // The GUI still prompts; the user's choice settles the direction.
+        Initiator::Unknown => crate::zmodem::Direction::Download,
+    };
+    if pane.upgrade().is_some() {
+        Mux::notify_from_any_thread(MuxNotification::ZmodemDetected { pane_id, direction });
+    }
+}
+
+/// Is this pane too soon after a finished session to trust a detection?
+fn pane_in_zmodem_cooldown(pane: &Weak<dyn Pane>) -> bool {
+    pane.upgrade()
+        .and_then(|p| p.zmodem_state())
+        .is_some_and(|state| state.in_cooldown())
+}
+
+/// Strip ZMODEM protocol leftovers out of a post-session chunk.
+///
+/// A peer that missed the closing frame keeps retransmitting headers and CAN
+/// bytes for a moment after a session ends. Those look exactly like a new
+/// session, so they must not reach the VT parser — but the same chunk also
+/// carries the shell's prompt redraw and the echo of whatever the user typed
+/// while the transfer was unwinding. Dropping the whole chunk, which is what
+/// this used to do, leaves the screen frozen until the cooldown expires: the
+/// user types into a dead-looking pane and only sees the backlog land several
+/// keystrokes later.
+///
+/// Only the protocol shapes are removed: a `**` + ZDLE header (and the ZHEX
+/// body when present) and runs of CAN. Everything else is real output.
+fn strip_zmodem_residue(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let header = bytes.get(i) == Some(&b'*')
+            && bytes.get(i + 1) == Some(&b'*')
+            && bytes.get(i + 2) == Some(&crate::zmodem::detect::ZDLE);
+        if header {
+            // A ZHEX control frame is `**` ZDLE `B`, a run of hex digits, then
+            // a carriage return and a frame terminator. Skipping the body
+            // matters because those bytes would otherwise render as text: the
+            // digits as a literal string, the terminator as a stray glyph.
+            i += 3;
+            if bytes.get(i) == Some(&b'B') {
+                i += 1;
+                while bytes.get(i).is_some_and(|b| b.is_ascii_hexdigit()) {
+                    i += 1;
+                }
+                // `\r`, then `\n` or `\x8a`, then optionally `\x11`.
+                if bytes.get(i) == Some(&b'\r') {
+                    i += 1;
+                }
+                if matches!(bytes.get(i), Some(b'\n') | Some(0x8a)) {
+                    i += 1;
+                }
+                if bytes.get(i) == Some(&0x11) {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        if bytes[i] == crate::zmodem::detect::ZDLE {
+            // CAN runs: the peer's abort burst, and our own echo of it.
+            i += 1;
+            continue;
+        }
+        // A binary frame header is `*` ZDLE <type>. The payload is not framed
+        // here, so only the 3-byte header can be recognised; that is enough to
+        // stop `*`, ZDLE and the type byte from rendering as glyphs, which is
+        // what a peer that missed the cancel keeps spraying.
+        if bytes[i] == b'*'
+            && bytes.get(i + 1) == Some(&crate::zmodem::detect::ZDLE)
+            && bytes.get(i + 2).is_some_and(|b| {
+                matches!(
+                    b,
+                    b'A' | b'C' | b'D' | b'E' | b'F' | b'G' | b'H' | b'I' | b'J' | b'K'
+                )
+            })
+        {
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    out
+}
+
+/// Is this pane holding a detected session that has no sink yet?
+fn pane_is_buffering_zmodem(pane: &Weak<dyn Pane>) -> bool {
+    pane.upgrade()
+        .and_then(|p| p.zmodem_state())
+        .is_some_and(|state| state.is_buffering())
+}
+
+/// Hold a detected session's opening bytes until a sink exists.
+///
+/// Opens the pane's session slot so later chunks are diverted here too, then
+/// appends what has already arrived. When the buffer overflows the session is
+/// abandoned: the peer has sent more than [`mux::zmodem::state::PENDING_CAPACITY`]
+/// with nobody listening, so the handshake has already failed and holding the
+/// pane in a diverted state would only freeze it.
+fn buffer_detected_zmodem(pane: &Weak<dyn Pane>, bytes: &[u8]) {
+    let Some(pane) = pane.upgrade() else {
+        return;
+    };
+    let Some(state) = pane.zmodem_state() else {
+        return;
+    };
+    state.begin_buffering();
+    if !state.buffer_incoming(bytes) {
+        log::warn!(
+            "zmodem: buffer overflow on pane {}; abandoning the session",
+            pane.pane_id()
+        );
+        state.finish();
+    }
+}
+
+/// Is this read error a transient condition rather than a dead source?
+///
+/// `EAGAIN`/`EWOULDBLOCK` mean "nothing yet", and `EINTR` means a signal
+/// arrived mid-call — the fd is still good. Treating either as fatal kills the
+/// parser thread, and a killed parser resets the pane's output.
+fn is_retryable_read(err: &std::io::Error) -> bool {
+    matches!(
+        err.kind(),
+        std::io::ErrorKind::WouldBlock
+            | std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::TimedOut
+    )
+}
+
 fn parse_buffered_data(
     pane: Weak<dyn Pane>,
     pane_id: PaneId,
@@ -347,6 +515,7 @@ fn parse_buffered_data(
     let mut buf = vec![0; configuration().mux_output_parser_buffer_size];
     let mut parser = termwiz::escape::parser::Parser::new();
     let mut actions = vec![];
+    let mut zmodem = crate::zmodem::Detector::new();
     let mut synchronized_output = SynchronizedOutputState::default();
     let mut action_size = 0;
     let mut delay = Duration::from_millis(configuration().mux_output_parser_coalesce_delay_ms);
@@ -431,12 +600,126 @@ fn parse_buffered_data(
                 dead.store(true, Ordering::Release);
                 break;
             }
+            // A non-blocking read that finds nothing yet is not a dead pane.
+            // Treating it as one tears down the parser thread, and with it the
+            // pane's output: the window resets. The fd can legitimately be in
+            // this state (the zmodem relay leaves the pty non-blocking), so the
+            // condition has to be tolerated rather than diagnosed as failure.
+            Err(err) if is_retryable_read(&err) => continue,
             Err(_) => {
                 dead.store(true, Ordering::Release);
                 break;
             }
             Ok(size) => {
-                parser.parse(&buf[0..size], |action| {
+                // ZMODEM takes priority over normal parsing. Two cases:
+                //
+                // 1. A transfer is already running on this pane: the bytes are
+                //    binary protocol data, so hand them straight to the local
+                //    `sz`/`rz` child and skip the parser entirely. Feeding
+                //    them to the parser would treat payload bytes as terminal
+                //    commands and corrupt the transfer.
+                //
+                // 2. No transfer yet: scan for the header prefix that starts
+                //    one. If found, the bytes from the header on belong to the
+                //    session, so they are diverted rather than parsed.
+                if let Some(sink) = pane_zmodem_sink(&pane) {
+                    let chunk = &buf[..size];
+                    match crate::zmodem::transfer::write_all(sink, chunk) {
+                        Ok(n) => {
+                            if let Some(pane) = pane.upgrade() {
+                                if let Some(state) = pane.zmodem_state() {
+                                    let before = state.peer_bytes_to_child();
+                                    state.note_peer_bytes(n);
+                                    // The first kilobytes of the peer's replies
+                                    // decide whether the child sees a clean
+                                    // handshake or junk; record them verbatim
+                                    // instead of guessing from a byte total.
+                                    if before < 4096 {
+                                        let shown = n.min(96);
+                                        log::info!(
+                                            "zmodem: peer bytes (+{n}) after {before}: {:02x?}",
+                                            &chunk[..shown]
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            // The local child is gone (it was killed, or it
+                            // exited), but the peer may still be streaming:
+                            // `sz` writes its whole window before it notices
+                            // anything. Handing the channel back to the normal
+                            // parser at this point renders those payload bytes
+                            // as terminal output, which is exactly the wall of
+                            // garbage that followed an aborted download.
+                            //
+                            // Keep diverting and dropping instead. The transfer
+                            // thread owns the ending: it reaps the child, sends
+                            // the CAN burst, and calls `zmodem_finish` once the
+                            // relay has stopped. The sink is uninstalled there,
+                            // so this loop cannot outlive the session.
+                            if err.kind() != std::io::ErrorKind::BrokenPipe {
+                                log::warn!(
+                                    "zmodem: diverting pane {pane_id} bytes failed: {err:#}"
+                                );
+                                if let Some(pane) = pane.upgrade() {
+                                    pane.zmodem_finish();
+                                }
+                            }
+                        }
+                    }
+                    continue;
+                }
+                // No sink yet, but a session is open: the destination is still
+                // being chosen. Keep buffering rather than re-scanning, which
+                // would treat protocol bytes as terminal output.
+                if pane_is_buffering_zmodem(&pane) {
+                    buffer_detected_zmodem(&pane, &buf[..size]);
+                    continue;
+                }
+
+                // A peer that missed the closing frame retransmits its header,
+                // which looks exactly like a new session. Strip those bytes
+                // rather than detecting them — but keep the ordinary output
+                // travelling in the same chunk, or the prompt and the user's
+                // echoed keystrokes vanish until the cooldown expires.
+                if pane_in_zmodem_cooldown(&pane) {
+                    let residue = strip_zmodem_residue(&buf[..size]);
+                    if residue.is_empty() {
+                        continue;
+                    }
+                    let chunk = &residue[..];
+                    parser.parse(chunk, |action| {
+                        actions.push(action);
+                    });
+                    if !actions.is_empty() {
+                        send_actions_to_mux(&pane, pane_id, &dead, std::mem::take(&mut actions));
+                        notify_state.maybe_notify(pane_id);
+                    }
+                    continue;
+                }
+
+                let chunk = &buf[..size];
+                let (parse_upto, diverted) = match zmodem.scan(chunk) {
+                    crate::zmodem::ScanResult::NotStarted => (size, false),
+                    crate::zmodem::ScanResult::Started { offset, initiator } => {
+                        // The session's bytes start at `offset`. There is no
+                        // sink yet — the destination has to be chosen first —
+                        // so they are buffered rather than dropped. ZMODEM can
+                        // retransmit, but discarding the opening frames is how
+                        // the handshake fails.
+                        buffer_detected_zmodem(&pane, &chunk[offset..]);
+                        notify_zmodem_detected(&pane, pane_id, initiator);
+                        (offset, true)
+                    }
+                };
+
+                if parse_upto == 0 && diverted {
+                    // The chunk begins with a header: nothing to parse.
+                    continue;
+                }
+                let chunk = &buf[..parse_upto];
+                parser.parse(chunk, |action| {
                     let mut flush = false;
                     match &action {
                         Action::CSI(CSI::Mode(Mode::SetDecPrivateMode(DecPrivateMode::Code(
@@ -662,7 +945,9 @@ fn read_from_pane_pty(
 
     // Poll timeout in milliseconds. Using 200ms as a balance between
     // responsiveness when closing panes and CPU overhead.
-    const POLL_TIMEOUT_MS: u64 = 200;
+    // Short because the pty's read gate is held across this wait: a transfer
+    // that wants the pty waits up to this long for the pane to step aside.
+    const POLL_TIMEOUT_MS: u64 = 50;
 
     // Tracks whether the pty fd became unrecoverable (EBADF/EIO). Used after
     // the loop to force-close the pane instead of obeying exit_behavior, since
@@ -677,7 +962,7 @@ fn read_from_pane_pty(
 
         // On Unix, poll before read to avoid blocking indefinitely.
         // This allows the dead flag check to happen even if no data arrives.
-        // Note: Non-Unix platforms will block on read(); acceptable for macOS-only Kaku.
+        // Note: Non-Unix platforms will block on read(); acceptable for macOS-only Faz.
         #[cfg(unix)]
         if let Some(fd) = reader_fd {
             let mut pfd = [pollfd {
@@ -686,7 +971,7 @@ fn read_from_pane_pty(
                 revents: 0,
             }];
             match poll(&mut pfd, Some(Duration::from_millis(POLL_TIMEOUT_MS))) {
-                Ok(0) => continue, // Timeout, check dead flag
+                Ok(0) => continue, // Timeout; the guard drops and a claim may take over
                 Ok(_) if pfd[0].revents & POLLIN != 0 => {
                     // Data available (possibly with POLLHUP), read it first
                 }
@@ -710,11 +995,57 @@ fn read_from_pane_pty(
             }
         }
 
-        match reader.read(&mut buf) {
+        // The gate covers the read and nothing else.
+        //
+        // Holding it across the poll was wrong: the pane parks the read side
+        // for as long as it waits for data, so a transfer trying to claim the
+        // gate could sit behind one poll timeout after another. That is a
+        // hand-off that looks like a hang — the picker closes and \`sz\` does not
+        // start for seventeen seconds.
+        //
+        // Reading only after the poll confirmed data is what makes the narrow
+        // window safe: the read returns immediately, so the gate is held
+        // briefly and the claim lands promptly.
+        //
+        // Re-check readability while holding the gate. Nothing else can consume
+        // the pty now, so a zero-timeout poll that still reports data means the
+        // read below returns without blocking — which is what keeps the gate
+        // from being held indefinitely by a read that has nothing to fetch.
+        let read_gate = pane.upgrade().and_then(|p| p.zmodem_state());
+        let _pane_read = read_gate.as_ref().map(|state| state.enter_pane_read());
+        #[cfg(unix)]
+        if let Some(fd) = reader_fd {
+            let mut pfd = [pollfd {
+                fd,
+                events: POLLIN,
+                revents: 0,
+            }];
+            match poll(&mut pfd, Some(Duration::ZERO)) {
+                Ok(0) => {
+                    // Nothing after all: the gate must drop so a waiting claim
+                    // can proceed, and the loop must not spin.
+                    std::thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                Ok(_) if pfd[0].revents & POLLIN == 0 => {
+                    std::thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        let outcome = reader.read(&mut buf);
+        drop(_pane_read);
+
+        match outcome {
             Ok(size) if size == 0 => {
                 log::trace!("read_pty EOF: pane_id {}", pane_id);
                 break;
             }
+            // Nothing to read yet is not a failure. This thread shares the pty
+            // with the zmodem relay, which leaves the fd non-blocking; without
+            // this a single empty read tore down the pane's output.
+            Err(err) if is_retryable_read(&err) => continue,
             Err(err) => {
                 error!("read_pty failed: pane {} {:?}", pane_id, err);
                 // EBADF/EIO means the pty fd is gone; show a message and force-close.
@@ -1135,7 +1466,7 @@ impl Mux {
     /// notification across threads (channel send, async task, deferred main
     /// thread handoff) you must `.clone()` it explicitly.** Most existing
     /// subscribers in this repo do exactly that — see
-    /// `kaku-gui/src/termwindow/mod.rs`, `kaku-gui/src/frontend.rs`,
+    /// `faz-gui/src/termwindow/mod.rs`, `faz-gui/src/frontend.rs`,
     /// `crates/wezterm-client/src/domain.rs`, and
     /// `crates/wezterm-mux-server-impl/src/dispatch.rs`.
     pub fn notify(&self, notification: MuxNotification) {
@@ -1980,8 +2311,73 @@ impl wezterm_term::DownloadHandler for MuxDownloader {
 
 #[cfg(test)]
 mod tests {
-    use super::SynchronizedOutputState;
+    use super::{strip_zmodem_residue, SynchronizedOutputState};
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn residue_strips_retransmitted_zhex_headers() {
+        // `rz` retransmits ZRINIT as `**` ZDLE `B0100000023be50`; none of it is
+        // terminal output and the hex digits would render as literal text.
+        let chunk = b"**\x18B0100000023be50\r\x8a\x11";
+        assert!(strip_zmodem_residue(chunk).is_empty());
+    }
+
+    #[test]
+    fn residue_strips_can_runs() {
+        let chunk = [0x18u8; 32];
+        assert!(strip_zmodem_residue(&chunk).is_empty());
+    }
+
+    #[test]
+    fn residue_keeps_shell_output_sharing_the_chunk() {
+        // The cooldown window is exactly when the user is typing into a
+        // transfer that just ended. Dropping the whole chunk froze the screen;
+        // only the protocol bytes may go.
+        let mut chunk = b"root@host:~# ".to_vec();
+        chunk.extend_from_slice(b"**\x18B0100000023be50");
+        chunk.extend_from_slice(b"ls -l\r\n");
+        chunk.extend_from_slice(&[0x18u8; 6]);
+        chunk.extend_from_slice(b"file.txt\r\n");
+
+        let kept = strip_zmodem_residue(&chunk);
+        assert_eq!(kept, b"root@host:~# ls -l\r\nfile.txt\r\n");
+    }
+
+    #[test]
+    fn residue_leaves_ordinary_output_untouched() {
+        let chunk = b"plain text, no protocol here\r\n";
+        assert_eq!(strip_zmodem_residue(chunk), chunk);
+    }
+
+    #[test]
+    fn residue_strips_binary_frame_headers() {
+        // An aborted download leaves the peer still streaming ZBIN frames
+        // (`*` ZDLE <type>). Only the 3-byte header is recognisable without
+        // framing the payload, but leaving it in is what put a stray `*` and a
+        // ZDLE glyph on screen after every cancelled transfer.
+        assert!(strip_zmodem_residue(b"*\x18C\x04\x00\x00").starts_with(b"\x04"));
+        assert_eq!(strip_zmodem_residue(b"*\x18C"), b"");
+        assert_eq!(strip_zmodem_residue(b"*\x18G"), b"");
+        // Shell output sharing the chunk still survives.
+        let mut chunk = b"root@host:~# ".to_vec();
+        chunk.extend_from_slice(b"*\x18C\x04\x00\x00");
+        chunk.extend_from_slice(b"ls\r\n");
+        assert_eq!(
+            strip_zmodem_residue(&chunk),
+            b"root@host:~# \x04\x00\x00ls\r\n"
+        );
+    }
+
+    #[test]
+    fn residue_handles_a_header_truncated_at_the_boundary() {
+        // A frame split across reads must not panic, and whatever is left of
+        // the protocol bytes goes away. A stray ZDLE is a CAN, so it never
+        // survives; a header prefix that did not complete leaves nothing.
+        assert!(strip_zmodem_residue(b"**\x18B").is_empty());
+        assert!(strip_zmodem_residue(b"**\x18").is_empty());
+        // A bare ZDLE without the `**` marker is still a CAN byte.
+        assert_eq!(strip_zmodem_residue(b"\x18B01"), b"B01");
+    }
 
     #[test]
     fn synchronized_output_timeout_tracks_idle_time_not_total_frame_time() {

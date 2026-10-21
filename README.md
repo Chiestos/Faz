@@ -1,46 +1,41 @@
 <div align="center">
   <img src="https://gw.alipayobjects.com/zos/k/6h/dwarf.svg" width="120" />
-  <h1>Kaku</h1>
-  <p><em>An AI-friendly Mac terminal with sensible defaults, ready out of the box.</em></p>
+  <h1>Faz</h1>
+  <p><em>A fast, out-of-the-box Mac terminal.</em></p>
 </div>
 
 <p align="center">
-  <a href="https://github.com/tw93/Kaku/stargazers"><img src="https://img.shields.io/github/stars/tw93/Kaku?style=flat-square" alt="Stars"></a>
-  <a href="https://github.com/tw93/Kaku/releases"><img src="https://img.shields.io/github/v/tag/tw93/Kaku?label=version&style=flat-square" alt="Version"></a>
+  <a href="https://github.com/tw93/Faz/stargazers"><img src="https://img.shields.io/github/stars/tw93/Faz?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/tw93/Faz/releases"><img src="https://img.shields.io/github/v/tag/tw93/Faz?label=version&style=flat-square" alt="Version"></a>
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
-  <a href="https://github.com/tw93/Kaku/commits"><img src="https://img.shields.io/github/commit-activity/m/tw93/Kaku?style=flat-square" alt="Commits"></a>
+  <a href="https://github.com/tw93/Faz/commits"><img src="https://img.shields.io/github/commit-activity/m/tw93/Faz?style=flat-square" alt="Commits"></a>
   <a href="https://twitter.com/HiTw93"><img src="https://img.shields.io/badge/follow-Tw93-red?style=flat-square&logo=Twitter" alt="Twitter"></a>
 </p>
 
 <p align="center">
-  <img src="assets/kaku.jpg" alt="Kaku Screenshot" width="1000" />
+  <img src="assets/faz.jpg" alt="Faz Screenshot" width="1000" />
 </p>
 
 ## Why
 
-Kaku (書く, かく) means “to write” in Japanese. It is based on WezTerm, with fonts, themes, shell integration, and Mac shortcuts already configured. Lua settings remain available when you want to customize it.
+Faz (書く, かく) is the Japanese word for writing: the act of putting thought into form. A deeply customized fork of WezTerm, built for practical defaults on day one while keeping full Lua customization and a fast, lightweight feel.
 
-Part of a trilogy: [Kaku](https://github.com/tw93/Kaku) (書く) writes code, [Waza](https://github.com/tw93/Waza) (技) drills habits, [Kami](https://github.com/tw93/Kami) (紙) ships documents. Think of them as a family: Kaku is the dad, Waza the big sister, Kami the little sister.
-
-## Quick Start
-
-Download the [Kaku DMG](https://github.com/tw93/Kaku/releases/latest), open it, and drag Kaku into Applications. Or install with Homebrew:
-
-```bash
-brew install tw93/tap/kakuku
-```
-
-Open Kaku to set up shell integration. Missing optional tools can be installed through `kaku init`. Check your installed version with `kaku --version`.
+Part of a trilogy: [Faz](https://github.com/tw93/Faz) (書く) writes code, [Waza](https://github.com/tw93/Waza) (技) drills habits, [Kami](https://github.com/tw93/Kami) (紙) ships documents. Think of them as a family: Faz is the dad, Waza the big sister, Kami the little sister.
 
 ## Features
 
-- **Ready to use**: JetBrains Mono, automatic dark and light themes, copy on select, and familiar Mac shortcuts.
-- **Tabs and panes**: Split your workspace, find a pane with Tab Navigator, and restore windows, panes, and working directories when you reopen Kaku.
-- **Right-click menu**: Paste, search, open AI chat, and split or close the clicked pane without remembering shortcuts.
-- **Clickable links**: `Cmd + Click` opens URLs and file paths; URLs automatically wrapped by the terminal keep their full address.
-- **AI-friendly**: Use your coding tools alongside an optional assistant for command suggestions and chat. Configure your own AI service with `kaku ai`.
-- **Shell tools**: Built-in zsh completion, syntax highlighting, and directory jumping, with shortcuts for optional Lazygit and Yazi installations.
-- **Lua configuration**: Customize fonts, themes, shortcuts, and terminal behavior using WezTerm's Lua configuration system.
+- **Zero Config**: Defaults with JetBrains Mono, macOS font rendering, and low-res font sizing.
+- **Theme-Aware Experience**: Auto-switches between dark and light modes with macOS, with tuned selection colors, font weight, and practical color overrides support.
+- **Curated Shell Suite**: Built-in zsh plugins with optional CLI tools for prompt, diff, and navigation workflows.
+- **Fast & Lightweight**: 40% smaller binary, instant startup, lazy loading, stripped-down GPU-accelerated core.
+- **WezTerm-Compatible Config**: Use WezTerm's Lua config directly with full API compatibility and no migration.
+- **Polished Defaults**: Copy on select, clickable file paths, history peek from full-screen apps, pane input broadcast, and visual bell on background tab completion.
+
+## Quick Start
+
+1. [Download Faz DMG](https://github.com/tw93/Faz/releases/latest) & Drag to Applications
+2. Open Faz. The app is notarized by Apple, so it opens without security warnings
+3. On first launch, Faz will automatically set up your shell environment
 
 ## Usage Guide
 
@@ -49,49 +44,42 @@ Open Kaku to set up shell integration. Missing optional tools can be installed t
 | New Tab | `Cmd + T` |
 | New Window | `Cmd + N` |
 | Close Tab/Pane | `Cmd + W` |
-| Navigate Tabs | `Cmd + Shift + [` / `]` or `Cmd + 1-9` |
+| Navigate Tabs | `Cmd + Shift + [` / `]` or `Cmd + 1–9` |
 | Navigate Panes | `Cmd + Opt + Arrows` |
 | Split Pane Vertical | `Cmd + D` |
 | Split Pane Horizontal | `Cmd + Shift + D` |
 | Open Settings Panel | `Cmd + ,` |
-| AI Panel | `Cmd + Shift + A` |
-| AI Chat | `Cmd + L` |
-| Apply AI Suggestion | `Cmd + Shift + E` |
 | Open Lazygit | `Cmd + Shift + G` |
 | Yazi File Manager | `Cmd + Shift + Y` or `y` |
 | Clear Screen | `Cmd + K` |
-| Open Context Menu | Right-click in a pane |
-| Open URL or File Path | `Cmd + Click` |
 
 Full keybinding reference: [docs/keybindings.md](docs/keybindings.md)
 
-## Kaku AI
+## Performance
 
-Configure your own AI service with `kaku ai` to use the built-in assistant. Kaku does not provide or relay the AI service.
-
-- **Command suggestions**: When a command fails, the configured assistant can suggest a fix. Press `Cmd + Shift + E` to paste it at the prompt for review.
-- **Natural language to command**: Type `# <description>` at the prompt and press Enter. The assistant places the generated command at the prompt for you to review and run.
-- **Chat**: Press `Cmd + L` to discuss terminal output or work with project files and tools. Use `kaku chat` from another shell to access the same conversation store.
-- **AI Tools Config**: Manage settings for Claude Code, Codex, Gemini CLI, Copilot CLI, Kimi Code, and more.
-
-For authentication, models, API Mode, and tool settings, see the [AI assistant docs](docs/features.md).
+| Metric | Upstream | Faz | Methodology |
+| :--- | :--- | :--- | :--- |
+| **Executable Size** | ~67 MB | ~40 MB | Aggressive symbol stripping & feature pruning |
+| **Resources Volume** | ~100 MB | ~80 MB | Asset optimization & lazy-loaded assets |
+| **Launch Latency** | Standard | Instant | Just-in-time initialization |
+| **Shell Bootstrap** | ~200ms | ~100ms | Optimized environment provisioning |
 
 ## FAQ
 
-**Is there a Windows or Linux version?** Not currently. Kaku is macOS-only for now.
+**Is there a Windows or Linux version?** Not currently. Faz is macOS-only for now.
 
-**Can I use transparent windows?** Yes, set `config.window_background_opacity` in `~/.config/kaku/kaku.lua`.
+**Can I use transparent windows?** Yes, set `config.window_background_opacity` in `~/.config/faz/faz.lua`.
 
-**The `kaku` command is missing.** Run `/Applications/Kaku.app/Contents/MacOS/kaku init --update-only && exec zsh -l`, then `kaku doctor`.
+**The `faz` command is missing.** Run `/Applications/Faz.app/Contents/MacOS/faz init --update-only && exec zsh -l`, then `faz doctor`.
 
 Full FAQ: [docs/faq.md](docs/faq.md)
 
 ## Docs
 
 - [Keybindings](docs/keybindings.md) - full shortcut reference
-- [Features](docs/features.md) - AI assistant, lazygit, yazi, remote files, shell suite
+- [Features](docs/features.md) - lazygit, yazi, shell suite
 - [Configuration](docs/configuration.md) - themes, fonts, custom keybindings, Lua API
-- [CLI Reference](docs/cli.md) - `kaku ai`, `kaku config`, `kaku doctor`, and more
+- [CLI Reference](docs/cli.md) - `faz config`, `faz doctor`, and more
 - [FAQ](docs/faq.md) - common questions and troubleshooting
 
 ## Background
@@ -100,29 +88,28 @@ I heavily rely on the CLI for both work and personal projects. Tools I've built,
 
 I used Alacritty for years and learned to value speed and simplicity. As my workflow shifted toward AI-assisted coding, I wanted stronger tab and pane ergonomics. I also explored Kitty, Ghostty, Warp, and iTerm2. Each is strong in different areas, but I still wanted a setup that matched my own balance of performance, defaults, and control.
 
-WezTerm is robust and highly hackable, and I am grateful for its engine and ecosystem. So I built Kaku to be that environment: fast, polished, and ready to work.
+WezTerm is robust and highly hackable, and I am grateful for its engine and ecosystem. So I built Faz to be that environment: fast, polished, and ready to work.
 
 ## Contributors
 
-Big thanks to all contributors who helped build Kaku. Go follow them! ❤️
+Big thanks to all contributors who helped build Faz. Go follow them! ❤️
 
-<a href="https://github.com/tw93/Kaku/graphs/contributors">
+<a href="https://github.com/tw93/Faz/graphs/contributors">
   <img src="./CONTRIBUTORS.svg?v=2" width="1000" />
 </a>
 
 ## Support
 
 - The most direct way to support me is getting [Mole for Mac](https://mole.fit), my paid Mac cleanup app.
-- If Kaku helped you, give it a star, [share it](https://twitter.com/intent/tweet?url=https://github.com/tw93/Kaku&text=Kaku%20-%20An%20AI-friendly%20Mac%20terminal.), or open an issue or PR.
-- I have two cats, TangYuan and Coke. If you think Kaku delights your life, you can feed them <a href="https://cats.tw93.fun?name=Kaku" target="_blank">canned food 🥩</a>.
+- If Faz helped you, give it a star, [share it](https://twitter.com/intent/tweet?url=https://github.com/tw93/Faz&text=Faz%20-%20A%20fast%20terminal%20built%20for%20AI%20coding.), or open an issue or PR.
+- I have two cats, TangYuan and Coke. If you think Faz delights your life, you can feed them <a href="https://cats.tw93.fun?name=Faz" target="_blank">canned food 🥩</a>.
 
 <details>
 <summary>These lovely people already did 🐱</summary>
 <br/>
-<a href="https://cats.tw93.fun?name=Kaku"><img src="https://cdn.jsdelivr.net/gh/tw93/sponsors@main/assets/sponsors.svg" width="1000" loading="lazy" /></a>
+<a href="https://cats.tw93.fun?name=Faz"><img src="https://cdn.jsdelivr.net/gh/tw93/sponsors@main/assets/sponsors.svg" width="1000" loading="lazy" /></a>
 </details>
 
 ## License
 
-MIT License, feel free to enjoy and participate in open source. Attribution for
-WezTerm and the bundled fonts is in [NOTICE.md](NOTICE.md).
+MIT License, feel free to enjoy and participate in open source.

@@ -11,7 +11,7 @@ fail() {
   exit 1
 }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-setup-zsh-smoke.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-setup-zsh-smoke.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 tmp_home="$tmp_dir/home"
@@ -32,10 +32,10 @@ output_log="$tmp_dir/output.log"
 error_log="$tmp_dir/error.log"
 
 if ! HOME="$tmp_home" \
-  KAKU_INIT_INTERNAL=1 \
-  KAKU_SKIP_TOOL_BOOTSTRAP=1 \
-  KAKU_SKIP_TERMINFO_BOOTSTRAP=1 \
-  KAKU_VENDOR_DIR="$tmp_vendor" \
+  FAZ_INIT_INTERNAL=1 \
+  FAZ_SKIP_TOOL_BOOTSTRAP=1 \
+  FAZ_SKIP_TERMINFO_BOOTSTRAP=1 \
+  FAZ_VENDOR_DIR="$tmp_vendor" \
   bash "$SHELL_DIR/setup_zsh.sh" --update-only >"$output_log" 2>"$error_log"; then
   cat "$output_log" >&2
   cat "$error_log" >&2
@@ -49,52 +49,46 @@ if grep -Fq "local: can only be used in a function" "$output_log" "$error_log"; 
 fi
 
 [[ -f "$tmp_home/.config/starship.toml" ]] || fail "starship.toml was not initialized"
-[[ -f "$tmp_home/.config/kaku/zsh/kaku.zsh" ]] || fail "kaku.zsh was not generated"
+[[ -f "$tmp_home/.config/faz/zsh/faz.zsh" ]] || fail "faz.zsh was not generated"
 [[ -f "$tmp_home/.zshrc" ]] || fail ".zshrc was not patched"
 
-if ! grep -Fq "fg=249" "$tmp_home/.config/kaku/zsh/kaku.zsh"; then
-  fail "generated kaku.zsh did not set readable comment color fg=249"
+if ! grep -Fq "fg=249" "$tmp_home/.config/faz/zsh/faz.zsh"; then
+  fail "generated faz.zsh did not set readable comment color fg=249"
 fi
-if grep -Fq "fg=244" "$tmp_home/.config/kaku/zsh/kaku.zsh"; then
-  fail "generated kaku.zsh still contains old comment color fg=244"
+if grep -Fq "fg=244" "$tmp_home/.config/faz/zsh/faz.zsh"; then
+  fail "generated faz.zsh still contains old comment color fg=244"
 fi
-grep -Fq 'if { (( _kaku_in_kaku )) || [[ -n "${KAKU_PROMPT_EVERYWHERE:-}" ]]; } && command -v starship' \
-  "$tmp_home/.config/kaku/zsh/kaku.zsh" \
-  || fail "generated kaku.zsh did not preserve the runtime Kaku session guard"
-grep -Fq 'local capability_file="$HOME/.config/kaku/ai_inline_capability"' \
-  "$tmp_home/.config/kaku/zsh/kaku.zsh" \
-  || fail "generated kaku.zsh did not read the inline AI capability"
-grep -Fq '_kaku_set_ai_user_var "kaku_ai_query" "[mode:${mode}] ${body}"' \
-  "$tmp_home/.config/kaku/zsh/kaku.zsh" \
-  || fail "generated kaku.zsh did not authenticate inline AI queries"
+grep -Fq 'if { (( _faz_in_faz )) || [[ -n "${FAZ_PROMPT_EVERYWHERE:-}" ]]; } && command -v starship' \
+  "$tmp_home/.config/faz/zsh/faz.zsh" \
+  || fail "generated faz.zsh did not preserve the runtime Faz session guard"
 
 # The generated file is sourced by the user's real zsh, so it must parse under
 # zsh. A corrupted heredoc (e.g. an unescaped backtick that bash expanded at
 # generation time, #450) or a stray top-level construct surfaces here even when
 # setup_zsh.sh itself exited 0.
 if command -v zsh >/dev/null 2>&1; then
-  if ! zsh -n "$tmp_home/.config/kaku/zsh/kaku.zsh" 2>"$tmp_dir/zsh_parse.log"; then
+  if ! zsh -n "$tmp_home/.config/faz/zsh/faz.zsh" 2>"$tmp_dir/zsh_parse.log"; then
     cat "$tmp_dir/zsh_parse.log" >&2
-    fail "generated kaku.zsh failed 'zsh -n' parse check"
+    fail "generated faz.zsh failed 'zsh -n' parse check"
   fi
 
   # Execute the generated prompt hook, not a source-text match (#551).
-  mouse_reset="$(HOME="$tmp_home" TERM=xterm-256color TERM_PROGRAM=Kaku zsh -dfc '
+  mouse_reset="$(HOME="$tmp_home" TERM=xterm-256color TERM_PROGRAM=Faz zsh -dfc '
     add-zsh-hook() { :; }
-    source "$HOME/.config/kaku/zsh/kaku.zsh" >/dev/null
-    (( ${precmd_functions[(Ie)_kaku_reset_mouse_tracking]} )) || exit 1
-    _kaku_reset_mouse_tracking
+    source "$HOME/.config/faz/zsh/faz.zsh" >/dev/null
+    (( ${precmd_functions[(Ie)_faz_reset_mouse_tracking]} )) || exit 1
+    _faz_reset_mouse_tracking
   ')" || fail "mouse recovery hook is not registered"
   [[ "$mouse_reset" == $'\e[?1000;1002;1003;1004;1005;1006;1007;1016l' ]] \
     || fail "prompt did not reset stale mouse/focus reporting"
 
   outside_reset="$(HOME="$tmp_home" TERM_PROGRAM=Apple_Terminal zsh -dfc '
     add-zsh-hook() { :; }
-    source "$HOME/.config/kaku/zsh/kaku.zsh" >/dev/null
+    source "$HOME/.config/faz/zsh/faz.zsh" >/dev/null
     unset TMUX
-    export KAKU_SESSION=1
-    _kaku_reset_mouse_tracking || exit 1
-  ')" || fail "mouse hook must not stop later prompt hooks outside Kaku"
+    export FAZ_SESSION=1
+    _faz_reset_mouse_tracking || exit 1
+  ')" || fail "mouse hook must not stop later prompt hooks outside Faz"
   [[ -z "$outside_reset" ]] || fail "mouse hook changed a different terminal"
 
   starship_stub_dir="$tmp_dir/starship-bin"
@@ -104,28 +98,28 @@ if command -v zsh >/dev/null 2>&1; then
   cat >"$starship_stub_dir/starship" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "init" ]]; then
-  printf 'print -r -- initialized >> "$KAKU_STARSHIP_TEST_MARKER"\n'
+  printf 'print -r -- initialized >> "$FAZ_STARSHIP_TEST_MARKER"\n'
 fi
 EOF
   chmod +x "$starship_stub_dir/starship"
 
   HOME="$tmp_home" \
     TERM_PROGRAM="Apple_Terminal" \
-    KAKU_STARSHIP_TEST_MARKER="$starship_marker" \
+    FAZ_STARSHIP_TEST_MARKER="$starship_marker" \
     PATH="$starship_stub_dir:$PATH" \
-    zsh -dfc 'add-zsh-hook() { :; }; source "$HOME/.config/kaku/zsh/kaku.zsh"'
+    zsh -dfc 'add-zsh-hook() { :; }; source "$HOME/.config/faz/zsh/faz.zsh"'
   [[ ! -s "$starship_marker" ]] \
-    || fail "generated kaku.zsh initialized Starship outside Kaku"
+    || fail "generated faz.zsh initialized Starship outside Faz"
 
   HOME="$tmp_home" \
-    TERM_PROGRAM="Kaku" \
-    KAKU_STARSHIP_TEST_MARKER="$starship_marker" \
+    TERM_PROGRAM="Faz" \
+    FAZ_STARSHIP_TEST_MARKER="$starship_marker" \
     PATH="$starship_stub_dir:$PATH" \
-    zsh -dfc 'add-zsh-hook() { :; }; source "$HOME/.config/kaku/zsh/kaku.zsh"'
+    zsh -dfc 'add-zsh-hook() { :; }; source "$HOME/.config/faz/zsh/faz.zsh"'
   [[ "$(cat "$starship_marker")" == "initialized" ]] \
-    || fail "generated kaku.zsh did not initialize Starship inside Kaku"
+    || fail "generated faz.zsh did not initialize Starship inside Faz"
 else
-  echo "warning: zsh not found; skipping kaku.zsh parse check" >&2
+  echo "warning: zsh not found; skipping faz.zsh parse check" >&2
 fi
 
 echo "setup_zsh update-only smoke test passed"

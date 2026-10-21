@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This script downloads plugin dependencies bundled into the Kaku App.
+# This script downloads plugin dependencies bundled into the Faz App.
 # CLI tools (starship/git-delta/lazygit) are installed via Homebrew at init time.
 
 VENDOR_DIR="$(cd "$(dirname "$0")/../assets/vendor" && pwd)"
@@ -13,7 +13,7 @@ download_pinned_repo() {
 	local repo="$3"
 	local ref="$4"
 	local dest="$VENDOR_DIR/$name"
-	local marker_file="$dest/.kaku-vendor-ref"
+	local marker_file="$dest/.faz-vendor-ref"
 	local archive_url="https://codeload.github.com/$repo/tar.gz/$ref"
 	local temp_dir
 	local extract_dir

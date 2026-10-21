@@ -81,7 +81,7 @@ struct CachedLeaderInfo {
 
 /// Cache of `with_root_pid(process_group_leader_pid)` to avoid repeating the
 /// full system `proc_listallpids` + per-pid `proc_pidinfo` scan on every paint.
-/// `forces_opaque_kaku_tui_background` (render hot path) and the tab bar both
+/// `forces_opaque_faz_tui_background` (render hot path) and the tab bar both
 /// query this each frame; without a cache, multiple panes streaming output from
 /// TUI agents (claude code, codex) trigger N x ~1000 syscalls per frame.
 #[cfg(unix)]
@@ -150,6 +150,10 @@ pub struct LocalPane {
     foreground_proc: Mutex<Option<CachedForegroundProc>>,
     encoding: Arc<AtomicU8>,
     command_description: String,
+    /// ZMODEM transfer state for this pane. The output parser consults it on
+    /// every read to decide whether bytes go to the VT parser or to a local
+    /// `sz`/`rz` child.
+    zmodem: Arc<super::zmodem::state::ZmodemState>,
 }
 
 #[async_trait(?Send)]
@@ -291,7 +295,7 @@ impl Pane for LocalPane {
         let mut proc = self.process.lock();
 
         const EXIT_BEHAVIOR: &str = "This message is shown because \
-            \x1b]8;;https://github.com/tw93/Kaku/\
+            \x1b]8;;https://github.com/tw93/Faz/\
             config/lua/config/exit_behavior.html\
             \x1b\\exit_behavior\x1b]8;;\x1b\\";
 
@@ -422,6 +426,43 @@ impl Pane for LocalPane {
         self.terminal.lock().perform_actions(actions)
     }
 
+    fn zmodem_sink(&self) -> Option<std::os::fd::RawFd> {
+        self.zmodem.sink()
+    }
+
+    fn zmodem_finish(&self) {
+        // Purge whatever protocol bytes are still queued in the pty before
+        // normal parsing resumes. Two things go wrong otherwise: the VT parser
+        // renders binary payload as control sequences, and the leftover frames
+        // are re-detected as a brand-new session — a timed-out upload leaves a
+        // ZRQINIT behind, which reads as the peer offering a file and pops up a
+        // save dialog nobody asked for.
+        //
+        // Drain whenever a session is ending, not only while the channel is
+        // active: by the time a timeout reaches here the sink is already gone,
+        // so `is_active` is false and the leftover would escape.
+        if self.zmodem.mode() != crate::zmodem::state::ZmodemMode::Idle {
+            if let Some(fd) = self.pty.lock().as_raw_fd() {
+                crate::zmodem::transfer::drain_until_quiet(fd);
+            }
+        }
+        self.zmodem.finish()
+    }
+
+    fn zmodem_state(&self) -> Option<Arc<super::zmodem::state::ZmodemState>> {
+        Some(Arc::clone(&self.zmodem))
+    }
+
+    fn zmodem_pty_slave_path(&self) -> Option<std::path::PathBuf> {
+        self.pty.lock().tty_name()
+    }
+
+    fn zmodem_pty_fd(&self) -> Option<std::os::fd::RawFd> {
+        // portable-pty returns `None` on platforms or backends without a raw
+        // descriptor; those panes simply cannot carry a transfer.
+        self.pty.lock().as_raw_fd()
+    }
+
     fn mouse_event(&self, event: MouseEvent) -> Result<(), Error> {
         Mux::get().record_input_for_current_identity();
         self.terminal.lock().mouse_event(event)
@@ -429,6 +470,19 @@ impl Pane for LocalPane {
 
     fn key_down(&self, key: KeyCode, mods: KeyModifiers) -> Result<(), Error> {
         Mux::get().record_input_for_current_identity();
+        if self.zmodem.is_active() {
+            // A transfer owns the pty's byte stream. Anything typed now lands in
+            // the middle of a ZMODEM frame: the peer's CRC check fails, it
+            // aborts with ZCAN, and the whole transfer dies. zssh dodges this
+            // because the user is at its local prompt while sz/rz runs; Faz
+            // keeps the pane live, so the input has to be refused here.
+            //
+            // Refused, not swallowed: a key that vanishes looks like a frozen
+            // terminal, and the user types harder. Echo it back so the keystroke
+            // is visibly absorbed rather than lost.
+            self.echo_during_zmodem(&key_echo(&key, mods));
+            return Ok(());
+        }
         if self.tmux_domain.lock().is_some() {
             log::trace!("key: {:?}", key);
             if key == KeyCode::Char('q') {
@@ -481,8 +535,18 @@ impl Pane for LocalPane {
         }))
     }
 
+    fn is_zmodem_exclusive(&self) -> bool {
+        self.zmodem.is_active()
+    }
+
     fn send_paste(&self, text: &str) -> Result<(), Error> {
         Mux::get().record_input_for_current_identity();
+        if self.zmodem.is_active() {
+            // See `key_down`: pasted text would corrupt the frame stream, and
+            // silently ignoring a paste is worse than showing it happened.
+            self.echo_during_zmodem(text);
+            return Ok(());
+        }
         if self.tmux_domain.lock().is_some() {
             Ok(())
         } else {
@@ -494,7 +558,7 @@ impl Pane for LocalPane {
         let title = self.terminal.lock().get_title().to_string();
         // If the title is the default pane title, then try to spice
         // things up a bit by returning the process basename instead
-        if title == "wezterm" {
+        if title == wezterm_term::terminalstate::DEFAULT_TITLE {
             if let Some(proc_name) = self.get_foreground_process_name(CachePolicy::AllowStale) {
                 let proc_name = std::path::Path::new(&proc_name);
                 if let Some(name) = proc_name.file_name() {
@@ -1055,6 +1119,40 @@ impl AlertHandler for LocalPaneNotifHandler {
     }
 }
 
+/// What a refused keystroke should look like on screen.
+///
+/// Printed only when a transfer is running, so it stays small and literal:
+/// printable characters as themselves, control keys as a caret marker the user
+/// can recognise. Returning an empty string for a plain modifier keeps a bare
+/// Shift press from drawing anything.
+fn key_echo(key: &KeyCode, mods: KeyModifiers) -> String {
+    match key {
+        KeyCode::Char(c) => {
+            if mods.contains(KeyModifiers::CTRL) {
+                // Ctrl+letter arrives as a C0 control character (Ctrl+A is
+                // U+0001), so the letter is recovered by adding 0x40.
+                let code = *c as u32;
+                if (1..=26).contains(&code) {
+                    if let Some(letter) = char::from_u32(code + 0x40) {
+                        return format!("^{letter}");
+                    }
+                }
+            }
+            c.to_string()
+        }
+        KeyCode::Enter => "^M".to_string(),
+        KeyCode::Tab => "^I".to_string(),
+        KeyCode::Escape => "^[".to_string(),
+        KeyCode::Backspace => "^?".to_string(),
+        KeyCode::Delete => "~DEL~".to_string(),
+        KeyCode::LeftArrow => "<- ".to_string(),
+        KeyCode::RightArrow => " ->".to_string(),
+        KeyCode::UpArrow => "^^ ".to_string(),
+        KeyCode::DownArrow => "vv ".to_string(),
+        _ => String::new(),
+    }
+}
+
 /// This is a little gross; on some systems, our pipe reader will continue
 /// to be blocked in read even after the child process has died.
 /// We need to wake up and notice that the child terminated in order
@@ -1089,6 +1187,31 @@ fn split_child(
 }
 
 impl LocalPane {
+    /// Show input that a running transfer refused, without sending it to the
+    /// pty.
+    ///
+    /// The bytes go into this pane's screen model only, so the user sees their
+    /// keystroke land while the protocol stream stays pristine. A bare `\r` is
+    /// deliberately not echoed: it would scroll the pane and disturb the
+    /// progress display the transfer is writing there.
+    fn echo_during_zmodem(&self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        let visible: String = text.chars().filter(|c| !c.is_control()).collect();
+        if visible.is_empty() {
+            // A control key (Enter, Tab, Escape) has no printable form. Say so
+            // rather than leaving the user wondering whether it registered.
+            self.terminal
+                .lock()
+                .perform_actions(vec![termwiz::escape::Action::PrintString("^G".to_string())]);
+            return;
+        }
+        self.terminal
+            .lock()
+            .perform_actions(vec![termwiz::escape::Action::PrintString(visible)]);
+    }
+
     pub fn new(
         pane_id: PaneId,
         mut terminal: Terminal,
@@ -1127,6 +1250,7 @@ impl LocalPane {
             foreground_proc: Mutex::new(None),
             encoding,
             command_description,
+            zmodem: Arc::new(super::zmodem::state::ZmodemState::new()),
         }
     }
 
@@ -1245,5 +1369,40 @@ impl Drop for LocalPane {
         if let ProcessState::Running { signaller, .. } = &mut *self.process.lock() {
             let _ = signaller.kill();
         }
+    }
+}
+
+#[cfg(test)]
+mod zmodem_input_tests {
+    use super::key_echo;
+    use termwiz::input::{KeyCode, Modifiers};
+
+    #[test]
+    fn printable_characters_echo_as_themselves() {
+        assert_eq!(key_echo(&KeyCode::Char('a'), Modifiers::NONE), "a");
+        assert_eq!(key_echo(&KeyCode::Char('中'), Modifiers::NONE), "中");
+    }
+
+    #[test]
+    fn control_chords_echo_in_caret_form() {
+        // Ctrl+A arrives as U+0001; showing it as "^A" is what a terminal does
+        // for every other control key, so the user recognises it instantly.
+        assert_eq!(key_echo(&KeyCode::Char('\u{1}'), Modifiers::CTRL), "^A");
+        assert_eq!(key_echo(&KeyCode::Char('\u{3}'), Modifiers::CTRL), "^C");
+    }
+
+    #[test]
+    fn named_keys_echo_their_marker() {
+        assert_eq!(key_echo(&KeyCode::Enter, Modifiers::NONE), "^M");
+        assert_eq!(key_echo(&KeyCode::Tab, Modifiers::NONE), "^I");
+        assert_eq!(key_echo(&KeyCode::Escape, Modifiers::NONE), "^[");
+        assert_eq!(key_echo(&KeyCode::Backspace, Modifiers::NONE), "^?");
+    }
+
+    #[test]
+    fn plain_modifiers_echo_nothing() {
+        // A bare Shift press must not draw a glyph into the pane.
+        assert_eq!(key_echo(&KeyCode::LeftShift, Modifiers::SHIFT), "");
+        assert_eq!(key_echo(&KeyCode::RightShift, Modifiers::SHIFT), "");
     }
 }

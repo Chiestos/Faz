@@ -492,7 +492,7 @@ pub fn allocate(
 
     let (input_tx, input_rx) = channel();
 
-    let renderer = termwiz_funcs::new_kaku_terminfo_renderer();
+    let renderer = termwiz_funcs::new_faz_terminfo_renderer();
 
     let tw_term = TermWizTerminal {
         render_tx: TermWizTerminalRenderTty {
@@ -541,7 +541,7 @@ pub async fn run<
     let (input_tx, input_rx) = channel();
     let should_close_window = window_id.is_none();
 
-    let renderer = termwiz_funcs::new_kaku_terminfo_renderer();
+    let renderer = termwiz_funcs::new_faz_terminfo_renderer();
 
     let tw_term = TermWizTerminal {
         render_tx: TermWizTerminalRenderTty {

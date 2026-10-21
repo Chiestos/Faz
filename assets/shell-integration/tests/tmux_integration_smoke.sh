@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-TMUX_SOURCE_LINE='source-file "$HOME/.config/kaku/tmux/kaku.tmux.conf" # Kaku tmux Integration'
+TMUX_SOURCE_LINE='source-file "$HOME/.config/faz/tmux/faz.tmux.conf" # Faz tmux Integration'
 
-normalize_kaku_tmux_source_line_file() {
+normalize_faz_tmux_source_line_file() {
   local input_file="$1"
   local output_file="$2"
 
@@ -17,7 +17,7 @@ BEGIN { replaced = 0; extra = 0 }
   }
 
   if ($0 ~ /^[[:space:]]*source-file[[:space:]]+/ &&
-      $0 ~ /kaku\/tmux\/kaku\.tmux\.conf/) {
+      $0 ~ /faz\/tmux\/faz\.tmux\.conf/) {
     if (!replaced) {
       print source_line
       replaced = 1
@@ -65,14 +65,14 @@ run_normalize() {
   local label="$4"
 
   local tmp_dir input_file output_file expected_file status
-  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-tmux-test.XXXXXX")"
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-tmux-test.XXXXXX")"
   input_file="$tmp_dir/input.tmux.conf"
   output_file="$tmp_dir/output.tmux.conf"
   expected_file="$tmp_dir/expected.tmux.conf"
   printf '%s' "$input_text" >"$input_file"
   printf '%s' "$expected_output" >"$expected_file"
 
-  if normalize_kaku_tmux_source_line_file "$input_file" "$output_file"; then
+  if normalize_faz_tmux_source_line_file "$input_file" "$output_file"; then
     status=0
   else
     status=$?
@@ -83,21 +83,21 @@ run_normalize() {
 }
 
 run_normalize \
-  $'set -g default-terminal "screen-256color"\nsource-file ~/.config/kaku/tmux/kaku.tmux.conf\n' \
+  $'set -g default-terminal "screen-256color"\nsource-file ~/.config/faz/tmux/faz.tmux.conf\n' \
   0 \
   $'set -g default-terminal "screen-256color"\n'"$TMUX_SOURCE_LINE"$'\n' \
   "legacy tmux source line is normalized"
 
 run_normalize \
-  $'# source-file "$HOME/.config/kaku/tmux/kaku.tmux.conf"\n'"$TMUX_SOURCE_LINE"$'\n'"$TMUX_SOURCE_LINE"$'\n' \
+  $'# source-file "$HOME/.config/faz/tmux/faz.tmux.conf"\n'"$TMUX_SOURCE_LINE"$'\n'"$TMUX_SOURCE_LINE"$'\n' \
   2 \
-  $'# source-file "$HOME/.config/kaku/tmux/kaku.tmux.conf"\n'"$TMUX_SOURCE_LINE"$'\n' \
+  $'# source-file "$HOME/.config/faz/tmux/faz.tmux.conf"\n'"$TMUX_SOURCE_LINE"$'\n' \
   "duplicate tmux source lines collapse while comments are preserved"
 
 run_normalize \
-  $'set -g status on\n# no kaku integration here\n' \
+  $'set -g status on\n# no faz integration here\n' \
   3 \
-  $'set -g status on\n# no kaku integration here\n' \
+  $'set -g status on\n# no faz integration here\n' \
   "non matching tmux config remains unchanged"
 
 echo "tmux integration smoke tests passed"

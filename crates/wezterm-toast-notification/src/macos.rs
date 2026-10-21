@@ -77,8 +77,8 @@ define_class!(
             if let Some(url) = url {
                 if let Ok(url_str) = url.downcast::<NSString>() {
                     let url_string = url_str.to_string();
-                    if url_string == "kaku://update" {
-                        spawn_kaku_update();
+                    if url_string == "faz://update" {
+                        spawn_faz_update();
                     } else {
                         wezterm_open_url::open_url(&url_string);
                     }
@@ -236,38 +236,38 @@ pub fn show_notif(toast: ToastNotification) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-fn spawn_kaku_update() {
+fn spawn_faz_update() {
     if crate::invoke_update_callback() {
-        log::info!("spawn_kaku_update: handled via registered callback");
+        log::info!("spawn_faz_update: handled via registered callback");
         return;
     }
 
     // Fallback: spawn a new window if no callback is registered
-    log::info!("spawn_kaku_update: no callback registered, falling back to direct spawn");
+    log::info!("spawn_faz_update: no callback registered, falling back to direct spawn");
     std::thread::spawn(|| {
-        let kaku_gui = std::env::current_exe()
+        let faz_gui = std::env::current_exe()
             .ok()
-            .and_then(|exe| exe.parent().map(|p| p.join("kaku-gui")))
+            .and_then(|exe| exe.parent().map(|p| p.join("faz-gui")))
             .filter(|p| p.exists())
             .unwrap_or_else(|| {
-                std::path::PathBuf::from("/Applications/Kaku.app/Contents/MacOS/kaku-gui")
+                std::path::PathBuf::from("/Applications/Faz.app/Contents/MacOS/faz-gui")
             });
 
-        let kaku_cli = kaku_gui
+        let faz_cli = faz_gui
             .parent()
-            .map(|p| p.join("kaku"))
+            .map(|p| p.join("faz"))
             .filter(|p| p.exists())
             .unwrap_or_else(|| {
-                std::path::PathBuf::from("/Applications/Kaku.app/Contents/MacOS/kaku")
+                std::path::PathBuf::from("/Applications/Faz.app/Contents/MacOS/faz")
             });
 
-        let result = std::process::Command::new(&kaku_gui)
-            .args(["start", "--", kaku_cli.to_str().unwrap_or("kaku"), "update"])
+        let result = std::process::Command::new(&faz_gui)
+            .args(["start", "--", faz_cli.to_str().unwrap_or("faz"), "update"])
             .spawn();
 
         match result {
-            Ok(_) => log::info!("spawn_kaku_update: process spawned successfully"),
-            Err(e) => log::error!("spawn_kaku_update: failed to spawn: {}", e),
+            Ok(_) => log::info!("spawn_faz_update: process spawned successfully"),
+            Err(e) => log::error!("spawn_faz_update: failed to spawn: {}", e),
         }
     });
 }

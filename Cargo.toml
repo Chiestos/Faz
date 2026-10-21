@@ -2,24 +2,22 @@
 members = [
   "crates/bidi",
   "deps/cairo",
-  "kaku",
-  "crates/kaku-remote",
+  "faz-cli",
   "crates/wezterm-blob-leases",
   "crates/wezterm-cell",
   "crates/wezterm-escape-parser",
   "crates/wezterm-dynamic",
-  "kaku-gui",
+  "faz-gui",
   "crates/wezterm-open-url",
   "crates/wezterm-ssh",
   "crates/wezterm-surface",
   "crates/wezterm-uds",
-  "crates/kaku-unicode-names",
+  "crates/faz-unicode-names",
 ]
 resolver = "2"
 exclude = [
   "termwiz/codegen",
   "crates/wezterm-char-props/codegen",
-  "crates/kaku-relay",
 ]
 
 [profile.release]
@@ -61,12 +59,7 @@ todo = "warn"
 
 [workspace.dependencies]
 ahash = "0.8"
-axum = { version = "0.8", features = ["ws"] }
-axum-server = { version = "0.7", features = ["tls-rustls"] }
-kaku-remote = { path = "crates/kaku-remote" }
-qrcode = "0.14"
 rustls = { version = "0.23", features = ["ring"] }
-tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 anyhow = "1.0"
 assert_fs = "1.0.4"
 async-channel = "2.3"
@@ -75,8 +68,7 @@ async-io = "2.3"
 async-task = "4.7"
 async-trait = "0.1"
 async_ossl = { path = "crates/async_ossl" }
-kaku-ai-utils = { path = "crates/kaku-ai-utils" }
-kaku-unicode-names = { path = "crates/kaku-unicode-names" }
+faz-unicode-names = { path = "crates/faz-unicode-names" }
 backtrace = "0.3"
 base64 = {version="0.22", default-features=false }
 base91 = { path = "crates/base91" }

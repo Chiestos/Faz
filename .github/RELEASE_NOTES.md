@@ -1,8 +1,8 @@
 # V0.20.0 Steady
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/tw93/Kaku/main/assets/logo.png" alt="Kaku Logo" width="120" height="120" />
-  <h1 style="margin: 12px 0 6px;">Kaku V0.20.0</h1>
+  <img src="https://raw.githubusercontent.com/tw93/Faz/main/assets/logo.png" alt="Faz Logo" width="120" height="120" />
+  <h1 style="margin: 12px 0 6px;">Faz V0.20.0</h1>
   <p><em>A fast, out-of-the-box terminal built for AI coding.</em></p>
 </div>
 
@@ -30,4 +30,4 @@
 
 Special thanks to @elonnzhang, @trxuan, and @yansigit for their contributions to this release.
 
-> https://github.com/tw93/Kaku
+> https://github.com/tw93/Faz

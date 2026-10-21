@@ -8,7 +8,7 @@ VERSION_FILE="assets/shell-integration/config_version.txt"
 HIGHLIGHTS_FILE="assets/shell-integration/config_update_highlights.tsv"
 CHECK_SCRIPT="assets/shell-integration/check_config_version.sh"
 FIRST_RUN_SCRIPT="assets/shell-integration/first_run.sh"
-KAKU_LUA="assets/macos/Kaku.app/Contents/Resources/kaku.lua"
+FAZ_LUA="assets/macos/Faz.app/Contents/Resources/faz.lua"
 
 file_contains_literal() {
 	local needle="$1"
@@ -55,8 +55,8 @@ for script in "$CHECK_SCRIPT" "$FIRST_RUN_SCRIPT"; do
 	fi
 done
 
-if ! file_contains_literal 'config_version.txt' "$KAKU_LUA"; then
-	echo "Expected $KAKU_LUA to read config_version.txt" >&2
+if ! file_contains_literal 'config_version.txt' "$FAZ_LUA"; then
+	echo "Expected $FAZ_LUA to read config_version.txt" >&2
 	exit 1
 fi
 

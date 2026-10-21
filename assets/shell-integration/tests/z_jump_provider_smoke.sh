@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/common.sh"
 
 echo "zshz_jump_provider: starting (zsh=$(command -v zsh 2>/dev/null || echo MISSING), bash=$BASH_VERSION)" >&2
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-zshz-jump-provider.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-zshz-jump-provider.XXXXXX")"
 cleanup() {
   rm -rf "$tmp_dir"
 }
@@ -23,13 +23,13 @@ create_stub_vendor_dir "$vendor_dir"
 
 # Minimal fast-syntax-highlighting stub
 cat >"$vendor_dir/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh" <<'EOF'
-typeset -g KAKU_TEST_FAST_SH_SOURCED=1
+typeset -g FAZ_TEST_FAST_SH_SOURCED=1
 _zsh_highlight() { :; }
 EOF
 
 # Minimal zsh-z stub that defines the zshz function and tracks source count
 cat >"$vendor_dir/zsh-z/zsh-z.plugin.zsh" <<'EOF'
-typeset -g KAKU_TEST_ZSHZ_SOURCE_COUNT=$(( ${KAKU_TEST_ZSHZ_SOURCE_COUNT:-0} + 1 ))
+typeset -g FAZ_TEST_ZSHZ_SOURCE_COUNT=$(( ${FAZ_TEST_ZSHZ_SOURCE_COUNT:-0} + 1 ))
 zshz() { :; }
 z() { zshz "$@"; }
 EOF
@@ -40,10 +40,10 @@ setup_status=0
 setup_out="$(
   HOME="$HOME" \
   ZDOTDIR="$ZDOTDIR" \
-  KAKU_INIT_INTERNAL=1 \
-  KAKU_SKIP_TOOL_BOOTSTRAP=1 \
-  KAKU_SKIP_TERMINFO_BOOTSTRAP=1 \
-  KAKU_VENDOR_DIR="$vendor_dir" \
+  FAZ_INIT_INTERNAL=1 \
+  FAZ_SKIP_TOOL_BOOTSTRAP=1 \
+  FAZ_SKIP_TERMINFO_BOOTSTRAP=1 \
+  FAZ_VENDOR_DIR="$vendor_dir" \
   bash "$REPO_ROOT/assets/shell-integration/setup_zsh.sh" --update-only 2>&1
 )" || setup_status=$?
 if [[ "$setup_status" -ne 0 ]]; then
@@ -52,9 +52,9 @@ if [[ "$setup_status" -ne 0 ]]; then
   exit 1
 fi
 
-kaku_zsh="$HOME/.config/kaku/zsh/kaku.zsh"
-if [[ ! -f "$kaku_zsh" ]]; then
-  echo "zshz_jump_provider: kaku.zsh not created at $kaku_zsh" >&2
+faz_zsh="$HOME/.config/faz/zsh/faz.zsh"
+if [[ ! -f "$faz_zsh" ]]; then
+  echo "zshz_jump_provider: faz.zsh not created at $faz_zsh" >&2
   exit 1
 fi
 
@@ -65,11 +65,11 @@ if ! with_zshz="$(
   HOME="$HOME" \
   ZDOTDIR="$ZDOTDIR" \
   zsh -f -c '
-source "$HOME/.config/kaku/zsh/kaku.zsh"
+source "$HOME/.config/faz/zsh/faz.zsh"
 if (( ${+functions[zshz]} )); then
-  print -r -- "__KAKU_ZSHZ_LOADED__:1"
+  print -r -- "__FAZ_ZSHZ_LOADED__:1"
 else
-  print -r -- "__KAKU_ZSHZ_LOADED__:0"
+  print -r -- "__FAZ_ZSHZ_LOADED__:0"
 fi
 ' 2>&1
 )"; then
@@ -79,15 +79,15 @@ fi
 fi
 
 case "$with_zshz" in
-  *__KAKU_ZSHZ_LOADED__:1* ) ;;
+  *__FAZ_ZSHZ_LOADED__:1* ) ;;
   * )
-    echo "zshz_jump_provider: zshz function not defined after sourcing kaku.zsh:" >&2
+    echo "zshz_jump_provider: zshz function not defined after sourcing faz.zsh:" >&2
     echo "$with_zshz" >&2
     exit 1
     ;;
 esac
 
-# Test 2: when zshz is already defined, kaku.zsh must not source zsh-z again
+# Test 2: when zshz is already defined, faz.zsh must not source zsh-z again
 with_existing_provider=""
 if ! with_existing_provider="$(
   TERM=xterm-256color \
@@ -95,10 +95,10 @@ if ! with_existing_provider="$(
   ZDOTDIR="$ZDOTDIR" \
   zsh -f -c '
 # Simulate user having already loaded zsh-z themselves
-typeset -g KAKU_TEST_ZSHZ_SOURCE_COUNT=0
+typeset -g FAZ_TEST_ZSHZ_SOURCE_COUNT=0
 zshz() { :; }
-source "$HOME/.config/kaku/zsh/kaku.zsh"
-print -r -- "__KAKU_NO_DOUBLE_SOURCE__:${KAKU_TEST_ZSHZ_SOURCE_COUNT}"
+source "$HOME/.config/faz/zsh/faz.zsh"
+print -r -- "__FAZ_NO_DOUBLE_SOURCE__:${FAZ_TEST_ZSHZ_SOURCE_COUNT}"
 ' 2>&1
 )"; then
   echo "zshz_jump_provider: zsh with existing provider exited non-zero:" >&2
@@ -107,7 +107,7 @@ print -r -- "__KAKU_NO_DOUBLE_SOURCE__:${KAKU_TEST_ZSHZ_SOURCE_COUNT}"
 fi
 
 case "$with_existing_provider" in
-  *__KAKU_NO_DOUBLE_SOURCE__:0* ) ;;
+  *__FAZ_NO_DOUBLE_SOURCE__:0* ) ;;
   * )
     echo "zshz_jump_provider: zsh-z sourced again despite existing zshz function:" >&2
     echo "$with_existing_provider" >&2
@@ -115,24 +115,24 @@ case "$with_existing_provider" in
     ;;
 esac
 
-# Test 3: when zoxide already owns z, kaku.zsh must not source zsh-z or override z.
+# Test 3: when zoxide already owns z, faz.zsh must not source zsh-z or override z.
 with_zoxide_provider=""
 if ! with_zoxide_provider="$(
   TERM=xterm-256color \
   HOME="$HOME" \
   ZDOTDIR="$ZDOTDIR" \
   zsh -f -c '
-# Simulate zoxide init zsh having run before Kaku integration.
-typeset -g KAKU_TEST_ZSHZ_SOURCE_COUNT=0
+# Simulate zoxide init zsh having run before Faz integration.
+typeset -g FAZ_TEST_ZSHZ_SOURCE_COUNT=0
 __zoxide_z() { :; }
 _zoxide_z() { :; }
 z() { __zoxide_z "$@"; }
-source "$HOME/.config/kaku/zsh/kaku.zsh"
-print -r -- "__KAKU_NO_ZSHZ_SOURCE_FOR_ZOXIDE__:${KAKU_TEST_ZSHZ_SOURCE_COUNT}"
+source "$HOME/.config/faz/zsh/faz.zsh"
+print -r -- "__FAZ_NO_ZSHZ_SOURCE_FOR_ZOXIDE__:${FAZ_TEST_ZSHZ_SOURCE_COUNT}"
 if (( ${+functions[zshz]} )); then
-  print -r -- "__KAKU_ZSHZ_DEFINED_WITH_ZOXIDE__:1"
+  print -r -- "__FAZ_ZSHZ_DEFINED_WITH_ZOXIDE__:1"
 else
-  print -r -- "__KAKU_ZSHZ_DEFINED_WITH_ZOXIDE__:0"
+  print -r -- "__FAZ_ZSHZ_DEFINED_WITH_ZOXIDE__:0"
 fi
 ' 2>&1
 )"; then
@@ -142,7 +142,7 @@ fi
 fi
 
 case "$with_zoxide_provider" in
-  *__KAKU_NO_ZSHZ_SOURCE_FOR_ZOXIDE__:0*__KAKU_ZSHZ_DEFINED_WITH_ZOXIDE__:0* ) ;;
+  *__FAZ_NO_ZSHZ_SOURCE_FOR_ZOXIDE__:0*__FAZ_ZSHZ_DEFINED_WITH_ZOXIDE__:0* ) ;;
   * )
     echo "zshz_jump_provider: zsh-z was loaded despite existing zoxide provider:" >&2
     echo "$with_zoxide_provider" >&2
@@ -158,9 +158,9 @@ if ! without_zshz="$(
   ZDOTDIR="$ZDOTDIR" \
   zsh -f -c '
 # Remove plugin file to simulate missing install
-rm -f "$HOME/.config/kaku/zsh/plugins/zsh-z/zsh-z.plugin.zsh" 2>/dev/null || true
-source "$HOME/.config/kaku/zsh/kaku.zsh"
-print -r -- "__KAKU_NO_ZSHZ_OK__:0"
+rm -f "$HOME/.config/faz/zsh/plugins/zsh-z/zsh-z.plugin.zsh" 2>/dev/null || true
+source "$HOME/.config/faz/zsh/faz.zsh"
+print -r -- "__FAZ_NO_ZSHZ_OK__:0"
 ' 2>&1
 )"; then
   echo "zshz_jump_provider: zsh without zsh-z exited non-zero:" >&2
@@ -169,9 +169,9 @@ print -r -- "__KAKU_NO_ZSHZ_OK__:0"
 fi
 
 case "$without_zshz" in
-  *__KAKU_NO_ZSHZ_OK__:0* ) ;;
+  *__FAZ_NO_ZSHZ_OK__:0* ) ;;
   * )
-    echo "zshz_jump_provider: kaku.zsh errored when zsh-z plugin is absent:" >&2
+    echo "zshz_jump_provider: faz.zsh errored when zsh-z plugin is absent:" >&2
     echo "$without_zshz" >&2
     exit 1
     ;;

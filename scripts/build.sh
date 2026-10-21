@@ -13,21 +13,19 @@ export CMAKE_OSX_DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-11.0}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-APP_NAME="Kaku"
+APP_NAME="Faz"
 TARGET_DIR="${TARGET_DIR:-target}"
 PROFILE="${PROFILE:-release}"
 OUT_DIR="${OUT_DIR:-dist}"
 OPEN_APP="${OPEN_APP:-0}"
 APP_ONLY="${APP_ONLY:-0}"
 BUILD_ARCH="${BUILD_ARCH:-}"
-KAKU_REQUIRE_SIGNED_RELEASE="${KAKU_REQUIRE_SIGNED_RELEASE:-0}"
+FAZ_REQUIRE_SIGNED_RELEASE="${FAZ_REQUIRE_SIGNED_RELEASE:-0}"
 
+# Faz ships Apple Silicon only; there is no x86_64 build. `native` and
+# `arm64` are accepted for compatibility with older invocations.
 if [[ -z "$BUILD_ARCH" ]]; then
-	if [[ "$PROFILE" == "release" || "$PROFILE" == "release-opt" ]]; then
-		BUILD_ARCH="universal"
-	else
-		BUILD_ARCH="native"
-	fi
+	BUILD_ARCH="native"
 fi
 
 resolve_native_target() {
@@ -35,11 +33,8 @@ resolve_native_target() {
 	arm64 | aarch64)
 		echo "aarch64-apple-darwin"
 		;;
-	x86_64)
-		echo "x86_64-apple-darwin"
-		;;
 	*)
-		echo "Unsupported macOS architecture: $(uname -m)" >&2
+		echo "Unsupported macOS architecture: $(uname -m) (Faz requires Apple Silicon)" >&2
 		exit 1
 		;;
 	esac
@@ -47,20 +42,19 @@ resolve_native_target() {
 
 resolve_build_targets() {
 	case "$BUILD_ARCH" in
-	universal)
-		echo "aarch64-apple-darwin x86_64-apple-darwin"
-		;;
 	native)
 		resolve_native_target
 		;;
 	arm64)
 		echo "aarch64-apple-darwin"
 		;;
-	x86_64)
-		echo "x86_64-apple-darwin"
+	universal | x86_64)
+		echo "Unsupported BUILD_ARCH=$BUILD_ARCH: Faz ships Apple Silicon only." >&2
+		echo "Use arm64 or native (the default)." >&2
+		exit 1
 		;;
 	*)
-		echo "Unsupported BUILD_ARCH=$BUILD_ARCH (expected: universal, native, arm64, x86_64)" >&2
+		echo "Unsupported BUILD_ARCH=$BUILD_ARCH (expected: native, arm64)" >&2
 		exit 1
 		;;
 	esac
@@ -82,9 +76,9 @@ is_developer_id_application_identity() {
 detect_signing_identity() {
 	local identities count
 
-	if [[ -n "${KAKU_SIGNING_IDENTITY:-}" ]]; then
-		if ! is_developer_id_application_identity "$KAKU_SIGNING_IDENTITY"; then
-			echo "Warning: KAKU_SIGNING_IDENTITY is not a Developer ID Application certificate: $KAKU_SIGNING_IDENTITY" >&2
+	if [[ -n "${FAZ_SIGNING_IDENTITY:-}" ]]; then
+		if ! is_developer_id_application_identity "$FAZ_SIGNING_IDENTITY"; then
+			echo "Warning: FAZ_SIGNING_IDENTITY is not a Developer ID Application certificate: $FAZ_SIGNING_IDENTITY" >&2
 			echo "Notarization requires Developer ID Application signing." >&2
 			return 1
 		fi
@@ -95,12 +89,12 @@ detect_signing_identity() {
 	count=$(printf '%s\n' "$identities" | grep -c '^Developer ID Application:' || true)
 
 	if [[ "$count" -ge 1 ]]; then
-		KAKU_SIGNING_IDENTITY=$(printf '%s\n' "$identities" | head -n1)
-		export KAKU_SIGNING_IDENTITY
+		FAZ_SIGNING_IDENTITY=$(printf '%s\n' "$identities" | head -n1)
+		export FAZ_SIGNING_IDENTITY
 		if [[ "$count" -gt 1 ]]; then
-			echo "Release build: found multiple Developer ID Application certificates, auto-selecting: $KAKU_SIGNING_IDENTITY"
+			echo "Release build: found multiple Developer ID Application certificates, auto-selecting: $FAZ_SIGNING_IDENTITY"
 		else
-			echo "Release build: auto-detected signing identity: $KAKU_SIGNING_IDENTITY"
+			echo "Release build: auto-detected signing identity: $FAZ_SIGNING_IDENTITY"
 		fi
 		return 0
 	fi
@@ -178,7 +172,7 @@ done
 require_command cargo
 require_command rustup
 
-APP_BUNDLE_SRC="assets/macos/Kaku.app"
+APP_BUNDLE_SRC="assets/macos/Faz.app"
 APP_BUNDLE_OUT="$OUT_DIR/$APP_NAME.app"
 
 echo "[1/7] Building binaries ($PROFILE, $BUILD_ARCH)..."
@@ -214,26 +208,14 @@ ensure_rust_targets "${BUILD_TARGETS[@]}"
 
 for target in "${BUILD_TARGETS[@]}"; do
 	echo "Building target: $target"
-	CARGO_TERM_PROGRESS_WHEN=auto cargo build --locked ${CARGO_PROFILE_ARGS[@]+"${CARGO_PROFILE_ARGS[@]}"} ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"} --target "$target" --target-dir "$TARGET_DIR" -p kaku-gui -p kaku
+	CARGO_TERM_PROGRESS_WHEN=auto cargo build --locked ${CARGO_PROFILE_ARGS[@]+"${CARGO_PROFILE_ARGS[@]}"} ${CARGO_FEATURE_ARGS[@]+"${CARGO_FEATURE_ARGS[@]}"} --target "$target" --target-dir "$TARGET_DIR" -p faz-gui -p faz-cli
 done
 
-if [[ "$BUILD_ARCH" == "universal" ]]; then
-	BIN_DIR="$TARGET_DIR/universal/$PROFILE_DIR"
-	mkdir -p "$BIN_DIR"
-	for bin in kaku kaku-gui k; do
-		lipo -create \
-			-output "$BIN_DIR/$bin" \
-			"$TARGET_DIR/aarch64-apple-darwin/$PROFILE_DIR/$bin" \
-			"$TARGET_DIR/x86_64-apple-darwin/$PROFILE_DIR/$bin"
-		chmod +x "$BIN_DIR/$bin"
-	done
-else
-	BIN_DIR="$TARGET_DIR/${BUILD_TARGETS[0]}/$PROFILE_DIR"
-fi
+BIN_DIR="$TARGET_DIR/${BUILD_TARGETS[0]}/$PROFILE_DIR"
 
-for bin in kaku kaku-gui k; do
+for bin in faz faz-gui; do
 	echo -n "Built $bin: "
-	lipo -info "$BIN_DIR/$bin"
+	file "$BIN_DIR/$bin"
 done
 
 echo "[2/7] Preparing app bundle..."
@@ -251,14 +233,14 @@ mkdir -p "$APP_BUNDLE_OUT/Contents/MacOS"
 mkdir -p "$APP_BUNDLE_OUT/Contents/Resources"
 
 echo "[2.5/7] Syncing version from Cargo.toml..."
-# Extract version from kaku/Cargo.toml (assuming it's the source of truth)
-VERSION=$(grep '^version =' kaku/Cargo.toml | head -n 1 | cut -d '"' -f2)
+# Extract version from faz-cli/Cargo.toml (assuming it's the source of truth)
+VERSION=$(grep '^version =' faz-cli/Cargo.toml | head -n 1 | cut -d '"' -f2)
 if [[ -n "$VERSION" ]]; then
 	echo "Stamping version $VERSION into Info.plist"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP_BUNDLE_OUT/Contents/Info.plist"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP_BUNDLE_OUT/Contents/Info.plist"
 else
-	echo "Warning: Could not detect version from kaku/Cargo.toml"
+	echo "Warning: Could not detect version from faz-cli/Cargo.toml"
 fi
 
 echo "[3/7] Downloading vendor plugins..."
@@ -268,7 +250,6 @@ echo "[4/7] Copying resources and binaries..."
 cp -R assets/shell-integration/* "$APP_BUNDLE_OUT/Contents/Resources/"
 cp -R assets/shell-completion "$APP_BUNDLE_OUT/Contents/Resources/"
 cp -R assets/fonts "$APP_BUNDLE_OUT/Contents/Resources/"
-cp -R assets/prompts "$APP_BUNDLE_OUT/Contents/Resources/"
 mkdir -p "$APP_BUNDLE_OUT/Contents/Resources/vendor"
 for vendor_item in starship.toml fast-syntax-highlighting zsh-autosuggestions zsh-completions zsh-z; do
 	src_path="assets/vendor/$vendor_item"
@@ -286,12 +267,12 @@ if [[ -f "assets/logo.icns" ]]; then
 	cp "assets/logo.icns" "$APP_BUNDLE_OUT/Contents/Resources/terminal.icns"
 fi
 
-if ! tic -xe kaku -o "$APP_BUNDLE_OUT/Contents/Resources/terminfo" termwiz/data/kaku.terminfo; then
+if ! tic -xe faz -o "$APP_BUNDLE_OUT/Contents/Resources/terminfo" termwiz/data/faz.terminfo; then
 	echo "Warning: 'tic -xe' failed (some ncurses/tic variants). Falling back to full compile mode."
-	tic -x -o "$APP_BUNDLE_OUT/Contents/Resources/terminfo" termwiz/data/kaku.terminfo
+	tic -x -o "$APP_BUNDLE_OUT/Contents/Resources/terminfo" termwiz/data/faz.terminfo
 fi
 
-for bin in kaku kaku-gui k; do
+for bin in faz faz-gui; do
 	cp "$BIN_DIR/$bin" "$APP_BUNDLE_OUT/Contents/MacOS/$bin"
 	chmod +x "$APP_BUNDLE_OUT/Contents/MacOS/$bin"
 done
@@ -302,10 +283,10 @@ xattr -cr "$APP_BUNDLE_OUT"
 echo "[5/7] Signing app bundle..."
 # Signing strategy:
 # - Dev builds (PROFILE=dev): Always use ad-hoc signing (-) for speed
-# - Release builds (PROFILE=release/release-opt): Use KAKU_SIGNING_IDENTITY or auto-detect a Developer ID Application certificate
+# - Release builds (PROFILE=release/release-opt): Use FAZ_SIGNING_IDENTITY or auto-detect a Developer ID Application certificate
 # Usage with developer certificate:
-#   KAKU_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/build.sh
-if [[ "$KAKU_REQUIRE_SIGNED_RELEASE" == "1" && ( "$PROFILE" == "dev" || "$PROFILE" == "debug" ) ]]; then
+#   FAZ_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/build.sh
+if [[ "$FAZ_REQUIRE_SIGNED_RELEASE" == "1" && ( "$PROFILE" == "dev" || "$PROFILE" == "debug" ) ]]; then
 	echo "Error: signed release requires PROFILE=release or PROFILE=release-opt, got PROFILE=$PROFILE" >&2
 	exit 1
 fi
@@ -315,15 +296,15 @@ if [[ "$PROFILE" == "dev" || "$PROFILE" == "debug" ]]; then
 	echo "Dev build: using ad-hoc signing"
 else
 	if detect_signing_identity; then
-		SIGNING_IDENTITY="$KAKU_SIGNING_IDENTITY"
+		SIGNING_IDENTITY="$FAZ_SIGNING_IDENTITY"
 		echo "Release build: signing with developer certificate"
 	else
-		if [[ "$KAKU_REQUIRE_SIGNED_RELEASE" == "1" ]]; then
-			echo "Error: release build requires a Developer ID Application certificate. Set KAKU_SIGNING_IDENTITY or install one in Keychain." >&2
+		if [[ "$FAZ_REQUIRE_SIGNED_RELEASE" == "1" ]]; then
+			echo "Error: release build requires a Developer ID Application certificate. Set FAZ_SIGNING_IDENTITY or install one in Keychain." >&2
 			exit 1
 		fi
 		SIGNING_IDENTITY="-"
-		echo "Release build: using ad-hoc signing (set KAKU_SIGNING_IDENTITY or install a single Developer ID Application certificate for notarization)"
+		echo "Release build: using ad-hoc signing (set FAZ_SIGNING_IDENTITY or install a single Developer ID Application certificate for notarization)"
 	fi
 fi
 
@@ -335,7 +316,7 @@ BASE_SIGN_ARGS=(
 RUNTIME_SIGN_ARGS=(
 	"${BASE_SIGN_ARGS[@]}"
 	--options runtime
-	--entitlements assets/macos/Kaku.entitlements
+	--entitlements assets/macos/Faz.entitlements
 )
 
 if [[ "$SIGNING_IDENTITY" == "-" ]]; then
@@ -357,11 +338,11 @@ while IFS= read -r -d '' dylib; do
 	codesign_with_retry "${BASE_SIGN_ARGS[@]}" "$dylib"
 done < <(find "$APP_BUNDLE_OUT/Contents/Frameworks" -type f -name '*.dylib' -print0 | sort -z)
 
-# kaku-gui is CFBundleExecutable. When codesign signs the main executable it
+# faz-gui is CFBundleExecutable. When codesign signs the main executable it
 # validates the other executables in Contents/MacOS as nested code and refuses
 # while any of them is still unsigned ("code object is not signed at all,
 # In subcomponent: .../k"), so the helpers must be signed before it.
-for bin in "$APP_BUNDLE_OUT/Contents/MacOS/kaku" "$APP_BUNDLE_OUT/Contents/MacOS/k" "$APP_BUNDLE_OUT/Contents/MacOS/kaku-gui"; do
+for bin in "$APP_BUNDLE_OUT/Contents/MacOS/faz" "$APP_BUNDLE_OUT/Contents/MacOS/faz-gui"; do
 	codesign_with_retry "${RUNTIME_SIGN_ARGS[@]}" "$bin"
 done
 
@@ -378,7 +359,7 @@ if [[ "$APP_ONLY" == "1" ]]; then
 	exit 0
 fi
 
-UPDATE_ZIP_NAME="kaku_for_update.zip"
+UPDATE_ZIP_NAME="faz_for_update.zip"
 UPDATE_ZIP_PATH="$OUT_DIR/$UPDATE_ZIP_NAME"
 UPDATE_SHA_PATH="$OUT_DIR/${UPDATE_ZIP_NAME}.sha256"
 

@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug or issue with Kaku
+about: Report a bug or issue with Faz
 title: '[BUG] '
 labels: bug
 assignees: ''
@@ -24,7 +24,7 @@ What happened? A short description is enough.
 ## Environment
 
 Please include:
-- **Kaku version**: (e.g. `0.4.0`)
+- **Faz version**: (e.g. `0.4.0`)
 - **macOS version**: (e.g. `macOS 15.3`)
 - **Machine**: (e.g. MacBook Pro M3)
 - **Shell**: (e.g. `zsh`, `bash`, `fish`)
@@ -33,7 +33,7 @@ Please include:
 
 Add anything helpful if available:
 - screenshots or recordings
-- relevant config snippet from `~/.config/kaku/kaku.lua`
+- relevant config snippet from `~/.config/faz/faz.lua`
 - Doctor panel header and related log lines
 
 You can submit first with minimal info; maintainers may ask follow-up questions.

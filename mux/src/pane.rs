@@ -301,6 +301,22 @@ pub trait Pane: Downcast + Send + Sync {
     fn send_paste(&self, text: &str) -> anyhow::Result<()>;
     fn reader(&self) -> anyhow::Result<Option<PaneReader>>;
     fn writer(&self) -> MappedMutexGuard<'_, dyn std::io::Write>;
+
+    /// Is a ZMODEM transfer holding this pane's pty's byte stream?
+    ///
+    /// While true, the local `sz`/`rz` child owns the channel: it is the only
+    /// writer whose bytes may reach the peer. Anything else — a keystroke, a
+    /// paste, an injected command, a char-selector glyph — lands in the middle
+    /// of a protocol frame, fails the peer's CRC check, and aborts the whole
+    /// transfer.
+    ///
+    /// Callers that write to a pane's pty must consult this. `Pane::key_down`
+    /// and `Pane::send_paste` never reach the pty while it holds, but the GUI
+    /// has several paths that write bytes directly (`write_all` on
+    /// [`Pane::writer`]) and those bypass the keyboard entirely.
+    fn is_zmodem_exclusive(&self) -> bool {
+        false
+    }
     fn resize(&self, size: TerminalSize) -> anyhow::Result<()>;
     /// Resize terminal state only without notifying the PTY.
     /// Used during live split-drag to provide smooth visual feedback
@@ -319,6 +335,57 @@ pub trait Pane: Downcast + Send + Sync {
     }
     fn mouse_event(&self, event: MouseEvent) -> anyhow::Result<()>;
     fn perform_actions(&self, _actions: Vec<termwiz::escape::Action>) {}
+
+    /// While a ZMODEM transfer is running on this pane, return the fd that raw
+    /// pty bytes must be written to instead of being fed to the VT parser.
+    ///
+    /// ZMODEM payloads are binary, so they cannot pass through the escape
+    /// parser: control bytes in the stream would be interpreted as terminal
+    /// commands and the payload would be corrupted. The pane's output parser
+    /// checks this on every read and, when it is `Some`, forwards the bytes
+    /// verbatim to the local `sz`/`rz` child and skips the parser entirely.
+    ///
+    /// `None` (the default) means no transfer is active, which is the case for
+    /// every pane that has no local pty behind it.
+    fn zmodem_sink(&self) -> Option<std::os::fd::RawFd> {
+        None
+    }
+
+    /// Stop diverting output to a ZMODEM child and resume normal parsing.
+    ///
+    /// Called by the parser thread when a diversion fails, and by the transfer
+    /// thread when a session ends.
+    fn zmodem_finish(&self) {}
+
+    /// The pane's ZMODEM state cell, if it can carry a transfer.
+    ///
+    /// Returns the same cell the output parser consults, so installing a sink
+    /// here is what makes the parser divert. `None` for panes with no local
+    /// pty.
+    fn zmodem_state(&self) -> Option<Arc<crate::zmodem::state::ZmodemState>> {
+        None
+    }
+
+    /// Path to the pane's pty slave, e.g. `/dev/ttys004`.
+    ///
+    /// A ZMODEM transfer has to put the *slave* into a byte-transparent mode:
+    /// termios belongs to the slave, so setting it on the master does nothing.
+    /// Without this the remote shell's line discipline mangles the binary
+    /// payload and the transfer dies partway through.
+    fn zmodem_pty_slave_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+
+    /// The pane's pty master fd, used to write a ZMODEM child's output back to
+    /// the remote and to switch the tty into a byte-transparent mode.
+    ///
+    /// Returns `None` for panes with no local pty (remote mux clients, overlay
+    /// panes), which therefore cannot carry a transfer. The fd stays valid only
+    /// while the pane is alive, so callers must hold the pane for as long as
+    /// they use it.
+    fn zmodem_pty_fd(&self) -> Option<std::os::fd::RawFd> {
+        None
+    }
     fn is_dead(&self) -> bool;
     fn kill(&self) {}
     fn palette(&self) -> ColorPalette;

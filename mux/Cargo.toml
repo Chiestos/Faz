@@ -2,7 +2,7 @@
 name = "mux"
 version = "0.1.0"
 authors = ["Wez Furlong <wez@wezfurlong.org>"]
-edition = "2018"
+edition = "2021"
 publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -27,7 +27,7 @@ luahelper.workspace = true
 metrics.workspace = true
 mlua.workspace = true
 names.workspace = true
-nix = {workspace=true, features=["term"]}
+nix = {workspace=true, features=["term", "fs", "poll", "signal", "process", "ioctl", "user"]}
 parking_lot.workspace = true
 percent-encoding.workspace = true
 portable-pty = { workspace=true, features = ["serde_support"]}

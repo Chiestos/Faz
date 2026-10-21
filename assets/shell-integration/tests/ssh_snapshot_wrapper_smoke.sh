@@ -16,7 +16,7 @@ if ! command -v zsh >/dev/null 2>&1; then
   exit 0
 fi
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-ssh-snapshot-smoke.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-ssh-snapshot-smoke.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 tmp_home="$tmp_dir/home"
@@ -35,14 +35,14 @@ else
 fi
 
 HOME="$tmp_home" \
-  KAKU_INIT_INTERNAL=1 \
-  KAKU_SKIP_TOOL_BOOTSTRAP=1 \
-  KAKU_SKIP_TERMINFO_BOOTSTRAP=1 \
-  KAKU_VENDOR_DIR="$tmp_vendor" \
+  FAZ_INIT_INTERNAL=1 \
+  FAZ_SKIP_TOOL_BOOTSTRAP=1 \
+  FAZ_SKIP_TERMINFO_BOOTSTRAP=1 \
+  FAZ_VENDOR_DIR="$tmp_vendor" \
   bash "$SHELL_DIR/setup_zsh.sh" --update-only >/dev/null
 
-kaku_zsh="$tmp_home/.config/kaku/zsh/kaku.zsh"
-[[ -f "$kaku_zsh" ]] || fail "kaku.zsh was not generated"
+faz_zsh="$tmp_home/.config/faz/zsh/faz.zsh"
+[[ -f "$faz_zsh" ]] || fail "faz.zsh was not generated"
 
 cat >"$tmp_bin/ssh" <<'EOF'
 #!/bin/sh
@@ -57,16 +57,16 @@ snapshot="$tmp_dir/ssh.snapshot.zsh"
 HOME="$tmp_home" \
   PATH="$tmp_bin:$PATH" \
   TERM=xterm-256color \
-  KAKU_ZSH="$kaku_zsh" \
+  FAZ_ZSH="$faz_zsh" \
   SNAPSHOT="$snapshot" \
   zsh -fc '
     alias ssh="ssh -p 2200"
-    source "$KAKU_ZSH"
+    source "$FAZ_ZSH"
     functions ssh > "$SNAPSHOT"
   ' >/dev/null
 
-if grep -Fq '_kaku_wrapped_ssh' "$snapshot"; then
-  fail "captured ssh wrapper still depends on _kaku_wrapped_ssh"
+if grep -Fq '_faz_wrapped_ssh' "$snapshot"; then
+  fail "captured ssh wrapper still depends on _faz_wrapped_ssh"
 fi
 
 output="$({
@@ -75,7 +75,7 @@ output="$({
     SNAPSHOT="$snapshot" \
     zsh -fc '
       source "$SNAPSHOT"
-      TERM=kaku ssh '\''semi;colon'\'' '\''$(printf SENTINEL)'\''
+      TERM=faz ssh '\''semi;colon'\'' '\''$(printf SENTINEL)'\''
     '
 } 2>&1)" || {
   printf '%s\n' "$output" >&2
@@ -97,12 +97,12 @@ live_ssh() {
   HOME="$tmp_home" \
     PATH="$tmp_bin:$PATH" \
     TERM=xterm-256color \
-    KAKU_ZSH="$kaku_zsh" \
+    FAZ_ZSH="$faz_zsh" \
     env "$@" \
     zsh -fc "
       $setup
-      source \"\$KAKU_ZSH\"
-      TERM=kaku ssh probe-host
+      source \"\$FAZ_ZSH\"
+      TERM=faz ssh probe-host
     " 2>&1
 }
 
@@ -125,18 +125,18 @@ grep -Fqx 'ARG=<IdentitiesOnly=yes>' <<<"$output" \
 
 # ...but not when the user already passed it or opted out.
 output="$(HOME="$tmp_home" PATH="$tmp_bin:$PATH" TERM=xterm-256color \
-  KAKU_ZSH="$kaku_zsh" SSH_AUTH_SOCK=/tmp/1password/agent.sock \
-  zsh -fc 'source "$KAKU_ZSH"; TERM=kaku ssh -oIdentitiesOnly=no probe-host' 2>&1)"
+  FAZ_ZSH="$faz_zsh" SSH_AUTH_SOCK=/tmp/1password/agent.sock \
+  zsh -fc 'source "$FAZ_ZSH"; TERM=faz ssh -oIdentitiesOnly=no probe-host' 2>&1)"
 grep -Fqx 'ARG=<IdentitiesOnly=yes>' <<<"$output" \
   && fail "IdentitiesOnly=yes was injected despite an explicit user setting"
-output="$(live_ssh '' SSH_AUTH_SOCK=/tmp/1password/agent.sock KAKU_SSH_SKIP_1PASSWORD_FIX=1)" || true
+output="$(live_ssh '' SSH_AUTH_SOCK=/tmp/1password/agent.sock FAZ_SSH_SKIP_1PASSWORD_FIX=1)" || true
 grep -Fqx 'ARG=<IdentitiesOnly=yes>' <<<"$output" \
-  && fail "IdentitiesOnly=yes was injected despite KAKU_SSH_SKIP_1PASSWORD_FIX=1"
+  && fail "IdentitiesOnly=yes was injected despite FAZ_SSH_SKIP_1PASSWORD_FIX=1"
 
 # The TERM fix honors its opt-out toggle.
-output="$(live_ssh '' KAKU_SSH_SKIP_TERM_FIX=1)" || true
-grep -Fqx 'TERM=kaku' <<<"$output" \
-  || fail "KAKU_SSH_SKIP_TERM_FIX=1 did not keep TERM untouched"
+output="$(live_ssh '' FAZ_SSH_SKIP_TERM_FIX=1)" || true
+grep -Fqx 'TERM=faz' <<<"$output" \
+  || fail "FAZ_SSH_SKIP_TERM_FIX=1 did not keep TERM untouched"
 
 # mosh gets the same TERM fallback (wrapper only defined when mosh exists,
 # so the fake binary must be on PATH before the integration is sourced).
@@ -146,8 +146,8 @@ printf 'TERM=%s\n' "${TERM-}"
 EOF
 chmod +x "$tmp_bin/mosh"
 output="$(HOME="$tmp_home" PATH="$tmp_bin:$PATH" TERM=xterm-256color \
-  KAKU_ZSH="$kaku_zsh" \
-  zsh -fc 'source "$KAKU_ZSH"; TERM=kaku mosh probe-host' 2>&1)"
+  FAZ_ZSH="$faz_zsh" \
+  zsh -fc 'source "$FAZ_ZSH"; TERM=faz mosh probe-host' 2>&1)"
 grep -Fqx 'TERM=xterm-256color' <<<"$output" \
   || fail "mosh wrapper did not apply the TERM fallback"
 

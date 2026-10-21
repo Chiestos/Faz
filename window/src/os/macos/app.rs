@@ -31,7 +31,7 @@ use url::Url;
 use super::connection::QuitOrigin;
 use super::keycodes::{layout_printable_vkeys, phys_to_vkey};
 
-const CLS_NAME: &str = "KakuAppDelegate";
+const CLS_NAME: &str = "FazAppDelegate";
 
 type OSStatus = i32;
 type EventHotKeyRef = *mut c_void;
@@ -58,7 +58,7 @@ const NO_ERR: OSStatus = 0;
 const K_EVENT_CLASS_KEYBOARD: u32 = 0x6b657962;
 const K_EVENT_HOT_KEY_PRESSED: u32 = 6;
 
-const HOTKEY_SIGNATURE: u32 = u32::from_be_bytes(*b"KAKU");
+const HOTKEY_SIGNATURE: u32 = u32::from_be_bytes(*b"FAZ!");
 const HOTKEY_ID: u32 = 1;
 
 const SHIFT_KEY: u32 = 1 << 9;
@@ -574,14 +574,14 @@ pub(crate) fn sync_global_hotkey_registration() {
     state.hotkey_ref = Some(hotkey_ref as usize);
 }
 
-fn reap_kaku_autofill_helpers() {
-    // Best-effort cleanup for macOS helper leaks where AutoFill (Kaku)
+fn reap_faz_autofill_helpers() {
+    // Best-effort cleanup for macOS helper leaks where AutoFill (Faz)
     // can accumulate across app restarts.
     const SCRIPT: &str = r#"
 for pid in $(pgrep -f 'SafariPlatformSupport.Helper|CredentialProviderExtensionHelper' 2>/dev/null); do
   name=$(lsappinfo info -only name -pid "$pid" 2>/dev/null | sed -n 's/.*"LSDisplayName"="\([^"]*\)".*/\1/p')
   case "$name" in
-    *"(Kaku)"*) kill "$pid" 2>/dev/null || true ;;
+    *"(Faz)"*) kill "$pid" 2>/dev/null || true ;;
   esac
 done
 "#;
@@ -589,10 +589,10 @@ done
     match Command::new("/bin/sh").arg("-c").arg(SCRIPT).status() {
         Ok(status) if status.success() => {}
         Ok(status) => {
-            log::debug!("reap_kaku_autofill_helpers exited with status {}", status);
+            log::debug!("reap_faz_autofill_helpers exited with status {}", status);
         }
         Err(err) => {
-            log::warn!("reap_kaku_autofill_helpers failed: {err:#}");
+            log::warn!("reap_faz_autofill_helpers failed: {err:#}");
         }
     }
 }
@@ -626,8 +626,8 @@ extern "C" fn application_should_terminate(
             WindowCloseConfirmation::AlwaysPrompt => {
                 let alert: id = msg_send![class!(NSAlert), alloc];
                 let alert: id = msg_send![alert, init];
-                let message_text = nsstring("Terminate Kaku?");
-                let info_text = nsstring("Detach and close all panes and terminate Kaku?");
+                let message_text = nsstring("Terminate Faz?");
+                let info_text = nsstring("Detach and close all panes and terminate Faz?");
                 let cancel = nsstring("Cancel");
                 let ok = nsstring("Ok");
 
@@ -664,7 +664,7 @@ extern "C" fn application_should_terminate_after_last_window_closed(
     NO
 }
 
-/// Find the frontmost Kaku window and dispatch QuitApplication to it so the
+/// Find the frontmost Faz window and dispatch QuitApplication to it so the
 /// GUI layer can run its mux-aware SmartPrompt logic (and show the confirm
 /// overlay if a stateful pane is still running). Returns `true` when a
 /// window accepted the dispatch; `false` when there is no window to route
@@ -708,7 +708,7 @@ fn terminate_now(origin: QuitOrigin, detail: Option<&str>) -> u64 {
     // stops. This is the reliable save path for Cmd+Q; window_will_close
     // may not fire for every window before the process exits.
     super::window::on_app_terminating();
-    reap_kaku_autofill_helpers();
+    reap_faz_autofill_helpers();
     uninstall_registered_hotkey(&mut GLOBAL_HOTKEY_STATE.lock().unwrap());
     request_app_termination(origin, detail);
     NSApplicationTerminateReply::NSTerminateNow as u64
@@ -720,7 +720,7 @@ extern "C" fn application_will_finish_launching(
     _notif: *mut Object,
 ) {
     log::debug!("application_will_finish_launching");
-    std::thread::spawn(reap_kaku_autofill_helpers);
+    std::thread::spawn(reap_faz_autofill_helpers);
 }
 
 extern "C" fn application_did_finish_launching(this: &mut Object, _sel: Sel, _notif: *mut Object) {
@@ -973,7 +973,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("kaku-app-tests-{}-{nanos}", name))
+        std::env::temp_dir().join(format!("faz-app-tests-{}-{nanos}", name))
     }
 
     #[test]
@@ -1037,7 +1037,7 @@ mod tests {
 
     #[test]
     fn parse_url_action_supports_open_tab_by_tty() {
-        let url = Url::parse("kaku://open-tab?tty=/dev/ttys012").expect("valid url");
+        let url = Url::parse("faz://open-tab?tty=/dev/ttys012").expect("valid url");
         assert_eq!(
             parse_url_action(&url),
             Some(UrlAction::OpenTabByTty("/dev/ttys012".to_string()))
@@ -1046,7 +1046,7 @@ mod tests {
 
     #[test]
     fn parse_url_action_supports_activate_pane_path_form() {
-        let url = Url::parse("kaku://activate-pane/42").expect("valid url");
+        let url = Url::parse("faz://activate-pane/42").expect("valid url");
         assert_eq!(
             parse_url_action(&url),
             Some(UrlAction::ActivatePaneById(42))
@@ -1055,14 +1055,14 @@ mod tests {
 
     #[test]
     fn parse_url_action_supports_activate_tab_query_form() {
-        let url = Url::parse("kaku://activate-tab?tab_id=7").expect("valid url");
+        let url = Url::parse("faz://activate-tab?tab_id=7").expect("valid url");
         assert_eq!(parse_url_action(&url), Some(UrlAction::ActivateTabById(7)));
     }
 
     #[test]
     fn parse_url_action_rejects_missing_or_invalid_ids() {
-        let missing = Url::parse("kaku://activate-pane").expect("valid url");
-        let invalid = Url::parse("kaku://activate-tab/not-a-number").expect("valid url");
+        let missing = Url::parse("faz://activate-pane").expect("valid url");
+        let invalid = Url::parse("faz://activate-tab/not-a-number").expect("valid url");
         assert_eq!(parse_url_action(&missing), None);
         assert_eq!(parse_url_action(&invalid), None);
     }
@@ -1134,11 +1134,11 @@ extern "C" fn application_open_untitled_file(
     NO
 }
 
-extern "C" fn kaku_perform_key_assignment(_self: &mut Object, _sel: Sel, menu_item: *mut Object) {
+extern "C" fn faz_perform_key_assignment(_self: &mut Object, _sel: Sel, menu_item: *mut Object) {
     let menu_item = crate::os::macos::menu::MenuItem::with_menu_item(menu_item);
-    // Safe because kakuPerformKeyAssignment: is only used with KeyAssignment
+    // Safe because fazPerformKeyAssignment: is only used with KeyAssignment
     let action = menu_item.get_represented_item();
-    log::debug!("kaku_perform_key_assignment {action:?}",);
+    log::debug!("faz_perform_key_assignment {action:?}",);
     match action {
         Some(RepresentedItem::KeyAssignment(action)) => {
             if let Some(conn) = Connection::get() {
@@ -1152,7 +1152,7 @@ extern "C" fn kaku_perform_key_assignment(_self: &mut Object, _sel: Sel, menu_it
 extern "C" fn show_settings_window(_self: &mut Object, _sel: Sel, _sender: *mut Object) {
     if let Some(conn) = Connection::get() {
         conn.dispatch_app_event(ApplicationEvent::PerformKeyAssignment(
-            KeyAssignment::EmitEvent("open-kaku-config".to_string()),
+            KeyAssignment::EmitEvent("open-faz-config".to_string()),
         ));
     }
 }
@@ -1412,7 +1412,7 @@ fn parse_id_from_url(url: &Url, path_segment: Option<&str>, query_key: &str) -> 
 }
 
 fn parse_url_action(url: &Url) -> Option<UrlAction> {
-    if url.scheme() != "kaku" {
+    if url.scheme() != "faz" {
         return None;
     }
 
@@ -1503,7 +1503,7 @@ extern "C" fn application_open_urls(
     }
 }
 
-extern "C" fn open_in_kaku_service(
+extern "C" fn open_in_faz_service(
     _self: &mut Object,
     _sel: Sel,
     pasteboard: *mut Object,
@@ -1511,16 +1511,16 @@ extern "C" fn open_in_kaku_service(
     _error: *mut Object,
 ) {
     let Some(path) = first_service_path(pasteboard) else {
-        log::warn!("openInKakuService: Finder provided no usable paths");
+        log::warn!("openInFazService: Finder provided no usable paths");
         return;
     };
     let path = normalize_finder_service_path(path);
 
-    log::debug!("openInKakuService {path}");
+    log::debug!("openInFazService {path}");
     dispatch_or_queue_service_open(path, true);
 }
 
-extern "C" fn open_in_kaku_window_service(
+extern "C" fn open_in_faz_window_service(
     _self: &mut Object,
     _sel: Sel,
     pasteboard: *mut Object,
@@ -1528,12 +1528,12 @@ extern "C" fn open_in_kaku_window_service(
     _error: *mut Object,
 ) {
     let Some(path) = first_service_path(pasteboard) else {
-        log::warn!("openInKakuWindowService: Finder provided no usable paths");
+        log::warn!("openInFazWindowService: Finder provided no usable paths");
         return;
     };
     let path = normalize_finder_service_path(path);
 
-    log::debug!("openInKakuWindowService {path}");
+    log::debug!("openInFazWindowService {path}");
     dispatch_or_queue_service_open(path, false);
 }
 
@@ -1544,7 +1544,7 @@ extern "C" fn application_dock_menu(
 ) -> *mut Object {
     let dock_menu = Menu::new_with_title("");
     let new_window_item =
-        MenuItem::new_with("New Window", Some(sel!(kakuPerformKeyAssignment:)), "");
+        MenuItem::new_with("New Window", Some(sel!(fazPerformKeyAssignment:)), "");
     new_window_item
         .set_represented_item(RepresentedItem::KeyAssignment(KeyAssignment::SpawnWindow));
     dock_menu.add_item(&new_window_item);
@@ -1595,8 +1595,8 @@ fn get_class() -> &'static Class {
                     as extern "C" fn(&mut Object, Sel, *mut Object) -> *mut Object,
             );
             cls.add_method(
-                sel!(kakuPerformKeyAssignment:),
-                kaku_perform_key_assignment as extern "C" fn(&mut Object, Sel, *mut Object),
+                sel!(fazPerformKeyAssignment:),
+                faz_perform_key_assignment as extern "C" fn(&mut Object, Sel, *mut Object),
             );
             // macOS may route "Settings..." through one of these standard selectors
             // instead of our custom menu-item selector.
@@ -1614,13 +1614,13 @@ fn get_class() -> &'static Class {
                     as extern "C" fn(&mut Object, Sel, *mut Object) -> BOOL,
             );
             cls.add_method(
-                sel!(openInKakuService:userData:error:),
-                open_in_kaku_service
+                sel!(openInFazService:userData:error:),
+                open_in_faz_service
                     as extern "C" fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object),
             );
             cls.add_method(
-                sel!(openInKakuWindowService:userData:error:),
-                open_in_kaku_window_service
+                sel!(openInFazWindowService:userData:error:),
+                open_in_faz_window_service
                     as extern "C" fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object),
             );
             cls.add_method(

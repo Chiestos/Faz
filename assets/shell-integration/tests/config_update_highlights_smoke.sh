@@ -33,7 +33,7 @@ assert_eq() {
 	fi
 }
 
-output="$(KAKU_CONFIG_UPDATE_LANGUAGE=en print_config_update_highlights "$SCRIPT_DIR" 12 15)"
+output="$(FAZ_CONFIG_UPDATE_LANGUAGE=en print_config_update_highlights "$SCRIPT_DIR" 12 15)"
 
 assert_not_contains "$output" "  v12"
 assert_not_contains "$output" "  v13"
@@ -42,16 +42,16 @@ assert_not_contains "$output" "Shell integration compatibility is improved for S
 assert_contains "$output" "Starship prompt and AI shell hooks are more reliable"
 assert_contains "$output" "regenerate the"
 assert_contains "$output" "managed script correctly"
-assert_contains "$output" "Yazi now follows Kaku dark and light themes automatically"
+assert_contains "$output" "Yazi now follows Faz dark and light themes automatically"
 
-english_output="$(KAKU_CONFIG_UPDATE_LANGUAGE=en print_config_update_highlights "$SCRIPT_DIR" 20 21)"
+english_output="$(FAZ_CONFIG_UPDATE_LANGUAGE=en print_config_update_highlights "$SCRIPT_DIR" 20 21)"
 assert_contains "$english_output" "Tab and pane close confirmation now support Never, Smart, and Always"
-assert_contains "$english_output" "Kaku Dark now reports a dark terminal background to Hermes"
+assert_contains "$english_output" "Faz Dark now reports a dark terminal background to Hermes"
 assert_not_contains "$english_output" "标签页和面板关闭确认"
 
-chinese_output="$(KAKU_CONFIG_UPDATE_LANGUAGE=zh print_config_update_highlights "$SCRIPT_DIR" 20 21)"
+chinese_output="$(FAZ_CONFIG_UPDATE_LANGUAGE=zh print_config_update_highlights "$SCRIPT_DIR" 20 21)"
 assert_contains "$chinese_output" "标签页和面板关闭确认现在支持"
-assert_contains "$chinese_output" "Kaku Dark 现在会向 Hermes 正确报告深色终端背景"
+assert_contains "$chinese_output" "Faz Dark 现在会向 Hermes 正确报告深色终端背景"
 assert_not_contains "$chinese_output" "Tab and pane close confirmation now support"
 
 state_test_dir="$(mktemp -d)"
@@ -59,8 +59,8 @@ trap 'rm -rf "$state_test_dir"' EXIT
 HOME="$state_test_dir/home"
 CONFIG_DIR="$state_test_dir/config"
 STATE_FILE="$CONFIG_DIR/state.json"
-LEGACY_VERSION_FILE="$CONFIG_DIR/.kaku_config_version"
-LEGACY_GEOMETRY_FILE="$CONFIG_DIR/.kaku_window_geometry"
+LEGACY_VERSION_FILE="$CONFIG_DIR/.faz_config_version"
+LEGACY_GEOMETRY_FILE="$CONFIG_DIR/.faz_window_geometry"
 CURRENT_CONFIG_VERSION=22
 mkdir -p "$CONFIG_DIR"
 printf '%s\n' '{"config_version":21,"managed_shell":"fish","window_geometry":{"width":120,"height":40},"window_position":{"x":10,"y":20,"screen_id":7},"future_setting":{"enabled":true}}' >"$STATE_FILE"
@@ -89,6 +89,6 @@ assert_eq "$(read_config_version)" "24"
 grep -Eq '"config_version"[[:space:]]*:[[:space:]]*24' "$STATE_FILE"
 grep -Eq '"metadata"[[:space:]]*:' "$STATE_FILE"
 grep -Eq '"config_version"[[:space:]]*:[[:space:]]*null' "$STATE_FILE"
-assert_eq "$(plutil -extract config_version raw -expect integer -o - -- "$HOME/.config/kaku/state.json")" "24"
+assert_eq "$(plutil -extract config_version raw -expect integer -o - -- "$HOME/.config/faz/state.json")" "24"
 
 echo "config_update_highlights smoke test passed"

@@ -21,7 +21,7 @@ read_bundled_config_version() {
 }
 
 config_update_highlight_language() {
-	local explicit="${KAKU_CONFIG_UPDATE_LANGUAGE:-${KAKU_UPDATE_LANGUAGE:-}}"
+	local explicit="${FAZ_CONFIG_UPDATE_LANGUAGE:-${FAZ_UPDATE_LANGUAGE:-}}"
 	case "$explicit" in
 		zh* | ZH* | cn | CN | 中文)
 			printf 'zh\n'
@@ -46,7 +46,14 @@ config_update_highlight_language() {
 
 detect_config_highlight_language() {
 	local highlight="$1"
-	if [[ "$highlight" == *[一-龥]* ]]; then
+	# Match CJK Unified Ideographs by their leading UTF-8 byte instead of a
+	# character range. A range like [一-龥] is resolved through the active
+	# collation order, and under LC_ALL=zh_CN.UTF-8 (or C) it fails to match
+	# ordinary Han characters such as 标 or 签, so Chinese entries were
+	# classified as English and leaked into the English output. The byte
+	# class below is locale independent: U+4E00-U+9FFF always encodes as
+	# bytes in the E4-E9 lead range.
+	if [[ "$highlight" == *[$'\xE4'-$'\xE9']* ]]; then
 		printf 'zh\n'
 	else
 		printf 'en\n'
@@ -147,7 +154,7 @@ read_managed_shell() {
 mirror_completed_state_to_default() {
 	local target_version="$1"
 	local managed_shell="${2:-}"
-	local default_config_dir="${HOME:-}/.config/kaku"
+	local default_config_dir="${HOME:-}/.config/faz"
 	local default_state_file="$default_config_dir/state.json"
 
 	if [[ -z "${HOME:-}" || "$CONFIG_DIR" == "$default_config_dir" ]]; then
@@ -190,7 +197,7 @@ record_config_version_success() {
 	local target_version="$1"
 	printf '%s\n' "$target_version" >"$LEGACY_VERSION_FILE"
 	if ! mirror_completed_state_to_default "$target_version" "$(read_managed_shell || true)"; then
-		printf 'warning: could not mirror completed Kaku state to the default config path\n' >&2
+		printf 'warning: could not mirror completed Faz state to the default config path\n' >&2
 	fi
 	return 0
 }
@@ -264,7 +271,7 @@ persist_config_version() {
 
 	printf "{\n  \"config_version\": %s%s%s\n}\n" "$target_version" "$managed_shell_json" "$geometry_json" >"$STATE_FILE"
 
-	# Keep a legacy version marker for users still loading older bundled kaku.lua.
+	# Keep a legacy version marker for users still loading older bundled faz.lua.
 	# This avoids repeated first-run onboarding after upgrades.
 	record_config_version_success "$target_version"
 	rm -f "$LEGACY_GEOMETRY_FILE"

@@ -7,7 +7,7 @@ cd "$REPO_ROOT"
 VERSION_FILE="assets/shell-integration/config_version.txt"
 HIGHLIGHTS_FILE="assets/shell-integration/config_update_highlights.tsv"
 TAG_PATTERN='^[Vv][0-9]+\.[0-9]+\.[0-9]+$'
-current_release_version=$(grep '^version =' "$REPO_ROOT/kaku/Cargo.toml" | head -n1 | cut -d'"' -f2)
+current_release_version=$(grep '^version =' "$REPO_ROOT/faz-cli/Cargo.toml" | head -n1 | cut -d'"' -f2)
 
 echo "=== Config Version Check ==="
 echo ""

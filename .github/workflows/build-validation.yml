@@ -1,6 +1,6 @@
 name: Build Validation
 
-# Release-shaped build validation: universal (arm64 + x86_64) release builds
+# Release-shaped build validation: release builds (Apple Silicon)
 # and app bundle assembly. These take ~25 minutes combined and almost never
 # break from routine Rust changes, so they do not gate every push. They run:
 #   - on pushes that touch the build pipeline itself (scripts, dependency
@@ -32,8 +32,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  universal-build:
-    name: Universal Build Validation
+  release-build:
+    name: Release Build Validation
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -43,32 +43,22 @@ jobs:
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
           toolchain: 1.95.0
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
-      - name: Build both targets
+      - name: Build release target
         run: |
           set -o pipefail
-          cargo build --locked --release --target aarch64-apple-darwin -p kaku -p kaku-gui 2>&1 | sed '/has no symbols/d'
-          cargo build --locked --release --target x86_64-apple-darwin -p kaku -p kaku-gui 2>&1 | sed '/has no symbols/d'
+          cargo build --locked --release --target aarch64-apple-darwin -p faz-cli -p faz-gui 2>&1 | sed '/has no symbols/d'
 
-      - name: Lipo merge and verify
+      - name: Verify architecture
         run: |
-          mkdir -p target/universal/release
-          lipo -create -output target/universal/release/kaku \
-            target/aarch64-apple-darwin/release/kaku \
-            target/x86_64-apple-darwin/release/kaku
-          lipo -create -output target/universal/release/kaku-gui \
-            target/aarch64-apple-darwin/release/kaku-gui \
-            target/x86_64-apple-darwin/release/kaku-gui
-
-          lipo target/universal/release/kaku -verify_arch arm64 x86_64
-          lipo target/universal/release/kaku-gui -verify_arch arm64 x86_64
-
-          lipo -info target/universal/release/kaku
-          lipo -info target/universal/release/kaku-gui
+          for bin in faz faz-gui; do
+            lipo target/aarch64-apple-darwin/release/$bin -verify_arch arm64
+            lipo -info target/aarch64-apple-darwin/release/$bin
+          done
 
   app-bundle:
     name: App Bundle Validation
@@ -92,7 +82,7 @@ jobs:
 
       - name: Verify bundled shell plugins are pinned
         run: |
-          test -d dist/Kaku.app
-          test "$(cat dist/Kaku.app/Contents/Resources/vendor/zsh-autosuggestions/.kaku-vendor-ref)" = "85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5"
-          test "$(cat dist/Kaku.app/Contents/Resources/vendor/fast-syntax-highlighting/.kaku-vendor-ref)" = "3d574ccf48804b10dca52625df13da5edae7f553"
-          test "$(cat dist/Kaku.app/Contents/Resources/vendor/zsh-completions/.kaku-vendor-ref)" = "84615f3d0b0e943d5b1de862c9552e572c8e70bb"
+          test -d dist/Faz.app
+          test "$(cat dist/Faz.app/Contents/Resources/vendor/zsh-autosuggestions/.faz-vendor-ref)" = "85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5"
+          test "$(cat dist/Faz.app/Contents/Resources/vendor/fast-syntax-highlighting/.faz-vendor-ref)" = "3d574ccf48804b10dca52625df13da5edae7f553"
+          test "$(cat dist/Faz.app/Contents/Resources/vendor/zsh-completions/.faz-vendor-ref)" = "84615f3d0b0e943d5b1de862c9552e572c8e70bb"

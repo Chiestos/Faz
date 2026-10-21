@@ -1,8 +1,8 @@
-# Kaku startup time budget (milliseconds). Local-only tool. Not wired into CI
+# Faz startup time budget (milliseconds). Local-only tool. Not wired into CI
 # because no release-build baseline has been captured yet, and `0` placeholder
 # values would make the gate vacuous. To enable a real budget:
 #
-#   1. Run `RUNS=10 ./scripts/measure_startup_kaku.sh` against a release build
+#   1. Run `RUNS=10 ./scripts/measure_startup_faz.sh` against a release build
 #      on the target machine. Keep power mode, display and background load fixed.
 #   2. Use schema 2 cold_start_ms and warm_start_ms: launch until both the
 #      fixture shell's precmd and first render have completed. Window-only,

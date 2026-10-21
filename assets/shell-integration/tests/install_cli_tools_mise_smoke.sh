@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_SCRIPT="$SCRIPT_DIR/../install_cli_tools.sh"
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/kaku-mise-smoke.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/faz-mise-smoke.XXXXXX")"
 cleanup() {
 	rm -rf "$tmp_dir"
 }
