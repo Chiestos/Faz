@@ -2157,15 +2157,16 @@ config.scrollback_lines = 10000
 config.selection_word_boundary = ' \t\n{}[]()"\'-'  -- Smart selection boundaries
 
 -- ===== Window Layout =====
--- Disable OS-level resize increments. AppKit applies these on the
--- Accessibility setFrame path (Raycast / Rectangle / Magnet / AeroSpace),
--- causing window-management "maximize" to round to cell-aligned dimensions
--- and leave a gap when visibleFrame is not a clean multiple of cell size
--- (reproducible on external displays).
--- Internal cell quantization is handled in apply_dimensions (slack absorbed
--- into top padding), so disabling this is safe.
+-- Resize the window in whole rows and columns, so a drag always lands on a
+-- cell boundary and the grid never shows a partial line.
+--
+-- Trade-off: AppKit applies these increments on the Accessibility setFrame
+-- path, which window managers (Raycast / Rectangle / Magnet / AeroSpace) use.
+-- Their "maximize" then rounds to cell-aligned dimensions and can leave a gap
+-- when the visible frame is not a clean multiple of the cell size — visible on
+-- some external displays. Set this to false if you use one of those tools.
 -- <https://github.com/tw93/Faz/issues/131>
-config.use_resize_increments = false
+config.use_resize_increments = true
 
 config.initial_cols = 110
 config.initial_rows = 22
