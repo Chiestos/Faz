@@ -28,7 +28,6 @@ pub struct ClientId {
     pub pid: u32,
     pub epoch: u64,
     pub id: usize,
-    pub ssh_auth_sock: Option<String>,
 }
 
 impl ClientId {
@@ -42,7 +41,6 @@ impl ClientId {
             pid: unsafe { libc::getpid() as u32 },
             epoch: *EPOCH,
             id,
-            ssh_auth_sock: None,
         }
     }
 }

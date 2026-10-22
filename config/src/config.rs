@@ -391,22 +391,6 @@ pub struct Config {
     #[dynamic(default = "UnixDomain::default_unix_domains")]
     pub unix_domains: Vec<UnixDomain>,
 
-    /// Deprecated and ignored. Faz does not ship an SSH client; connecting is
-    /// done with the system `ssh` inside a pane. Kept as deprecated fields so
-    /// that existing `faz.lua` files carrying `config.ssh_domains` or
-    /// `config.ssh_backend` still load, with a warning, instead of failing.
-    #[dynamic(
-        default,
-        deprecated = "Faz has no built-in SSH client; use the system `ssh` in a pane"
-    )]
-    pub ssh_domains: wezterm_dynamic::Value,
-
-    #[dynamic(
-        default,
-        deprecated = "Faz has no built-in SSH client; use the system `ssh` in a pane"
-    )]
-    pub ssh_backend: wezterm_dynamic::Value,
-
     /// When running in server mode, defines configuration for
     /// each of the endpoints that we'll listen for connections
     #[dynamic(default)]
@@ -430,12 +414,6 @@ pub struct Config {
     /// high and the user experience will be laggy and less responsive.
     #[dynamic(default = "default_mux_output_parser_buffer_size")]
     pub mux_output_parser_buffer_size: usize,
-
-    #[dynamic(default, deprecated = "Faz has no built-in SSH client")]
-    pub mux_enable_ssh_agent: wezterm_dynamic::Value,
-
-    #[dynamic(default)]
-    pub default_ssh_auth_sock: Option<String>,
 
     /// How many ms to delay after reading a chunk of output
     /// in order to try to coalesce fragmented writes into

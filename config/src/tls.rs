@@ -33,12 +33,6 @@ pub struct TlsDomainClient {
     #[dynamic(validate = "validate_domain_name")]
     pub name: String,
 
-    /// Deprecated and ignored: Faz no longer ships a built-in ssh client,
-    /// so a TLS domain can't be bootstrapped over ssh. Retained so existing
-    /// configs still load.
-    #[dynamic(default, deprecated = "the built-in ssh client was removed")]
-    pub bootstrap_via_ssh: wezterm_dynamic::Value,
-
     /// identifies the host:port pair of the remote server.
     pub remote_address: String,
 

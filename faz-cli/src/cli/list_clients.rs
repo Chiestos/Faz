@@ -57,10 +57,6 @@ impl ListClientsCommand {
                         name: "FOCUS".to_string(),
                         alignment: Alignment::Right,
                     },
-                    Column {
-                        name: "SSH_AUTH_SOCK".to_string(),
-                        alignment: Alignment::Left,
-                    },
                 ];
                 let mut data = vec![];
                 let now: DateTime<Utc> = Utc::now();
@@ -99,11 +95,6 @@ impl ListClientsCommand {
                         info.focused_pane_id
                             .map(|id| id.to_string())
                             .unwrap_or_else(String::new),
-                        info.client_id
-                            .ssh_auth_sock
-                            .as_deref()
-                            .unwrap_or("")
-                            .to_string(),
                     ]);
                 }
 
@@ -127,7 +118,6 @@ struct CliListClientsResultItem {
     idle_time: std::time::Duration,
     workspace: String,
     focused_pane_id: Option<mux::pane::PaneId>,
-    ssh_auth_sock: Option<String>,
 }
 
 impl From<mux::client::ClientInfo> for CliListClientsResultItem {
@@ -147,7 +137,6 @@ impl From<mux::client::ClientInfo> for CliListClientsResultItem {
             username,
             hostname,
             pid,
-            ssh_auth_sock,
             ..
         } = client_id.as_ref();
 
@@ -164,7 +153,6 @@ impl From<mux::client::ClientInfo> for CliListClientsResultItem {
             idle_time: idle_time.to_std().unwrap_or(std::time::Duration::ZERO),
             workspace: active_workspace.as_deref().unwrap_or("").to_string(),
             focused_pane_id,
-            ssh_auth_sock: ssh_auth_sock.as_ref().map(|s| s.to_string()),
         }
     }
 }
