@@ -1161,6 +1161,13 @@ pub struct TermWindow {
     /// file or a destination. Set by `on_zmodem_detected`, consumed when the
     /// transfer starts.
     zmodem_pending: Option<ZmodemPending>,
+
+    /// Where the ZMODEM picker was last left, per pane and direction.
+    ///
+    /// Reopening the picker starts from the folder the user just used instead
+    /// of a fixed guess, which matters when a session sends several files from
+    /// the same place. Keyed by pane so two panes do not overwrite each other.
+    zmodem_last_pick: std::collections::HashMap<(PaneId, mux::zmodem::Direction), PathBuf>,
 }
 
 /// Set once WebGpu has failed to initialize in this process. Every later
@@ -1200,7 +1207,7 @@ impl TermWindow {
 
     fn load_os_parameters(&mut self) {
         if let Some(ref window) = self.window {
-            self.os_parameters = match window
+            let fresh = match window
                 .get_os_parameters(&self.config, self.effective_layout_window_state())
             {
                 Ok(os_parameters) => os_parameters,
@@ -1209,6 +1216,15 @@ impl TermWindow {
                     None
                 }
             };
+            // Reloads fire on config change, focus change and deferred layout,
+            // and at least one of those runs before the window buttons exist.
+            // Adopting the empty result then dropped the tab bar back to the
+            // top of the window for a frame — the jumping the user sees. Keep
+            // the last good measurement instead of overwriting it with nothing.
+            let fresh_has_title_bar = fresh.as_ref().and_then(|p| p.title_bar.height).is_some();
+            if fresh_has_title_bar || self.os_parameters.is_none() {
+                self.os_parameters = fresh;
+            }
         }
     }
 
@@ -1680,6 +1696,7 @@ impl TermWindow {
             layout_sticky_fullscreen_until: None,
             closed_tab_history: std::collections::VecDeque::new(),
             zmodem_pending: None,
+            zmodem_last_pick: std::collections::HashMap::new(),
             os_parameters: None,
             render_backend: None,
             window: None,
@@ -6747,16 +6764,20 @@ impl TermWindow {
                 "选择要发送的文件".to_string(),
             ),
         };
-        // Start where the user most likely wants to be: the shell's cwd for a
-        // send, downloads for a receive.
-        let start_dir = match direction {
-            mux::zmodem::Direction::Download => dirs_next::download_dir()
-                .filter(|p| p.is_dir())
-                .unwrap_or_else(|| config::HOME_DIR.to_path_buf()),
-            mux::zmodem::Direction::Upload => self
-                .pane_cwd(pane_id)
-                .unwrap_or_else(|| config::HOME_DIR.to_path_buf()),
-        };
+        // Start where the user last chose on this pane, else where they most
+        // likely want to be: the shell's cwd for a send, downloads for a
+        // receive.
+        let remembered = self.zmodem_last_pick.get(&(pane_id, direction)).cloned();
+        let start_dir = remembered
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| match direction {
+                mux::zmodem::Direction::Download => dirs_next::download_dir()
+                    .filter(|p| p.is_dir())
+                    .unwrap_or_else(|| config::HOME_DIR.to_path_buf()),
+                mux::zmodem::Direction::Upload => self
+                    .pane_cwd(pane_id)
+                    .unwrap_or_else(|| config::HOME_DIR.to_path_buf()),
+            });
 
         let (overlay, future) = crate::overlay::start_overlay(self, &tab, move |_tab_id, term| {
             crate::overlay::filebrowser::browse(term, start_dir, mode, title)
@@ -6772,6 +6793,20 @@ impl TermWindow {
             promise::spawn::spawn_into_main_thread(async move {
                 match picked {
                     Ok(crate::overlay::filebrowser::PickResult::Chosen(path)) => {
+                        // Remember the containing folder so the next picker on
+                        // this pane opens there. A download picks a directory
+                        // directly; an upload picks a file, so use its parent.
+                        let remembered = match direction {
+                            mux::zmodem::Direction::Download => Some(path.clone()),
+                            mux::zmodem::Direction::Upload => {
+                                path.parent().map(|p| p.to_path_buf())
+                            }
+                        };
+                        if let Some(dir) = remembered {
+                            window.notify(TermWindowNotif::Apply(Box::new(move |tw| {
+                                tw.zmodem_last_pick.insert((pane_id, direction), dir);
+                            })));
+                        }
                         // Every picked path has a live peer behind it: a
                         // detected session, or a menu-initiated send that
                         // starts the remote receiver itself.

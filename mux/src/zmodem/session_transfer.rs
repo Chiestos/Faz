@@ -25,7 +25,9 @@ use std::time::{Duration, Instant};
 use super::transfer::{make_pipe, prepare_transfer_tty, write_all, Relay};
 
 /// Which direction a transfer runs in, which decides the local child.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// `Hash` so callers can key per-pane state on (pane, direction).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
     /// Local -> remote. Runs `sz <paths>`; the remote must be running `rz`.
     Upload,
