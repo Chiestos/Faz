@@ -1,7 +1,8 @@
 name: Build Validation
 
-# Release-shaped build validation: release builds (Apple Silicon)
-# and app bundle assembly. These take ~25 minutes combined and almost never
+# Release-shaped build validation: release builds for both architectures
+# (arm64 on Apple Silicon, x86_64 on Intel), the universal merge, and app
+# bundle assembly. These take ~30 minutes combined and almost never
 # break from routine Rust changes, so they do not gate every push. They run:
 #   - on pushes that touch the build pipeline itself (scripts, dependency
 #     graph, bundle assets),
@@ -32,9 +33,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # One job per architecture so each slice builds natively on its own runner:
+  # arm64 on an Apple Silicon machine, x86_64 on an Intel one. Cross-compiling
+  # the Intel slice from arm64 does work (the macOS SDK is universal, and Kaku
+  # upstream built both targets on arm64 runners), but building natively keeps
+  # the vendored C deps — harfbuzz, freetype, libpng, zlib — on the compiler
+  # path they were last exercised on.
   release-build:
-    name: Release Build Validation
-    runs-on: macos-latest
+    name: Release Build Validation (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            lipo_arch: arm64
+          - arch: x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            lipo_arch: x86_64
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -43,22 +62,66 @@ jobs:
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
           toolchain: 1.95.0
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.target }}
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: ${{ matrix.target }}
 
       - name: Build release target
         run: |
           set -o pipefail
-          cargo build --locked --release --target aarch64-apple-darwin -p faz-cli -p faz-gui 2>&1 | sed '/has no symbols/d'
+          cargo build --locked --release --target ${{ matrix.target }} -p faz-cli -p faz-gui 2>&1 | sed '/has no symbols/d'
 
       - name: Verify architecture
         run: |
           for bin in faz faz-gui; do
-            lipo target/aarch64-apple-darwin/release/$bin -verify_arch arm64
-            lipo -info target/aarch64-apple-darwin/release/$bin
+            lipo target/${{ matrix.target }}/release/$bin -verify_arch ${{ matrix.lipo_arch }}
+            lipo -info target/${{ matrix.target }}/release/$bin
           done
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bin-${{ matrix.arch }}
+          path: |
+            target/${{ matrix.target }}/release/faz
+            target/${{ matrix.target }}/release/faz-gui
+          if-no-files-found: error
+          retention-days: 7
+
+  # Fat binaries for distribution. The two slices are built natively above, so
+  # this job only lipos them together and never compiles anything.
+  universal:
+    name: Universal Merge
+    needs: release-build
+    runs-on: macos-latest
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: bin-*
+          path: bins
+
+      - name: Lipo merge and verify
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          for bin in faz faz-gui; do
+            lipo -create -output "out/$bin" "bins/bin-arm64/$bin" "bins/bin-x86_64/$bin"
+            chmod +x "out/$bin"
+            lipo -verify_arch arm64 x86_64 "out/$bin"
+            lipo -info "out/$bin"
+          done
+
+      - name: Upload universal binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: faz-universal
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
 
   app-bundle:
     name: App Bundle Validation
@@ -86,3 +149,11 @@ jobs:
           test "$(cat dist/Faz.app/Contents/Resources/vendor/zsh-autosuggestions/.faz-vendor-ref)" = "85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5"
           test "$(cat dist/Faz.app/Contents/Resources/vendor/fast-syntax-highlighting/.faz-vendor-ref)" = "3d574ccf48804b10dca52625df13da5edae7f553"
           test "$(cat dist/Faz.app/Contents/Resources/vendor/zsh-completions/.faz-vendor-ref)" = "84615f3d0b0e943d5b1de862c9552e572c8e70bb"
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Faz-app-native-arm64
+          path: dist/Faz.app
+          if-no-files-found: error
+          retention-days: 7
