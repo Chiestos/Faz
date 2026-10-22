@@ -111,7 +111,7 @@ jobs:
           for bin in faz faz-gui; do
             lipo -create -output "out/$bin" "bins/bin-arm64/$bin" "bins/bin-x86_64/$bin"
             chmod +x "out/$bin"
-            lipo -verify_arch arm64 x86_64 "out/$bin"
+            lipo "out/$bin" -verify_arch arm64 x86_64
             lipo -info "out/$bin"
           done
 
