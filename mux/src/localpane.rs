@@ -1101,9 +1101,18 @@ impl AlertHandler for LocalPaneNotifHandler {
                     }
                 }
                 Alert::TabTitleChanged(title) => {
-                    if let Some((_domain, _window_id, tab_id)) = mux.resolve_pane_id(pane_id) {
-                        if let Some(tab) = mux.get_tab(tab_id) {
-                            tab.set_title(title.as_deref().unwrap_or(""));
+                    if let Some((domain_id, _window_id, tab_id)) = mux.resolve_pane_id(pane_id) {
+                        // In a tmux-controlled tab the title belongs to tmux:
+                        // it comes from the remote window name, and a shell
+                        // inside that window emitting OSC 2 must not override
+                        // it.
+                        let title_owned_by_tmux = mux.get_domain(domain_id).is_some_and(|domain| {
+                            domain.downcast_ref::<crate::tmux::TmuxDomain>().is_some()
+                        });
+                        if !title_owned_by_tmux {
+                            if let Some(tab) = mux.get_tab(tab_id) {
+                                tab.set_title(title.as_deref().unwrap_or(""));
+                            }
                         }
                     }
                 }
@@ -1184,6 +1193,22 @@ fn split_child(
 }
 
 impl LocalPane {
+    /// Detach the `tmux -CC` client running in this pane.
+    ///
+    /// Writes `detach\n` to this pane's pty, which is the process running the
+    /// tmux client. The terminal's own writer is unusable here: for a tmux
+    /// pane it is a `TmuxPtyWriter` that turns everything into `send-keys`
+    /// for a remote pane, so the command would run inside the tmux session
+    /// instead of reaching the client.
+    pub fn detach_tmux(&self) -> Result<(), Error> {
+        if self.tmux_domain.lock().is_some() {
+            let mut writer = self.writer.lock();
+            writer.write_all(b"detach\n")?;
+            writer.flush()?;
+        }
+        Ok(())
+    }
+
     /// Show input that a running transfer refused, without sending it to the
     /// pty.
     ///

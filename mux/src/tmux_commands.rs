@@ -516,6 +516,11 @@ impl TmuxDomainState {
                 published = true;
             }
 
+            // Hand the tab back to any `Domain::spawn` waiting on it.
+            if let Some(mut promise) = self.pending_spawns.lock().pop_front() {
+                promise.ok(Arc::clone(&tab));
+            }
+
             let gui_tabs = self.gui_tabs.lock();
             let local_tab = match gui_tabs.get(&window.window_id) {
                 Some(x) => x,

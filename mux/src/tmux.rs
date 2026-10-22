@@ -66,6 +66,11 @@ pub(crate) type TmuxCmdQueue = VecDeque<Box<dyn TmuxCommand>>;
 pub(crate) struct TmuxDomainState {
     pub pane_id: PaneId,     // ID of the original pane
     pub domain_id: DomainId, // ID of TmuxDomain
+    /// Unique name for this tmux session's domain.
+    ///
+    /// Every `tmux -CC` gets its own domain and window, so a fixed "tmux"
+    /// name would make them collide in the mux's name index.
+    pub name: String,
     state: Mutex<State>,
     pub cmd_queue: Arc<Mutex<TmuxCmdQueue>>,
     /// The window hosting this tmux session's tabs.
@@ -85,6 +90,10 @@ pub(crate) struct TmuxDomainState {
     pub support_commands: Mutex<HashMap<String, String>>,
     pub attach_state: Mutex<AttachState>,
     pending_splits: Mutex<VecDeque<promise::Promise<TmuxPaneId>>>,
+    /// Tabs requested through `Domain::spawn` that are waiting for tmux to
+    /// answer with `%window-add`. Resolved by `sync_window_state` once the
+    /// tab exists locally.
+    pub(crate) pending_spawns: Mutex<VecDeque<promise::Promise<Arc<Tab>>>>,
     pub backlog: Mutex<HashMap<TmuxPaneId, Vec<u8>>>,
 }
 
@@ -361,6 +370,7 @@ impl TmuxDomain {
         let cmd_queue = VecDeque::new();
         let inner = Arc::new(TmuxDomainState {
             domain_id,
+            name: format!("tmux-{pane_id}"),
             pane_id,
             // parser,
             state: Mutex::new(State::WaitForInitialGuard),
@@ -373,6 +383,7 @@ impl TmuxDomain {
             support_commands: Mutex::new(HashMap::default()),
             attach_state: Mutex::new(AttachState::Init),
             pending_splits: Mutex::new(VecDeque::default()),
+            pending_spawns: Mutex::new(VecDeque::default()),
             backlog: Mutex::new(HashMap::default()),
         });
 
@@ -395,11 +406,34 @@ impl Domain for TmuxDomain {
         _encoding: PaneEncoding,
         _window: WindowId,
     ) -> anyhow::Result<Arc<Tab>> {
+        // tmux owns the tab: ask it for a new window and wait for the
+        // resulting `%window-add` to be turned into a local tab by
+        // `sync_window_state`.
+        let mut promise = promise::Promise::new();
+        let future = promise
+            .get_future()
+            .ok_or_else(|| anyhow::anyhow!("promise already taken"))?;
+        self.inner.pending_spawns.lock().push_back(promise);
         self.inner.create_tmux_window();
-        // This is intention, we would not return a Tab, since we don't have now!
-        // We use create_tmux_window to create back end tmux window, then the
-        // Tmux WindowAdd event will triage us to do the rest things.
-        anyhow::bail!("Intention: we use tmux command to do so");
+
+        // If tmux never answers (rejected command, session gone), fail
+        // instead of leaving the caller's spawn pending forever.
+        let timeout = async {
+            smol::Timer::after(std::time::Duration::from_secs(10)).await;
+            Err(anyhow::anyhow!(
+                "timed out waiting for tmux to create a new window"
+            ))
+        };
+        smol::future::or(future, timeout).await.map_err(|err| {
+            match err.downcast::<promise::BrokenPromise>() {
+                Ok(_) => anyhow::anyhow!("tmux closed before the new window could be created"),
+                Err(err) => err.context("waiting for tmux to create a new window"),
+            }
+        })
+    }
+
+    fn spawnable(&self) -> bool {
+        true
     }
 
     async fn split_pane(
@@ -443,7 +477,7 @@ impl Domain for TmuxDomain {
     }
 
     fn domain_name(&self) -> &str {
-        "tmux"
+        &self.inner.name
     }
 
     async fn attach(&self, _window_id: Option<crate::WindowId>) -> anyhow::Result<()> {
@@ -451,11 +485,33 @@ impl Domain for TmuxDomain {
     }
 
     fn detachable(&self) -> bool {
-        false
+        // Closing the window that hosts this session should end the
+        // `tmux -CC` client, just like `c-b d`: the tmux session keeps
+        // running on the server, but Faz lets go of it.
+        true
     }
 
     fn detach(&self) -> anyhow::Result<()> {
-        anyhow::bail!("detach not implemented for TmuxDomain");
+        let mux = Mux::get();
+        let Some(pane) = mux.get_pane(self.inner.pane_id) else {
+            // The pane running `tmux -CC` is already gone; nothing to send.
+            return Ok(());
+        };
+        // Ask the pane to leave control mode. It must bypass the tmux input
+        // interception, which would otherwise forward this to a remote pane
+        // instead of the tmux client. Leaving control mode closes the DCS and
+        // lands in `DeviceControlMode::Exit`, where the local domain and tabs
+        // are cleaned up while the tmux session keeps running on the server.
+        let local = pane
+            .downcast_ref::<crate::localpane::LocalPane>()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "tmux control pane {} is not a LocalPane",
+                    self.inner.pane_id
+                )
+            })?;
+        local.detach_tmux()?;
+        Ok(())
     }
 
     fn state(&self) -> DomainState {

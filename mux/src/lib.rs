@@ -1645,7 +1645,10 @@ impl Mux {
     fn remove_window_internal(&self, window_id: WindowId) {
         log::debug!("remove_window_internal {}", window_id);
 
-        let window = self.windows.write().remove(&window_id);
+        let window = {
+            let mut windows = self.windows.write();
+            windows.remove(&window_id)
+        };
         if let Some(window) = window {
             // Gather all the domains referenced by this window
             let mut domains_of_window = HashSet::new();
@@ -1655,17 +1658,34 @@ impl Mux {
                 }
             }
 
-            for domain_id in domains_of_window {
-                if let Some(domain) = self.get_domain(domain_id) {
-                    if domain.detachable() {
-                        log::info!("detaching domain");
-                        if let Err(err) = domain.detach() {
-                            log::error!(
-                                "while detaching domain {domain_id} {}: {err:#}",
-                                domain.domain_name()
-                            );
-                        }
+            // `detach` writes to the pane that owns the domain (for tmux it
+            // submits a command to the client), so run it from the domains we
+            // collected rather than under the window lock.
+            log::info!("window {window_id} spans domains {domains_of_window:?}");
+            let detachable: Vec<_> = domains_of_window
+                .into_iter()
+                .filter_map(|domain_id| {
+                    let domain = self.get_domain(domain_id);
+                    if let Some(d) = &domain {
+                        log::info!(
+                            "domain {} {} detachable={}",
+                            d.domain_id(),
+                            d.domain_name(),
+                            d.detachable()
+                        );
                     }
+                    domain
+                })
+                .filter(|domain| domain.detachable())
+                .collect();
+            for domain in detachable {
+                log::info!("detaching domain {}", domain.domain_name());
+                if let Err(err) = domain.detach() {
+                    log::error!(
+                        "while detaching domain {} {}: {err:#}",
+                        domain.domain_id(),
+                        domain.domain_name()
+                    );
                 }
             }
 

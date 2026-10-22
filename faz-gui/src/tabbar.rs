@@ -118,6 +118,14 @@ fn call_format_tab_titles_batch_with_lua(
             continue;
         }
 
+        // A tmux-controlled tab's title is tmux's business: it is the remote
+        // window name, kept in sync by `window-renamed`/`list-windows`. Let
+        // the user's `format-tab-title` rewrite it and the two fight.
+        if tab.is_tmux {
+            results.push(None);
+            continue;
+        }
+
         let result = config::lua::emit_sync_callback(
             lua,
             (
@@ -1394,6 +1402,7 @@ mod test {
             has_unread_bell: false,
             window_id: 0,
             tab_title: title.to_string(),
+            is_tmux: false,
         }
     }
 

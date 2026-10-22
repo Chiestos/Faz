@@ -812,6 +812,9 @@ pub struct TabInformation {
     pub has_unread_bell: bool,
     pub window_id: MuxWindowId,
     pub tab_title: String,
+    /// True when this tab belongs to a `tmux -CC` session, whose title is
+    /// owned by tmux and must not be rewritten by `format-tab-title`.
+    pub is_tmux: bool,
 }
 
 impl UserData for TabInformation {
@@ -1228,6 +1231,32 @@ impl TermWindow {
         }
     }
 
+    /// Whether any pane in this window belongs to a `tmux -CC` session.
+    ///
+    /// Such a window is a view onto a remote tmux session, not a place where
+    /// local processes need preserving, so closing it detaches instead of
+    /// hiding.
+    fn window_hosts_tmux_session(&self) -> bool {
+        let mux = Mux::get();
+        let domain_ids: Vec<_> = {
+            let Some(window) = mux.get_window(self.mux_window_id) else {
+                return false;
+            };
+            window
+                .iter()
+                .flat_map(|tab| {
+                    tab.iter_panes_ignoring_zoom()
+                        .into_iter()
+                        .map(|pos| pos.pane.domain_id())
+                })
+                .collect()
+        };
+        domain_ids.into_iter().any(|domain_id| {
+            mux.get_domain(domain_id)
+                .is_some_and(|domain| domain.downcast_ref::<mux::tmux::TmuxDomain>().is_some())
+        })
+    }
+
     fn close_requested(&mut self, _window: &Window) {
         // AppKit sends `windowShouldClose:` to every NSWindow during Cmd+Q as
         // well as for plain Cmd+W. `on_app_terminating` sets the global flag
@@ -1249,7 +1278,20 @@ impl TermWindow {
         }
         #[cfg(target_os = "macos")]
         {
-            // On macOS, hide the window instead of destroying it so that tabs,
+            // A tmux control-mode window is destroyed rather than hidden.
+            // Hiding it would keep the `tmux -CC` client attached, which is
+            // exactly what closing the window is supposed to undo: tmux
+            // already keeps the session alive on the server, so there is
+            // nothing here worth preserving.
+            if self.window_hosts_tmux_session() {
+                let mux = Mux::get();
+                mux.kill_window(self.mux_window_id);
+                _window.close();
+                front_end().forget_known_window(_window);
+                return;
+            }
+
+            // Otherwise hide the window instead of destroying it so that tabs,
             // panes, and child processes are preserved. Clicking the Dock icon
             // calls application_open_untitled_file which finds the window in
             // conn.windows and focuses it back.
@@ -6595,6 +6637,12 @@ impl TermWindow {
                         .unwrap_or(false),
                     window_id: self.mux_window_id,
                     tab_title: tab.get_title(),
+                    is_tmux: tab
+                        .get_active_pane()
+                        .and_then(|pane| mux.get_domain(pane.domain_id()))
+                        .is_some_and(|domain| {
+                            domain.downcast_ref::<mux::tmux::TmuxDomain>().is_some()
+                        }),
                     active_pane: tab
                         .iter_panes()
                         .into_iter()
