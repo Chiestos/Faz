@@ -737,6 +737,165 @@ local function resolve_bundled_config()
   return nil
 end
 
+-- ─── Tab title handler ───────────────────────────────────────────────
+-- Only the FIRST `format-tab-title` handler registered wins, and the bundled
+-- config registers its own when dofile'd below. Register ours first.
+
+-- Track bell events per pane for the tab notification dot.
+local _bell_panes = {}
+wezterm.on('bell', function(window, pane)
+  if pane and pane.pane_id then
+    _bell_panes[tostring(pane.pane_id())] = true
+  end
+end)
+
+local function _pane_keys(tab)
+  local keys = {}
+  if tab and type(tab.panes) == 'table' then
+    for _, p in ipairs(tab.panes) do
+      if p and p.pane_id then
+        keys[#keys + 1] = tostring(p.pane_id)
+      end
+    end
+  end
+  if #keys == 0 and tab and tab.active_pane and tab.active_pane.pane_id then
+    keys[1] = tostring(tab.active_pane.pane_id)
+  end
+  return keys
+end
+
+wezterm.on('format-tab-title', function(tab, tabs, panes, cfg, hover, max_width)
+  local index = tab.tab_index + 1
+
+  -- Local title from cwd: abbreviate intermediate directories to their
+  -- first character, keep the current one whole.
+  local title = ''
+  do
+    local cwd = nil
+    if tab.active_pane then
+      local ok_c, c = pcall(function() return tab.active_pane.current_working_dir end)
+      if ok_c then cwd = c end
+    end
+    local path = ''
+    if type(cwd) == 'userdata' then
+      local ok_fp, fp = pcall(function() return cwd.file_path end)
+      path = ok_fp and fp or ''
+    elseif type(cwd) == 'table' then
+      path = cwd.file_path or cwd.path or ''
+    elseif type(cwd) == 'string' then
+      path = cwd
+    end
+    path = path:gsub('^file://[^/]*', ''):gsub('/$', '')
+
+    local home = wezterm.home_dir or ''
+    home = home:gsub('/$', '')
+    if home ~= '' and path == home then
+      path = '~'
+    elseif home ~= '' and path:sub(1, #home + 1) == home .. '/' then
+      path = '~' .. path:sub(#home + 1)
+    end
+
+    local current = path:match('([^/]+)$') or path
+    local dir_part = path:sub(1, #path - #current)
+    dir_part = dir_part:gsub('([^/])[^/]*', '%1')
+    title = dir_part .. current
+    if title == '' then
+      title = '~'
+    end
+  end
+
+  local zoomed = tab.active_pane and tab.active_pane.is_zoomed
+
+  local has_bell = false
+  for _, k in ipairs(_pane_keys(tab)) do
+    if _bell_panes[k] then
+      has_bell = true
+      break
+    end
+  end
+  if has_bell and tab.is_active then
+    for _, k in ipairs(_pane_keys(tab)) do
+      _bell_panes[k] = nil
+    end
+    has_bell = false
+  end
+
+  -- Equal-width tabs: truncate every tab to a fixed width so they line up.
+  local cap = 999
+  if type(cfg) == 'table' and cfg.tab_max_width then
+    cap = cfg.tab_max_width
+  end
+  local width = max_width
+  if not width or width <= 0 then
+    width = cap
+  end
+  if width > cap then
+    width = cap
+  end
+
+  local prefix = ' ' .. index .. ' '
+  local reserved = wezterm.column_width(prefix) + 1 + 1 + (zoomed and 2 or 0)
+  local title_budget = width - reserved
+  if title_budget < 1 then
+    title_budget = 1
+  end
+
+  local display_title = title
+  if wezterm.column_width(display_title) > title_budget then
+    -- Keep the rightmost part: the current directory.
+    display_title = '…' .. wezterm.truncate_left(display_title, title_budget - 1)
+  end
+
+  local zoom_color = '#ff8800'
+  local zoom_text = zoomed and ' z' or ''
+
+  if tab.is_active then
+    return {
+      { Background = { Color = '#ffd400' } },
+      { Foreground = { Color = '#1a1a1a' } },
+      { Attribute = { Intensity = 'Bold' } },
+      { Text = prefix },
+      { Foreground = { Color = '#1a1a1a' } },
+      { Text = display_title },
+      { Foreground = { Color = '#b30000' } },
+      { Text = zoom_text },
+      { Foreground = { Color = '#1a1a1a' } },
+      { Text = ' ' },
+      { Foreground = { Color = has_bell and '#ff8800' or '#1a1a1a' } },
+      { Text = has_bell and '\u{2022} ' or ' ' },
+    }
+  elseif hover then
+    return {
+      { Background = { Color = '#150a2e' } },
+      { Foreground = { Color = '#8888aa' } },
+      { Text = prefix },
+      { Foreground = { Color = '#bf00ff' } },
+      { Text = display_title },
+      { Foreground = { Color = zoom_color } },
+      { Text = zoom_text },
+      { Foreground = { Color = '#bf00ff' } },
+      { Text = ' ' },
+      { Foreground = { Color = has_bell and '#ff8800' or '#bf00ff' } },
+      { Text = has_bell and '\u{2022} ' or ' ' },
+    }
+  else
+    return {
+      { Background = { Color = '#0d0d20' } },
+      { Foreground = { Color = '#8888aa' } },
+      { Text = prefix },
+      { Foreground = { Color = '#e0e0ff' } },
+      { Text = display_title },
+      { Foreground = { Color = zoom_color } },
+      { Text = zoom_text },
+      { Foreground = { Color = '#e0e0ff' } },
+      { Text = ' ' },
+      { Foreground = { Color = has_bell and '#ff8800' or '#555580' } },
+      { Text = has_bell and '\u{2022} ' or ' ' },
+    }
+  end
+end)
+
+-- ─── Load bundled defaults ───────────────────────────────────────────
 local config = {}
 local bundled = resolve_bundled_config()
 
@@ -751,78 +910,196 @@ else
   wezterm.log_error('Faz: bundled defaults not found')
 end
 
--- Faz follows macOS appearance by default. Uncomment one line to force a theme:
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  NEON CYBERPUNK THEME  ✦
+-- ═══════════════════════════════════════════════════════════════════
+-- Redefines Faz Dark so it keeps working across app updates: the bundled
+-- defaults load first, then this file overrides them.
+
+config.color_schemes = config.color_schemes or {}
+config.color_schemes['Faz Dark'] = {
+  -- Core
+  foreground         = '#e0e0ff',
+  background         = '#0a0a1a',
+  cursor_bg          = '#ff00ff',
+  cursor_fg          = '#0a0a1a',
+  cursor_border      = '#ff00ff',
+  selection_bg       = '#3d1a6e',
+  selection_fg       = '#00ffff',
+  compose_cursor     = '#ff00ff',
+
+  -- ANSI — neon rainbow on dark
+  ansi = {
+    '#1a0a2e',   -- Black: deep violet-black
+    '#ff0080',   -- Red: neon pink
+    '#00ff80',   -- Green: neon mint
+    '#ffff00',   -- Yellow: neon yellow
+    '#00bfff',   -- Blue: neon cyan-blue
+    '#bf00ff',   -- Magenta: neon purple
+    '#00ffff',   -- Cyan: electric cyan
+    '#c0c0d0',   -- White: cool silver
+  },
+
+  brights = {
+    '#2a1a4e',   -- Bright black
+    '#ff3399',   -- Bright red: hot pink
+    '#33ff99',   -- Bright green: bright mint
+    '#ffff66',   -- Bright yellow: golden
+    '#66d4ff',   -- Bright blue: sky neon
+    '#d94dff',   -- Bright magenta: vivid purple
+    '#66ffff',   -- Bright cyan: bright electric
+    '#ffffff',   -- Bright white
+  },
+
+  split = '#941f51',
+  scrollbar_thumb = '#bf00ff',
+
+  -- Tab bar
+  tab_bar = {
+    background = '#0d0d20',
+    inactive_tab_edge = '#0d0d20',
+    active_tab = {
+      bg_color = '#ffd400',
+      fg_color = '#1a1a1a',
+      intensity = 'Bold',
+      underline = 'None',
+      italic = false,
+      strikethrough = false,
+    },
+    inactive_tab = {
+      bg_color = '#0d0d20',
+      fg_color = '#555580',
+      intensity = 'Normal',
+    },
+    inactive_tab_hover = {
+      bg_color = '#150a2e',
+      fg_color = '#bf00ff',
+      italic = false,
+    },
+    new_tab = {
+      bg_color = '#0d0d20',
+      fg_color = '#555580',
+      intensity = 'Half',
+    },
+    new_tab_hover = {
+      bg_color = '#150a2e',
+      fg_color = '#bf00ff',
+      italic = false,
+    },
+  },
+
+  -- Keep dark text readable on the dark background
+  foreground_color_overrides = {
+    ['#000000'] = '#e0e0ff',
+    ['#110f18'] = '#e0e0ff',
+    ['#15141b'] = '#e0e0ff',
+    ['#1a1a1a'] = '#e0e0ff',
+    ['#1c1c1c'] = '#e0e0ff',
+  },
+
+  color_overrides = {
+    ['#1a0a2e'] = '#0a0a1a',
+    ['#6d6d6d'] = '#1a0a3a',
+    ['#6E6E6E'] = '#1a0a3a',
+  },
+}
+
+-- Faz follows macOS appearance by default. The Neon Cyberpunk palette above is
+-- registered as 'Faz Dark'; uncomment one line to pin a scheme instead.
 -- config.color_scheme = 'Faz Dark'
 -- config.color_scheme = 'Faz Light'
 
--- User overrides:
--- Faz intentionally keeps WezTerm-compatible Lua API names
--- for maximum compatibility, so `wezterm.*` here is expected.
--- Full API docs: https://wezfurlong.org/wezterm/config/lua/
--- Faz options:  https://github.com/tw93/Faz/blob/main/docs/configuration.md
---
--- Changes apply automatically when you save this file.
--- Every example below differs from the default, so uncommenting it takes effect.
---
--- 1) Font family and size (default: JetBrains Mono, size auto 15/17)
--- config.font = wezterm.font('Menlo')
--- config.font_size = 16.0
--- config.line_height = 1.1  -- default 1.28; use 1.0-1.1 if QR codes or TUI charts look stretched
---
--- 2) Color scheme (a fixed scheme disables light/dark auto switching)
--- config.color_scheme = 'Catppuccin Mocha'
---
--- 3) Window size and padding (default: 110x22, 40px sides, 0 bottom)
--- config.initial_cols = 120
--- config.initial_rows = 30
--- config.window_padding = { left = '24px', right = '24px', top = '40px', bottom = '20px' }
---
--- 4) Window transparency and blur
--- config.window_background_opacity = 0.95            -- opacity, 0.0 to 1.0
--- config.macos_window_background_blur = 20           -- blur radius, integer 0 to 100
---
--- 5) Selection and quit behavior
--- config.copy_on_select = false                      -- default true
--- config.window_close_confirmation = 'NeverPrompt'   -- default 'SmartPrompt'
---
--- 6) Default shell/program (default: your login shell)
--- config.default_prog = { '/opt/homebrew/bin/fish', '-l' }
---
--- 7) Cursor and scrollback
--- config.default_cursor_style = 'SteadyBlock'        -- default 'BlinkingBar'
--- config.cursor_blink_rate = 0                       -- 0 disables blinking; default 500
--- config.scrollback_lines = 20000                    -- default 10000
--- config.file_link_editor = 'zed'                    -- opens path[:line[:column]]
---
--- 8) Tab bar
--- config.tab_bar_at_bottom = false                   -- default true
--- config.hide_tab_bar_if_only_one_tab = false        -- default true
--- config.tab_title_show_basename_only = true
--- config.tab_title_show_foreground_process = true    -- show "dirname·codex" while commands run
---
--- 9) Tab key completion (default 'suggestion_first': Tab accepts the inline suggestion)
--- config.smart_tab_mode = 'completion_first'
---
--- 10) Working directory inheritance (default: all true)
--- config.window_inherit_working_directory = false
--- config.tab_inherit_working_directory = false
--- config.split_pane_inherit_working_directory = false
---
--- 11) Split pane
--- config.split_pane_gap = 6                          -- default 2
--- config.inactive_pane_hsb = { saturation = 1.0, brightness = 0.9 }
---
--- 12) Fullscreen (set false if you use yabai/AeroSpace tiling)
--- config.native_macos_fullscreen_mode = false
---
--- 13) Add a key binding (defaults: docs/keybindings.md)
--- table.insert(config.keys, {
---   key = 'k',
---   mods = 'CMD|SHIFT',
---   action = wezterm.action.ClearScrollback('ScrollbackAndViewport'),
--- })
---
 
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  APPEARANCE  ✦
+-- ═══════════════════════════════════════════════════════════════════
+
+config.font = wezterm.font('JetBrains Mono')
+config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE|MACOS_FORCE_DISABLE_SHADOW'
+config.line_height = 1.0
+
+config.window_background_opacity = 0.7
+config.macos_window_background_blur = 10
+
+config.window_padding = {
+  left   = '16px',
+  right  = '16px',
+  top    = '40px',
+  bottom = '10px',
+}
+
+config.initial_cols = 130
+config.initial_rows = 35
+
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  CURSOR  ✦
+-- ═══════════════════════════════════════════════════════════════════
+
+config.default_cursor_style = 'BlinkingBlock'
+config.cursor_blink_rate = 300
+
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  TAB BAR  ✦
+-- ═══════════════════════════════════════════════════════════════════
+
+config.hide_tab_bar_if_only_one_tab = true
+config.tab_bar_at_bottom = false
+config.tab_title_show_basename_only = false
+-- config.use_fancy_tab_bar = false
+config.show_tabs_in_tab_bar = true
+config.tab_max_width = 48
+
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  SCROLLBACK  ✦
+-- ═══════════════════════════════════════════════════════════════════
+
+config.scrollback_lines = 20000
+config.alternate_buffer_wheel_scroll_speed = 3
+config.enable_scroll_bar = true
+
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  SPLIT PANES  ✦
+-- ═══════════════════════════════════════════════════════════════════
+
+config.split_pane_gap = 1
+config.inactive_pane_hsb = {
+  saturation = 0.9,
+  brightness = 0.7,
+}
+
+-- Double-click selects hyphenated identifiers as one word: my-variable-name
+config.selection_word_boundary = ' \t\n{}[]()"\':,'
+
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  WORKING DIRECTORY INHERITANCE  ✦
+-- ═══════════════════════════════════════════════════════════════════
+
+config.window_inherit_working_directory = false
+config.tab_inherit_working_directory = false
+config.split_pane_inherit_working_directory = true
+
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  KEY BINDINGS  ✦
+-- ═══════════════════════════════════════════════════════════════════
+
+table.insert(config.keys, {
+  key = 'Enter',
+  mods = 'CMD|SHIFT',
+  action = wezterm.action.TogglePaneZoomState,
+})
+
+-- ═══════════════════════════════════════════════════════════════════
+--  ✦  MISC  ✦
+-- ═══════════════════════════════════════════════════════════════════
+
+config.default_prog = { '/bin/zsh', '-l' }
+config.copy_on_select = true
+config.automatically_reload_config = true
+config.send_composed_key_when_right_alt_is_pressed = false
+
+config.smart_tab_mode = 'completion_first'
+config.show_new_tab_button_in_tab_bar = true
+config.use_resize_increments = true
 return config
 "#
 }
