@@ -1,29 +1,24 @@
-use crate::domain::{ClientDomain, ClientDomainConfig};
+use crate::domain::ClientDomain;
 use crate::pane::ClientPane;
 use anyhow::{anyhow, bail, Context};
-use async_ossl::AsyncSslStream;
 use async_trait::async_trait;
 use codec::*;
-use config::{configuration, TlsDomainClient, UnixDomain, UnixTarget};
+use config::{configuration, UnixDomain, UnixTarget};
 use futures::FutureExt;
 use mux::client::ClientId;
 use mux::connui::ConnectionUI;
 use mux::domain::DomainId;
 use mux::pane::PaneId;
 use mux::Mux;
-use openssl::ssl::{SslConnector, SslFiletype, SslMethod};
-use openssl::x509::X509;
 use smol::channel::{bounded, unbounded, Receiver, Sender};
 use smol::prelude::*;
 use smol::{block_on, Async};
 use std::collections::HashMap;
 use std::marker::Unpin;
-use std::net::TcpStream;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(windows)]
 use std::os::windows::io::{AsRawSocket, AsSocket, BorrowedSocket, RawSocket};
-use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use thiserror::Error;
@@ -50,7 +45,7 @@ pub struct Client {
     sender: Sender<ReaderMessage>,
     local_domain_id: Option<DomainId>,
     pub client_id: ClientId,
-    client_domain_config: ClientDomainConfig,
+    client_domain_config: UnixDomain,
     pub is_reconnectable: bool,
     pub is_local: bool,
 }
@@ -531,12 +526,12 @@ where
 
 #[derive(Debug)]
 struct Reconnectable {
-    config: ClientDomainConfig,
+    config: UnixDomain,
     stream: Option<Box<dyn AsyncReadAndWrite>>,
 }
 
 impl Reconnectable {
-    fn new(config: ClientDomainConfig, stream: Option<Box<dyn AsyncReadAndWrite>>) -> Self {
+    fn new(config: UnixDomain, stream: Option<Box<dyn AsyncReadAndWrite>>) -> Self {
         Self {
             config,
             stream,
@@ -548,17 +543,14 @@ impl Reconnectable {
     }
 
     fn is_local(&mut self) -> bool {
-        matches!(&self.config, ClientDomainConfig::Unix(_))
+        true
     }
 
     fn reconnectable(&mut self) -> bool {
-        match &self.config {
-            // It doesn't make sense to reconnect to a unix socket; we only
-            // get disconnected it it dies, so respawning it would not preserve
-            // the set of tabs and we'd have confusing and inconsistent state
-            ClientDomainConfig::Unix(_) => false,
-            ClientDomainConfig::Tls(_) => true,
-        }
+        // It doesn't make sense to reconnect to a unix socket; we only
+        // get disconnected it it dies, so respawning it would not preserve
+        // the set of tabs and we'd have confusing and inconsistent state
+        false
     }
 
     fn connect(
@@ -567,12 +559,8 @@ impl Reconnectable {
         ui: &mut ConnectionUI,
         no_auto_start: bool,
     ) -> anyhow::Result<()> {
-        match self.config.clone() {
-            ClientDomainConfig::Unix(unix_dom) => {
-                self.unix_connect(unix_dom, initial, ui, no_auto_start)
-            }
-            ClientDomainConfig::Tls(tls) => self.tls_connect(tls, initial, ui),
-        }
+        let unix_dom = self.config.clone();
+        self.unix_connect(unix_dom, initial, ui, no_auto_start)
     }
 
     fn unix_connect(
@@ -654,124 +642,6 @@ impl Reconnectable {
         Ok(())
     }
 
-    pub fn tls_connect(
-        &mut self,
-        tls_client: TlsDomainClient,
-        _initial: bool,
-        ui: &mut ConnectionUI,
-    ) -> anyhow::Result<()> {
-        openssl::init();
-
-        let remote_address = &tls_client.remote_address;
-
-        let remote_host_name = remote_address.split(':').next().ok_or_else(|| {
-            anyhow!(
-                "expected mux_server_remote_address to have the form 'host:port', but have {}",
-                remote_address
-            )
-        })?;
-
-        let cloned_ui = ui.clone();
-        let stream = cloned_ui.run_and_log_error({
-            || self.try_connect(&tls_client, ui, &remote_address, remote_host_name)
-        })?;
-        self.stream.replace(stream);
-        Ok(())
-    }
-
-    fn try_connect(
-        &mut self,
-        tls_client: &TlsDomainClient,
-        ui: &mut ConnectionUI,
-        remote_address: &str,
-        remote_host_name: &str,
-    ) -> anyhow::Result<Box<dyn AsyncReadAndWrite>> {
-        let mut connector = SslConnector::builder(SslMethod::tls())?;
-
-        let cert_file = tls_client.pem_cert.clone().ok_or_else(|| {
-            anyhow!(
-                "tls_client `{}` must set pem_cert; Faz no longer obtains                  certificates by bootstrapping over ssh",
-                tls_client.name
-            )
-        })?;
-
-        connector
-            .set_certificate_file(&cert_file, SslFiletype::PEM)
-            .context(format!(
-                "set_certificate_file to {} for TLS client",
-                cert_file.display()
-            ))?;
-
-        if let Some(chain_file) = tls_client.pem_ca.as_ref() {
-            connector
-                .set_certificate_chain_file(&chain_file)
-                .context(format!(
-                    "set_certificate_chain_file to {} for TLS client",
-                    chain_file.display()
-                ))?;
-        }
-
-        let key_file = tls_client.pem_private_key.clone().ok_or_else(|| {
-            anyhow!(
-                "tls_client `{}` must set pem_private_key; Faz no longer obtains                  keys by bootstrapping over ssh",
-                tls_client.name
-            )
-        })?;
-        connector
-            .set_private_key_file(&key_file, SslFiletype::PEM)
-            .context(format!(
-                "set_private_key_file to {} for TLS client",
-                key_file.display()
-            ))?;
-
-        fn load_cert(name: &Path) -> anyhow::Result<X509> {
-            let cert_bytes = std::fs::read(name)?;
-            log::trace!("loaded {}", name.display());
-            Ok(X509::from_pem(&cert_bytes)?)
-        }
-        for name in &tls_client.pem_root_certs {
-            if name.is_dir() {
-                for entry in std::fs::read_dir(name)? {
-                    if let Ok(cert) = load_cert(&entry?.path()) {
-                        connector.cert_store_mut().add_cert(cert).ok();
-                    }
-                }
-            } else {
-                connector.cert_store_mut().add_cert(load_cert(name)?)?;
-            }
-        }
-
-        let connector = connector.build();
-        let connector = connector
-            .configure()?
-            .verify_hostname(!tls_client.accept_invalid_hostnames);
-
-        ui.output_str(&format!("Connecting to {} using TLS\n", remote_address));
-        let stream = TcpStream::connect(remote_address)
-            .with_context(|| format!("connecting to {}", remote_address))?;
-        stream.set_nodelay(true)?;
-        stream.set_write_timeout(Some(tls_client.write_timeout))?;
-        stream.set_read_timeout(Some(tls_client.read_timeout))?;
-
-        let stream = Box::new(Async::new(AsyncSslStream::new(
-            connector
-                .connect(
-                    tls_client
-                        .expected_cn
-                        .as_deref()
-                        .unwrap_or(remote_host_name),
-                    stream,
-                )
-                .with_context(|| {
-                    format!(
-                        "SslConnector for {} with host name {}",
-                        remote_address, remote_host_name,
-                    )
-                })?,
-        ))?);
-        ui.output_str("TLS Connected!\n");
-        Ok(stream)
-    }
 }
 
 impl Client {
@@ -878,7 +748,7 @@ impl Client {
         }
     }
 
-    pub fn into_client_domain_config(self) -> ClientDomainConfig {
+    pub fn into_client_domain_config(self) -> UnixDomain {
         self.client_domain_config
     }
 
@@ -1010,21 +880,9 @@ impl Client {
         no_auto_start: bool,
     ) -> anyhow::Result<Self> {
         let mut reconnectable =
-            Reconnectable::new(ClientDomainConfig::Unix(unix_dom.clone()), None);
+            Reconnectable::new(unix_dom.clone(), None);
         reconnectable.connect(initial, ui, no_auto_start)?;
         Ok(Self::new(local_domain_id, reconnectable))
-    }
-
-    pub fn new_tls(
-        local_domain_id: DomainId,
-        tls_client: &TlsDomainClient,
-        ui: &mut ConnectionUI,
-    ) -> anyhow::Result<Self> {
-        let mut reconnectable =
-            Reconnectable::new(ClientDomainConfig::Tls(tls_client.clone()), None);
-        let no_auto_start = true;
-        reconnectable.connect(true, ui, no_auto_start)?;
-        Ok(Self::new(Some(local_domain_id), reconnectable))
     }
 
     pub async fn send_pdu(&self, pdu: Pdu) -> anyhow::Result<Pdu> {

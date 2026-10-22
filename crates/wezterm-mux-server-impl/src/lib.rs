@@ -8,23 +8,16 @@ use config::ConfigHandle;
 use mux::domain::{Domain, LocalDomain};
 use mux::Mux;
 use std::sync::Arc;
-use wezterm_client::domain::{ClientDomain, ClientDomainConfig};
+use config::UnixDomain;
+use wezterm_client::domain::ClientDomain;
 
 pub mod dispatch;
 pub mod local;
 pub mod pki;
 pub mod sessionhandler;
 
-fn client_domains(config: &config::ConfigHandle) -> Vec<ClientDomainConfig> {
-    let mut domains = vec![];
-    for unix_dom in &config.unix_domains {
-        domains.push(ClientDomainConfig::Unix(unix_dom.clone()));
-    }
-
-    for tls_client in &config.tls_clients {
-        domains.push(ClientDomainConfig::Tls(tls_client.clone()));
-    }
-    domains
+fn client_domains(config: &config::ConfigHandle) -> Vec<UnixDomain> {
+    config.unix_domains.clone()
 }
 
 pub fn update_mux_domains(config: &ConfigHandle) -> anyhow::Result<()> {
@@ -39,7 +32,7 @@ fn update_mux_domains_impl(config: &ConfigHandle, is_standalone_mux: bool) -> an
     let mux = Mux::get();
 
     for client_config in client_domains(&config) {
-        if mux.get_domain_by_name(client_config.name()).is_some() {
+        if mux.get_domain_by_name(&client_config.name).is_some() {
             continue;
         }
 

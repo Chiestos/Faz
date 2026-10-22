@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use codec::{ListPanesResponse, SpawnV2, SplitPane};
 use config::keyassignment::{PaneEncoding, SpawnTabDomain};
-use config::{TlsDomainClient, UnixDomain};
+use config::UnixDomain;
 use mux::connui::{ConnectionUI, ConnectionUIParams};
 use mux::domain::{alloc_domain_id, Domain, DomainId, DomainState, SplitSource};
 use mux::pane::{Pane, PaneId};
@@ -175,49 +175,6 @@ impl ClientInner {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum ClientDomainConfig {
-    Unix(UnixDomain),
-    Tls(TlsDomainClient),
-}
-
-impl ClientDomainConfig {
-    pub fn name(&self) -> &str {
-        match self {
-            ClientDomainConfig::Unix(unix) => &unix.name,
-            ClientDomainConfig::Tls(tls) => &tls.name,
-        }
-    }
-
-    pub fn local_echo_threshold_ms(&self) -> Option<u64> {
-        match self {
-            ClientDomainConfig::Unix(unix) => unix.local_echo_threshold_ms,
-            ClientDomainConfig::Tls(tls) => tls.local_echo_threshold_ms,
-        }
-    }
-
-    pub fn overlay_lag_indicator(&self) -> bool {
-        match self {
-            ClientDomainConfig::Unix(unix) => unix.overlay_lag_indicator,
-            ClientDomainConfig::Tls(tls) => tls.overlay_lag_indicator,
-        }
-    }
-
-    pub fn label(&self) -> String {
-        match self {
-            ClientDomainConfig::Unix(unix) => format!("unix mux {}", unix.socket_path().display()),
-            ClientDomainConfig::Tls(tls) => format!("TLS mux {}", tls.remote_address),
-        }
-    }
-
-    pub fn connect_automatically(&self) -> bool {
-        match self {
-            ClientDomainConfig::Unix(unix) => unix.connect_automatically,
-            ClientDomainConfig::Tls(tls) => tls.connect_automatically,
-        }
-    }
-}
-
 impl ClientInner {
     pub fn new(
         local_domain_id: DomainId,
@@ -239,7 +196,7 @@ impl ClientInner {
 }
 
 pub struct ClientDomain {
-    config: ClientDomainConfig,
+    config: UnixDomain,
     label: String,
     inner: Mutex<Option<Arc<ClientInner>>>,
     local_domain_id: DomainId,
@@ -384,9 +341,9 @@ fn mux_notify_client_domain(local_domain_id: DomainId, notif: MuxNotification) -
 }
 
 impl ClientDomain {
-    pub fn new(config: ClientDomainConfig) -> Self {
+    pub fn new(config: UnixDomain) -> Self {
         let local_domain_id = alloc_domain_id();
-        let label = config.label();
+        let label = format!("unix mux {}", config.socket_path().display());
         Mux::get().subscribe(move |notif| mux_notify_client_domain(local_domain_id, notif.clone()));
         Self {
             config,
@@ -401,7 +358,7 @@ impl ClientDomain {
     }
 
     pub fn connect_automatically(&self) -> bool {
-        self.config.connect_automatically()
+        self.config.connect_automatically
     }
 
     pub fn perform_detach(&self) {
@@ -708,8 +665,8 @@ impl ClientDomain {
         let domain = domain
             .downcast_ref::<Self>()
             .ok_or_else(|| anyhow!("domain {} is not a ClientDomain", domain_id))?;
-        let threshold = domain.config.local_echo_threshold_ms();
-        let overlay_lag_indicator = domain.config.overlay_lag_indicator();
+        let threshold = domain.config.local_echo_threshold_ms;
+        let overlay_lag_indicator = domain.config.overlay_lag_indicator;
 
         let inner = Arc::new(ClientInner::new(
             domain_id,
@@ -732,7 +689,7 @@ impl Domain for ClientDomain {
     }
 
     fn domain_name(&self) -> &str {
-        self.config.name()
+        &self.config.name
     }
 
     async fn domain_label(&self) -> String {
@@ -938,19 +895,16 @@ impl Domain for ClientDomain {
             let ui = ui.clone();
             async move {
                 let mut cloned_ui = ui.clone();
-                let client = spawn_into_new_thread(move || match &config {
-                    ClientDomainConfig::Unix(unix) => {
-                        let initial = true;
-                        let no_auto_start = false;
-                        Client::new_unix_domain(
-                            Some(domain_id),
-                            unix,
-                            initial,
-                            &mut cloned_ui,
-                            no_auto_start,
-                        )
-                    }
-                    ClientDomainConfig::Tls(tls) => Client::new_tls(domain_id, tls, &mut cloned_ui),
+                let client = spawn_into_new_thread(move || {
+                    let initial = true;
+                    let no_auto_start = false;
+                    Client::new_unix_domain(
+                        Some(domain_id),
+                        &config,
+                        initial,
+                        &mut cloned_ui,
+                        no_auto_start,
+                    )
                 })
                 .await?;
 

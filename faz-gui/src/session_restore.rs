@@ -549,31 +549,6 @@ fn cwd_from_working_dir_with_hostname(
         .map(|path| path.to_string_lossy().into_owned())
 }
 
-fn is_ssh_domain_name(name: &str) -> bool {
-    name.starts_with("SSH:") || name.starts_with("SSHMUX:")
-}
-
-/// Working directory to hand to `spawn_pane` on restore.
-///
-/// An ssh-domain pane's OSC 7 cwd is `file://<remote-host>/path`;
-/// `to_file_path` refuses remote-host URLs, so those panes used to restore
-/// into the remote home directory. The path component is meaningful on the
-/// remote side, so pass it through for ssh domains. Local domains accept
-/// empty/`localhost` hosts plus this machine's exact hostname (see
-/// `cwd_from_working_dir`); any other host still fails conversion, so a
-/// leftover remote path cannot leak into a local spawn.
-fn cwd_for_restore(domain_name: &str, working_dir: Option<&SerdeUrl>) -> Option<String> {
-    if is_ssh_domain_name(domain_name) {
-        let url = working_dir?;
-        if url.url.scheme() != "file" {
-            return None;
-        }
-        let path = url.url.path();
-        return (!path.is_empty() && path != "/").then(|| path.to_string());
-    }
-    cwd_from_working_dir(working_dir)
-}
-
 fn focused_window_id() -> Option<MuxWindowId> {
     frontend::try_front_end()
         .and_then(|fe| fe.focused_mux_window_id())
@@ -1076,7 +1051,7 @@ async fn spawn_panes_for_tab(
                 &mux,
                 entry.size,
                 None,
-                cwd_for_restore(&entry.domain_name, entry.working_dir.as_ref()),
+                cwd_from_working_dir(entry.working_dir.as_ref()),
                 encoding,
             )
             .await
@@ -1489,16 +1464,16 @@ mod tests {
     #[test]
     fn restore_cwd_local_domain_requires_local_url() {
         assert_eq!(
-            cwd_for_restore("local", Some(&serde_url("file:///Users/a/src"))).as_deref(),
+            cwd_from_working_dir(Some(&serde_url("file:///Users/a/src"))).as_deref(),
             Some("/Users/a/src")
         );
         assert_eq!(
-            cwd_for_restore("local", Some(&serde_url("file://localhost/Users/a/src"))).as_deref(),
+            cwd_from_working_dir(Some(&serde_url("file://localhost/Users/a/src"))).as_deref(),
             Some("/Users/a/src")
         );
         // A remote-host cwd must not leak into a local spawn.
         assert_eq!(
-            cwd_for_restore("local", Some(&serde_url("file://server/home/u"))),
+            cwd_from_working_dir(Some(&serde_url("file://server/home/u"))),
             None
         );
     }
@@ -1531,19 +1506,6 @@ mod tests {
             ),
             None
         );
-    }
-
-    #[test]
-    fn restore_cwd_ssh_domain_keeps_remote_path() {
-        assert_eq!(
-            cwd_for_restore("SSH:server", Some(&serde_url("file://server/home/u/proj"))).as_deref(),
-            Some("/home/u/proj")
-        );
-        assert_eq!(
-            cwd_for_restore("SSHMUX:server", Some(&serde_url("file://server/"))),
-            None
-        );
-        assert_eq!(cwd_for_restore("SSH:server", None), None);
     }
 
     fn sample_window(title: &str) -> SavedWindowSnapshot {

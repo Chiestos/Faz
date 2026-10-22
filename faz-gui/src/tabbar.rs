@@ -497,10 +497,9 @@ fn is_builtin_ssh_title(tab: &TabInformation, callback_present: bool) -> bool {
 /// Detect the SSH destination for a pane, used to show the remote host in tab titles.
 ///
 /// Fallback chain (first match wins):
-///   1. `WEZTERM_PROG` user var → parse SSH command
-///   2. Domain name prefix (`SSH:` / `SSHMUX:`)
-///   3. Foreground process named `ssh` → parse its argv
-///   4. CWD host component (e.g. from `file://host/…`)
+///   1. `WEZTERM_PROG` user var → parse the remote-shell command
+///   2. Foreground process named `ssh`/`mosh`/`autossh`/`et` → parse its argv
+///   3. CWD host component (e.g. from `file://host/…`)
 fn ssh_destination_for_pane(pane: &PaneInformation) -> Option<String> {
     if let Some(command) = pane.user_vars.get("WEZTERM_PROG") {
         if let Some(host) = ssh_target_from_command(command) {
@@ -520,17 +519,6 @@ fn ssh_destination_for_real_pane(real_pane: &std::sync::Arc<dyn Pane>) -> Option
     if let Some(command) = real_pane.copy_user_vars().get("WEZTERM_PROG") {
         if let Some(host) = ssh_target_from_command(command) {
             return Some(host);
-        }
-    }
-
-    let mux = Mux::try_get()?;
-    if let Some(domain) = mux.get_domain(real_pane.domain_id()) {
-        let name = domain.domain_name();
-        if let Some(host) = name
-            .strip_prefix("SSH:")
-            .or_else(|| name.strip_prefix("SSHMUX:"))
-        {
-            return Some(host.to_string());
         }
     }
 

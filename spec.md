@@ -212,7 +212,8 @@
 | N-104 | AppleScript `do script` | 不向 AppleScript 暴露 shell 执行 |
 | N-105 | Remote Files（`sshfs` 远程文件浏览） | 已整体移除，相关依赖一并清除 |
 | N-106 | Homebrew tap / cask 分发 | 不维护 tap，更新走 DMG |
-| N-107 | 内置 SSH 客户端（`ssh_domains`、SSH agent 转发、TLS `bootstrap_via_ssh` 引导、`faz cli tlscreds`） | 已整体移除；`ssh_domains` / `ssh_backend` / `mux_enable_ssh_agent` / `bootstrap_via_ssh` 保留为 deprecated 字段以兼容旧配置。远程连接用窗格里系统的 `ssh` |
+| N-107 | 内置 SSH 客户端（`ssh_domains`、SSH agent 转发、`faz cli tlscreds`） | 已整体移除，配置字段一并删除。远程连接用窗格里系统的 `ssh`；tab 标题仍会读取 `WEZTERM_PROG` 和前台进程，为 `ssh` / `mosh` / `autossh` / `et` 显示远端主机名 |
+| N-108 | TLS 域（`tls_clients` / `tls_servers`） | 已整体移除。服务端从未接线，`tls_servers` 只被解析不生效；`ClientDomainConfig` 随之压平为 `UnixDomain` |
 
 ---
 

@@ -1027,40 +1027,6 @@ local function ssh_target_from_command(command)
   return ssh_target_from_tokens(shell_split(text))
 end
 
-local function pane_domain_name(pane)
-  if not pane then
-    return ""
-  end
-
-  local ok, value = pcall(function()
-    if pane.get_domain_name then
-      return pane:get_domain_name()
-    end
-    return pane.domain_name
-  end)
-  if not ok then
-    return ""
-  end
-  return trim_surrounding_whitespace(value or "")
-end
-
-local function pane_user_vars(pane)
-  if not pane then
-    return nil
-  end
-
-  local ok, vars = pcall(function()
-    if pane.get_user_vars then
-      return pane:get_user_vars()
-    end
-    return pane.user_vars
-  end)
-  if not ok or type(vars) ~= "table" then
-    return nil
-  end
-  return vars
-end
-
 local function pane_foreground_process_name(pane)
   if not pane then
     return ""
@@ -1078,25 +1044,44 @@ local function pane_foreground_process_name(pane)
   return trim_surrounding_whitespace(value or "")
 end
 
-local function pane_foreground_process_info(pane)
-  if not pane then
-    return nil
-  end
-
-  local ok, info = pcall(function()
-    return pane:get_foreground_process_info()
-  end)
-  if not ok or type(info) ~= "table" then
-    return nil
-  end
-  return info
-end
-
 -- Intentionally global: the top-level chunk already carries 200 locals, which
 -- is LuaJIT's hard per-function limit, so this must not become `local function`.
 -- Tab-title events hand us PaneInformation objects that expose plain fields
 -- only; method-style access (pane:get_xxx()) raises on them, so read fields
 -- directly instead of reusing the pane_* helpers above.
+-- Remote-shell launchers whose panes need shell-side (not locally resolved)
+-- commands. Faz has no built-in ssh client; this only looks at the process
+-- the user started in the pane.
+local _faz_remote_shells = { ssh = true, mosh = true, autossh = true, et = true }
+
+local function pane_runs_remote_shell(pane)
+  if not pane then
+    return false
+  end
+
+  local ok_prog, prog = pcall(function()
+    return pane.user_vars and pane.user_vars.WEZTERM_PROG or ''
+  end)
+  if ok_prog and type(prog) == 'string' and prog ~= '' then
+    local first = prog:match('%S+')
+    if first then
+      local name = (basename(first:lower()) or first:lower())
+      if _faz_remote_shells[name] then
+        return true
+      end
+    end
+  end
+
+  local ok_name, name = pcall(function()
+    return pane.foreground_process_name
+  end)
+  if not ok_name or type(name) ~= 'string' or name == '' then
+    return false
+  end
+  name = name:lower()
+  return _faz_remote_shells[(basename(name) or name)] == true
+end
+
 function _faz_foreground_process_title(pane)
   if not pane then
     return nil
@@ -1365,8 +1350,7 @@ local function launch_yazi(window, pane)
 
   -- Remote panes must not receive a locally resolved absolute yazi path, so
   -- the shell wrapper is used there and the resolved command only locally.
-  local domain_name = pane_domain_name(pane)
-  local is_remote = domain_name:match("^SSH:") ~= nil or domain_name:match("^SSHMUX:") ~= nil
+  local is_remote = pane_runs_remote_shell(pane)
   local send_command = "\x15y 2>/dev/null || yazi\r"
   if not is_remote then
     sync_managed_yazi_theme(window)
@@ -1549,11 +1533,6 @@ local function tab_display_title(tab, effective_config)
   end
 
   if text == '' and active_pane then
-    local domain = pane_domain_name(active_pane)
-    local target = domain:match("^SSH:(.+)$") or domain:match("^SSHMUX:(.+)$")
-    text = trim_surrounding_whitespace(target or '') or ''
-  end
-  if text == '' and active_pane then
     text = active_pane.title or ''
   end
   if text == '' then
@@ -1627,11 +1606,6 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, effective_config, hove
       if process_title then
         full_text = _faz_context_process_title(full_text, process_title) or ''
         short_text = _faz_context_process_title(short_text, process_title) or ''
-      end
-      if full_text == '' then
-        local domain = pane_domain_name(p)
-        local target = domain:match("^SSH:(.+)$") or domain:match("^SSHMUX:(.+)$")
-        full_text = trim_surrounding_whitespace(target or '') or ''
       end
       if full_text == '' then
         full_text = p.title or '?'
