@@ -1,4 +1,3 @@
-use crate::activity::Activity;
 use crate::domain::{alloc_domain_id, Domain, DomainId, DomainState, SplitSource};
 use crate::pane::{Pane, PaneId};
 use crate::tab::{SplitRequest, Tab, TabId};
@@ -69,7 +68,17 @@ pub(crate) struct TmuxDomainState {
     pub domain_id: DomainId, // ID of TmuxDomain
     state: Mutex<State>,
     pub cmd_queue: Arc<Mutex<TmuxCmdQueue>>,
+    /// The window hosting this tmux session's tabs.
+    ///
+    /// Holds the builder until the first tab lands, then drops it: dropping
+    /// fires `MuxNotification::WindowCreated`, which is what makes the GUI
+    /// adopt the window. Keeping the builder alive forever (the previous
+    /// behaviour) meant the notification never fired and the window never
+    /// appeared.
     pub gui_window: Mutex<Option<MuxWindowBuilder>>,
+    /// Set once the builder has been dropped and the GUI was told about the
+    /// window. `gui_window` is `None` from then on; use this for the id.
+    pub gui_window_id: Mutex<Option<WindowId>>,
     pub gui_tabs: Mutex<HashMap<TmuxWindowId, TmuxTab>>,
     pub remote_panes: Mutex<HashMap<TmuxPaneId, RefTmuxRemotePane>>,
     pub tmux_session: Mutex<Option<TmuxSessionId>>,
@@ -181,7 +190,9 @@ impl TmuxDomainState {
                     log::info!("tmux session changed:{}", session);
                 }
                 // Only handle the new tab, the first empty window handled by sync_window_state
-                Event::WindowAdd { window } if self.gui_window.lock().is_some() => {
+                Event::WindowAdd { window }
+                    if self.gui_window.lock().is_some() || self.gui_window_id.lock().is_some() =>
+                {
                     if let Some(session) = *self.tmux_session.lock() {
                         let mut cmd_queue = self.cmd_queue.as_ref().lock();
                         cmd_queue.push_back(Box::new(ListAllWindows {
@@ -272,28 +283,41 @@ impl TmuxDomainState {
 
     /// create a standalone window for tmux tabs
     pub fn create_gui_window(&self) {
-        if self.gui_window.lock().is_none() {
-            let mux = Mux::get();
-            let window_builder =
-                if let Some((_domain, window_id, _tab)) = mux.resolve_pane_id(self.pane_id) {
-                    MuxWindowBuilder {
-                        window_id,
-                        activity: Some(Activity::new()),
-                        notified: false,
-                    }
-                } else {
-                    mux.new_empty_window(
-                        None, /* TODO: pass session here */
-                        None, /* position */
-                    )
-                };
+        if self.gui_window.lock().is_some() || self.gui_window_id.lock().is_some() {
+            return;
+        }
 
-            log::info!("Tmux create window id {}", window_builder.window_id);
-            {
-                let mut window_id = self.gui_window.lock();
-                *window_id = Some(window_builder); // keep the builder so it won't be purged
-            }
-        };
+        // Always a fresh window: the pane running `tmux -CC` keeps its own
+        // window untouched, and every tmux session gets a window of its own.
+        let mux = Mux::get();
+        let window_builder = mux.new_empty_window(
+            None, /* TODO: pass session here */
+            None, /* position */
+        );
+
+        log::info!("Tmux create window id {}", window_builder.window_id);
+        *self.gui_window.lock() = Some(window_builder);
+    }
+
+    /// The tmux window's id, once one has been created.
+    pub fn gui_window_id(&self) -> Option<WindowId> {
+        if let Some(id) = *self.gui_window_id.lock() {
+            return Some(id);
+        }
+        self.gui_window.lock().as_ref().map(|b| b.window_id)
+    }
+
+    /// Drop the window builder once the first tab is in place.
+    ///
+    /// This fires `WindowCreated`, so the GUI adopts a window that already
+    /// has content. Call it only after `add_tab_to_window`.
+    pub fn publish_gui_window(&self) {
+        let builder = self.gui_window.lock().take();
+        if let Some(mut builder) = builder {
+            let window_id = builder.window_id;
+            *self.gui_window_id.lock() = Some(window_id);
+            builder.notify();
+        }
     }
 
     /// create a tmux window
@@ -342,6 +366,7 @@ impl TmuxDomain {
             state: Mutex::new(State::WaitForInitialGuard),
             cmd_queue: Arc::new(Mutex::new(cmd_queue)),
             gui_window: Mutex::new(None),
+            gui_window_id: Mutex::new(None),
             gui_tabs: Mutex::new(HashMap::default()),
             remote_panes: Mutex::new(HashMap::default()),
             tmux_session: Mutex::new(None),

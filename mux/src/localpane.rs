@@ -1038,9 +1038,12 @@ impl wezterm_term::DeviceControlHandler for LocalPaneDCSHandler {
 
                     self.tmux_domain.replace(tmux_domain);
 
-                // TODO: do we need to proactively list available tabs here?
-                // if so we should arrange to call domain.attach() and make
-                // it do the right thing.
+                    // The rest of the attach happens from `SessionChanged`:
+                    // that event queues `list-commands`, whose result queues
+                    // `list-windows`, whose result runs `sync_window_state`.
+                    // That path creates the dedicated window, fills it with
+                    // the session's existing tabs, and publishes it to the
+                    // GUI once the first tab is in place.
                 } else if configuration().log_unknown_escape_sequences {
                     log::warn!("unknown DeviceControlMode::Enter {:?}", mode,);
                 }

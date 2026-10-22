@@ -377,13 +377,13 @@ impl TmuxDomainState {
         let mux = Mux::get();
 
         self.create_gui_window();
-        let mut gui_window = self.gui_window.lock();
-        let gui_window_id = match gui_window.as_mut() {
-            Some(x) => x,
-            None => {
-                anyhow::bail!("No tmux gui created");
-            }
+        let gui_window_id = match self.gui_window_id() {
+            Some(id) => id,
+            None => anyhow::bail!("No tmux gui created"),
         };
+        // Set once the first tab is attached, so the window reaches the GUI
+        // with content instead of as an empty window that might be pruned.
+        let mut published = self.gui_window_id.lock().is_some();
 
         for window in windows.iter() {
             if window.session_id != current_session {
@@ -510,8 +510,11 @@ impl TmuxDomainState {
                 }
             }
 
-            mux.add_tab_to_window(&tab, **gui_window_id)?;
-            gui_window_id.notify();
+            mux.add_tab_to_window(&tab, gui_window_id)?;
+            if !published {
+                self.publish_gui_window();
+                published = true;
+            }
 
             let gui_tabs = self.gui_tabs.lock();
             let local_tab = match gui_tabs.get(&window.window_id) {

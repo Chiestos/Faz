@@ -29,13 +29,17 @@ impl Write for TmuxPtyWriter {
             pane_lock.pane_id
         };
         log::trace!("pane:{}, content:{:?}", &pane_id, buf);
+        let len = buf.len();
         let mut cmd_queue = self.cmd_queue.lock();
         cmd_queue.push_back(Box::new(SendKeys {
             pane: pane_id,
             keys: buf.to_vec(),
         }));
         TmuxDomainState::schedule_send_next_command(self.domain_id);
-        Ok(0)
+        // Every byte was accepted into the command queue. Reporting `Ok(0)`
+        // made `write_all` bail with `WriteZero` right after the first write,
+        // which is why typing stalled after a single character.
+        Ok(len)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
@@ -50,13 +54,17 @@ impl Write for TmuxPty {
             pane_lock.pane_id
         };
         log::trace!("pane:{}, content:{:?}", &pane_id, buf);
+        let len = buf.len();
         let mut cmd_queue = self.cmd_queue.lock();
         cmd_queue.push_back(Box::new(SendKeys {
             pane: pane_id,
             keys: buf.to_vec(),
         }));
         TmuxDomainState::schedule_send_next_command(self.domain_id);
-        Ok(0)
+        // Every byte was accepted into the command queue. Reporting `Ok(0)`
+        // made `write_all` bail with `WriteZero` right after the first write,
+        // which is why typing stalled after a single character.
+        Ok(len)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
