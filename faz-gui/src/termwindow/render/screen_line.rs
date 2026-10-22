@@ -223,10 +223,18 @@ impl crate::TermWindow {
                     bg_default = false;
                 }
 
-                (
-                    bg.mul_alpha(self.config.text_background_opacity),
-                    bg_default,
-                )
+                // A default background must use the caller's resolved colour,
+                // not the palette background at full alpha: when the window is
+                // translucent the caller passes alpha 0 so the window surface
+                // shows through. Filling it here painted an opaque block, which
+                // is why tab-bar gaps came out darker than the strip beside
+                // them.
+                let bg = if bg_default {
+                    params.default_bg
+                } else {
+                    bg.mul_alpha(self.config.text_background_opacity)
+                };
+                (bg, bg_default)
             };
 
             if !bg_is_default {

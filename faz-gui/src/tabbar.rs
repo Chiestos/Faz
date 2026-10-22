@@ -1007,11 +1007,11 @@ impl TabBarState {
         let mut x = 0;
         let mut items = vec![];
 
-        let black_cell = Cell::blank_with_attrs(
-            CellAttributes::default()
-                .set_background(ColorSpec::TrueColor(*colors.background()))
-                .clone(),
-        );
+        // Gaps between tabs stay transparent so the strip painted underneath
+        // shows through. Giving them a solid colour drew an opaque block on top
+        // of that strip, which is why the gaps read darker than the titlebar
+        // beside them.
+        let black_cell = Cell::blank_with_attrs(CellAttributes::default());
 
         if use_integrated_title_buttons
             && config.integrated_title_button_style == IntegratedTitleButtonStyle::MacOsNative

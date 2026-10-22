@@ -1,7 +1,7 @@
 use crate::quad::TripleLayerQuadAllocator;
 use crate::utilsprites::RenderMetrics;
 use ::window::ULength;
-use config::{Config, ConfigHandle, Dimension, DimensionContext, TabBarColors};
+use config::{Config, ConfigHandle, Dimension, DimensionContext};
 use window::color::LinearRgba;
 
 const INTEGRATED_BUTTONS_TOP_TAB_INSET_POINTS: f32 = 3.0;
@@ -37,23 +37,18 @@ pub(crate) fn integrated_buttons_top_inset(
     }
 }
 
-fn integrated_buttons_top_background(
+/// Background for the strip that holds the window buttons.
+///
+/// One rule for every non-tab surface: the window's own background at its
+/// configured opacity. Tabs keep their own colours on top of it. There used to
+/// be a `tab_bar.background` special case here, which made the strip read as a
+/// different colour from the terminal beside it whenever opacity was not 1.0.
+pub(crate) fn integrated_buttons_top_background(
     config: &ConfigHandle,
-    non_fancy_top_tab_bar_visible: bool,
+    _non_fancy_top_tab_bar_visible: bool,
     pane_background: LinearRgba,
 ) -> LinearRgba {
-    if non_fancy_top_tab_bar_visible && config.window_background_opacity == 1.0 {
-        config
-            .resolved_palette
-            .tab_bar
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(TabBarColors::default)
-            .background()
-            .to_linear()
-    } else {
-        pane_background.mul_alpha(config.window_background_opacity)
-    }
+    pane_background.mul_alpha(config.window_background_opacity)
 }
 
 impl crate::TermWindow {
@@ -358,17 +353,14 @@ mod tests {
     }
 
     #[test]
-    fn opaque_non_fancy_top_tab_inset_matches_tab_bar_background() {
+    fn top_strip_uses_the_window_background_at_its_opacity() {
+        // One rule for every non-tab surface: the window's own background.
+        // There used to be a `tab_bar.background` special case for opaque
+        // windows, which made the strip a different colour from the terminal.
         let config = ConfigHandle::default_config();
+        let opacity = config.window_background_opacity as f32;
         let pane_background = LinearRgba::with_components(0.1, 0.2, 0.3, 1.0);
-        let expected = config
-            .resolved_palette
-            .tab_bar
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(TabBarColors::default)
-            .background()
-            .to_linear();
+        let expected = pane_background.mul_alpha(opacity);
 
         assert_eq!(
             integrated_buttons_top_background(&config, true, pane_background),
@@ -376,7 +368,7 @@ mod tests {
         );
         assert_eq!(
             integrated_buttons_top_background(&config, false, pane_background),
-            pane_background
+            expected
         );
     }
 }
