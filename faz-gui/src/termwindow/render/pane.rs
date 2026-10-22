@@ -183,18 +183,10 @@ impl crate::TermWindow {
         let (_, padding_top) = self.padding_left_top();
         let content_left = self.content_left_inset();
 
-        let tab_bar_height = if self.show_tab_bar {
-            self.tab_bar_pixel_height()
-                .context("tab_bar_pixel_height")?
-        } else {
-            0.
-        };
         let top_bar_height = if self.config.tab_bar_at_bottom {
             0.0
         } else {
-            // The bar may be pushed down to clear the window buttons; content
-            // starts below wherever it ends.
-            tab_bar_height + self.tab_bar_top_offset(tab_bar_height)
+            self.top_chrome_height()
         };
         let border = self.get_os_border();
         // When tab bar is at top, it covers the titlebar area, so don't add

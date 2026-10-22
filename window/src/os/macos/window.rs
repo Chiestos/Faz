@@ -1,6 +1,10 @@
 // let () = msg_send! is a common pattern for objc
 #![allow(clippy::let_unit_value)]
 
+/// Fraction of twice the window-button centre offset used as the tab-bar
+/// strip height. Applied to a point measurement, so it is display-density
+/// independent.
+const TITLEBAR_STRIP_SCALE: f64 = 0.8;
 use super::keycodes::*;
 use super::{nsstring, nsstring_to_str};
 use crate::clipboard::Clipboard as ClipboardContext;
@@ -1776,28 +1780,35 @@ impl WindowOps for Window {
                 if close.is_null() {
                     return None;
                 }
+                // Measure in the window's own coordinate space. The button's
+                // superview is a titlebar container whose top is not the window
+                // top, so measuring there reports the centre several points too
+                // close and puts the strip too high.
                 let frame: NSRect = msg_send![close, frame];
                 let superview: id = msg_send![close, superview];
                 if superview.is_null() {
                     return None;
                 }
-                let container: NSRect = msg_send![superview, frame];
-                // NSView coordinates are bottom-up unless the view is flipped;
-                // the titlebar container is not. Ask rather than assume, or the
-                // result is off by the container height.
-                let flipped: bool = msg_send![superview, isFlipped];
-                let from_top = if flipped {
-                    frame.origin.y + frame.size.height
-                } else {
-                    container.size.height - frame.origin.y
-                };
-                log::debug!(
-                    "titlebar: button=({:.1},{:.1} {:.1}x{:.1}) container_h={:.1} flipped={flipped} from_top={from_top:.1}",
-                    frame.origin.x,
-                    frame.origin.y,
-                    frame.size.width,
-                    frame.size.height,
-                    container.size.height
+                let window_frame: NSRect = msg_send![ns_window, frame];
+                let button_in_window: NSRect = msg_send![close,
+                    convertRect: frame toView: std::ptr::null_mut::<Object>()];
+
+                // Window coordinates are bottom-up; the frame origin is the
+                // bottom-left of the whole window, titlebar included.
+                let centre_from_top = window_frame.size.height
+                    - (button_in_window.origin.y + button_in_window.size.height / 2.0);
+                // Twice the centre offset would put the strip symmetrically
+                // around the buttons; 0.8 of that lands where the gaps read as
+                // equal at this titlebar size. Point-space, so it scales with
+                // any display density.
+                let from_top = centre_from_top * 2.0 * TITLEBAR_STRIP_SCALE;
+                log::info!(
+                    "titlebar: button_in_window=({:.1},{:.1} {:.1}x{:.1}) window_h={:.1} centre_from_top={centre_from_top:.1} strip={from_top:.1}",
+                    button_in_window.origin.x,
+                    button_in_window.origin.y,
+                    button_in_window.size.width,
+                    button_in_window.size.height,
+                    window_frame.size.height
                 );
                 (!from_top.is_nan() && from_top > 0.0)
                     .then(|| ULength::new(from_top.ceil() as usize))

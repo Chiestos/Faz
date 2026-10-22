@@ -12,11 +12,22 @@ impl crate::TermWindow {
     pub fn paint_tab_bar(&mut self, layers: &mut TripleLayerQuadAllocator) -> anyhow::Result<()> {
         let border = self.get_os_border();
         let tab_bar_height = self.tab_bar_pixel_height()?;
+        // The bar keeps its one line of cells; the strip above it stays empty
+        // and draggable. Its bottom edge lands on the strip line derived from
+        // the window buttons, and the terminal content starts there too.
         let tab_bar_y = if self.config.tab_bar_at_bottom {
             ((self.dimensions.pixel_height as f32) - tab_bar_height - border.bottom.get() as f32)
                 .max(0.)
         } else {
-            self.tab_bar_top_offset(tab_bar_height)
+            // The bar hangs from the strip line: its top is strip minus its
+            // own height, so its bottom edge is the line itself. Fullscreen has
+            // no buttons and no strip, so the bar sits at the very top.
+            if self.layout_is_effective_fullscreen() {
+                0.
+            } else {
+                let strip = self.title_bar_strip_height();
+                (strip - tab_bar_height).max(0.)
+            }
         };
         let panes = self.get_panes_to_render();
         let force_opaque_tab_bar_background = forces_opaque_faz_tui_window_background(&panes);
@@ -70,31 +81,7 @@ impl crate::TermWindow {
                 self.config.text_background_opacity
             });
 
-        if effective_window_is_transparent {
-            let tab_bar_bg = if let Some(active) = self.get_active_pane_or_overlay() {
-                active
-                    .palette()
-                    .background
-                    .to_linear()
-                    .mul_alpha(self.config.window_background_opacity)
-            } else {
-                palette
-                    .background
-                    .to_linear()
-                    .mul_alpha(self.config.window_background_opacity)
-            };
-            self.filled_rectangle(
-                layers,
-                0,
-                euclid::rect(
-                    0.0,
-                    tab_bar_y,
-                    self.dimensions.pixel_width as f32,
-                    tab_bar_height,
-                ),
-                tab_bar_bg,
-            )?;
-        }
+        self.fill_tab_bar_background(layers, tab_bar_y, tab_bar_height)?;
 
         self.render_screen_line(
             RenderScreenLineParams {
@@ -144,6 +131,54 @@ impl crate::TermWindow {
         Ok(())
     }
 
+    /// Paint the window background behind the tab-bar strip.
+    ///
+    /// Nothing else fills this region (see the `top_fill_height` note in
+    /// paint.rs), so without this the strip shows the window backing, which is
+    /// a second translucent layer and reads lighter than the terminal body.
+    /// Called both when the bar is visible and when it is hidden for a single
+    /// tab, so the strip keeps the same colour either way.
+    pub(crate) fn fill_tab_bar_background(
+        &self,
+        layers: &mut TripleLayerQuadAllocator,
+        tab_bar_y: f32,
+        tab_bar_height: f32,
+    ) -> anyhow::Result<()> {
+        let window_is_transparent =
+            !self.window_background.is_empty() || self.config.window_background_opacity != 1.0;
+        if !window_is_transparent {
+            return Ok(());
+        }
+        let pane_background = self
+            .get_active_pane_or_overlay()
+            .map(|pane| pane.palette().background.to_linear())
+            .unwrap_or_else(|| {
+                self.config
+                    .resolved_palette
+                    .background
+                    .unwrap_or_default()
+                    .to_linear()
+            });
+        let bg = pane_background.mul_alpha(self.config.window_background_opacity);
+        let top = if self.config.tab_bar_at_bottom {
+            tab_bar_y
+        } else {
+            0.0
+        };
+        self.filled_rectangle(
+            layers,
+            0,
+            euclid::rect(
+                0.0,
+                top,
+                self.dimensions.pixel_width as f32,
+                tab_bar_y + tab_bar_height - top,
+            ),
+            bg,
+        )?;
+        Ok(())
+    }
+
     pub fn tab_bar_pixel_height_impl(
         config: &ConfigHandle,
         fontconfig: &wezterm_font::FontConfiguration,
@@ -177,26 +212,45 @@ impl crate::TermWindow {
         Self::tab_bar_pixel_height_impl(&self.config, &self.fonts, &self.render_metrics)
     }
 
-    /// Top edge of a top-positioned tab bar, in device pixels.
+    /// Distance from the window top to the first row of terminal content, for
+    /// a top-positioned tab bar.
     ///
-    /// The bar sits directly under the standard window buttons rather than at
-    /// the very top of the window: the buttons are centred in the titlebar, so
-    /// their bottom edge is not the bar's height. The bar keeps its one-line
-    /// height and is pushed down, leaving the strip above it as drag space.
+    /// The strip that holds the window buttons is chrome: the tab bar's one
+    /// line sits at its bottom, and the content starts right below it.
+    pub(crate) fn top_chrome_height(&self) -> f32 {
+        if self.config.tab_bar_at_bottom {
+            return 0.;
+        }
+        // Fullscreen has no titlebar and no window buttons, so there is no
+        // strip to clear — but a visible tab bar still needs its own height,
+        // otherwise the terminal rows run under it.
+        if self.layout_is_effective_fullscreen() {
+            if !self.show_tab_bar {
+                return 0.;
+            }
+            return self.tab_bar_pixel_height().unwrap_or(0.);
+        }
+        // No bar, no strip: with the tab row hidden (a single tab) the terminal
+        // takes the space back instead of leaving an empty band under the
+        // titlebar.
+        if !self.show_tab_bar {
+            return 0.;
+        }
+        self.title_bar_strip_height()
+            .max(self.tab_bar_pixel_height().unwrap_or(0.))
+    }
+
+    /// Height of the strip that holds the standard window buttons, in device
+    /// pixels. Zero when the platform did not report it.
     ///
     /// AppKit reports the button frame in points while this layer works in
-    /// device pixels; without the conversion the two never overlapped (22pt of
-    /// buttons against a 34px bar on a 2x display) and the bar did not move.
-    pub(crate) fn tab_bar_top_offset(&self, tab_bar_height: f32) -> f32 {
-        let border = self.get_os_border();
+    /// device pixels, hence the dpi conversion.
+    pub(crate) fn title_bar_strip_height(&self) -> f32 {
         let dpi_scale = self.dimensions.dpi as f32 / 96.0;
-        let title_bar_height = self
-            .os_parameters
+        self.os_parameters
             .as_ref()
             .and_then(|p| p.title_bar.height)
             .map(|h| h.get() as f32 * dpi_scale)
-            .unwrap_or(0.);
-        let under_buttons = (title_bar_height - tab_bar_height).max(0.);
-        (border.top.get() as f32).max(under_buttons)
+            .unwrap_or(0.)
     }
 }

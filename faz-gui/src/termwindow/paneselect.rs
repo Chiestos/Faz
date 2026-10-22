@@ -63,7 +63,7 @@ impl PaneSelector {
 
         let top_bar_height = if term_window.show_tab_bar && !term_window.config.tab_bar_at_bottom {
             let h = term_window.tab_bar_pixel_height().unwrap();
-            h + term_window.tab_bar_top_offset(h)
+            h
         } else {
             0.
         };

@@ -627,8 +627,13 @@ impl super::TermWindow {
 
         let border = self.get_os_border();
 
+        // Must match where the grid is actually drawn. `top_chrome_height`
+        // accounts for the strip above the tabs; using only the bar height here
+        // left that strip unconsumed, so every click landed one row low.
         let first_line_offset = if self.show_tab_bar && !self.config.tab_bar_at_bottom {
-            self.tab_bar_pixel_height().unwrap_or(0.) as isize
+            // `top_chrome_height` measures the tab/strip area only; the OS
+            // border sits above it.
+            self.top_chrome_height() as isize + border.top.get() as isize
         } else {
             border.top.get() as isize
         };
