@@ -126,8 +126,8 @@
 
 | 编号 | 需求 | 状态 | 验证 |
 |---|---|---|---|
-| R-101 | 通过 ssh 连接远程主机的 domain | 已实现 | `mux/src/ssh.rs` |
-| R-102 | SSH agent 转发 | 已实现 | `mux/src/ssh_agent.rs` |
+| R-101 | 通过 ssh 连接远程主机的 domain | 已移除（见 N-107） | 原 `mux/src/ssh.rs`、`crates/wezterm-ssh` |
+| R-102 | SSH agent 转发 | 已移除（见 N-107） | 原 `mux/src/ssh_agent.rs` |
 | R-103 | tmux 控制模式（`tmux -CC`）集成：远端 tmux 的 window/pane 映射为 Faz 的 tab/pane | 部分实现（见 7.1） | `mux/src/tmux.rs`、`tmux_commands.rs` |
 
 **tmux 集成的工作机制**：tmux 的 control mode 通过终端转义序列协商。当 pane 输出中出现 `DCS 1000` 请求时，Faz 新建一个 `TmuxDomain` 接管该 pane，把后续输出当作 tmux 控制协议解析。远端发送 `%window-add`、`%layout-change`、`%output` 等控制行，Faz 据此在本地建立对应的 tab 与 pane；本地新建窗口、分屏、套选 pane 时，Faz 反向发送 `new-window`、`split-window`、`select-pane` 命令。效果是：**在 Faz 里可以原生操作远端 tmux 会话**，不需要记住 tmux 前缀键，也不需要嵌套终端。
@@ -212,6 +212,7 @@
 | N-104 | AppleScript `do script` | 不向 AppleScript 暴露 shell 执行 |
 | N-105 | Remote Files（`sshfs` 远程文件浏览） | 已整体移除，相关依赖一并清除 |
 | N-106 | Homebrew tap / cask 分发 | 不维护 tap，更新走 DMG |
+| N-107 | 内置 SSH 客户端（`ssh_domains`、SSH agent 转发、TLS `bootstrap_via_ssh` 引导、`faz cli tlscreds`） | 已整体移除；`ssh_domains` / `ssh_backend` / `mux_enable_ssh_agent` / `bootstrap_via_ssh` 保留为 deprecated 字段以兼容旧配置。远程连接用窗格里系统的 `ssh` |
 
 ---
 

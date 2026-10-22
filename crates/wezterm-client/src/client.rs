@@ -4,32 +4,26 @@ use anyhow::{anyhow, bail, Context};
 use async_ossl::AsyncSslStream;
 use async_trait::async_trait;
 use codec::*;
-use config::{configuration, SshDomain, TlsDomainClient, UnixDomain, UnixTarget};
-use filedescriptor::FileDescriptor;
+use config::{configuration, TlsDomainClient, UnixDomain, UnixTarget};
 use futures::FutureExt;
 use mux::client::ClientId;
 use mux::connui::ConnectionUI;
 use mux::domain::DomainId;
 use mux::pane::PaneId;
-use mux::ssh::ssh_connect_with_ui;
 use mux::Mux;
 use openssl::ssl::{SslConnector, SslFiletype, SslMethod};
 use openssl::x509::X509;
-use portable_pty::Child;
 use smol::channel::{bounded, unbounded, Receiver, Sender};
 use smol::prelude::*;
 use smol::{block_on, Async};
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use std::marker::Unpin;
 use std::net::TcpStream;
-#[cfg(unix)]
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(windows)]
 use std::os::windows::io::{AsRawSocket, AsSocket, BorrowedSocket, RawSocket};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use thiserror::Error;
@@ -539,63 +533,6 @@ where
 struct Reconnectable {
     config: ClientDomainConfig,
     stream: Option<Box<dyn AsyncReadAndWrite>>,
-    tls_creds: Option<GetTlsCredsResponse>,
-}
-
-struct SshStream {
-    stdin: FileDescriptor,
-    stdout: FileDescriptor,
-}
-
-unsafe impl async_io::IoSafe for SshStream {}
-
-impl std::fmt::Debug for SshStream {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        write!(fmt, "SshStream {{...}}")
-    }
-}
-
-#[cfg(unix)]
-impl AsFd for SshStream {
-    fn as_fd(&self) -> BorrowedFd<'_> {
-        self.stdout.as_fd()
-    }
-}
-
-#[cfg(unix)]
-impl AsRawFd for SshStream {
-    fn as_raw_fd(&self) -> RawFd {
-        self.stdout.as_raw_fd()
-    }
-}
-
-#[cfg(windows)]
-impl AsRawSocket for SshStream {
-    fn as_raw_socket(&self) -> RawSocket {
-        self.stdout.as_raw_socket()
-    }
-}
-
-#[cfg(windows)]
-impl AsSocket for SshStream {
-    fn as_socket(&self) -> BorrowedSocket {
-        self.stdout.as_socket()
-    }
-}
-
-impl Read for SshStream {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        self.stdout.read(buf)
-    }
-}
-
-impl Write for SshStream {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        self.stdin.write(buf)
-    }
-    fn flush(&mut self) -> Result<(), std::io::Error> {
-        self.stdin.flush()
-    }
 }
 
 impl Reconnectable {
@@ -603,22 +540,7 @@ impl Reconnectable {
         Self {
             config,
             stream,
-            tls_creds: None,
         }
-    }
-
-    fn tls_creds_path(&self) -> anyhow::Result<PathBuf> {
-        let path = config::pki_dir()?.join(self.config.name());
-        std::fs::create_dir_all(&path)?;
-        Ok(path)
-    }
-
-    fn tls_creds_ca_path(&self) -> anyhow::Result<PathBuf> {
-        Ok(self.tls_creds_path()?.join("ca.pem"))
-    }
-
-    fn tls_creds_cert_path(&self) -> anyhow::Result<PathBuf> {
-        Ok(self.tls_creds_path()?.join("cert.pem"))
     }
 
     fn take_stream(&mut self) -> Option<Box<dyn AsyncReadAndWrite>> {
@@ -636,12 +558,6 @@ impl Reconnectable {
             // the set of tabs and we'd have confusing and inconsistent state
             ClientDomainConfig::Unix(_) => false,
             ClientDomainConfig::Tls(_) => true,
-            // It *does* make sense to reconnect with an ssh session, but we
-            // need to grow some smarts about whether the disconnect was because
-            // we sent CTRL-D to close the last session, or whether it was a network
-            // level disconnect, because we will otherwise throw up authentication
-            // dialogs that would be annoying
-            ClientDomainConfig::Ssh(_) => false,
         }
     }
 
@@ -656,76 +572,7 @@ impl Reconnectable {
                 self.unix_connect(unix_dom, initial, ui, no_auto_start)
             }
             ClientDomainConfig::Tls(tls) => self.tls_connect(tls, initial, ui),
-            ClientDomainConfig::Ssh(ssh) => self.ssh_connect(ssh, initial, ui),
         }
-    }
-
-    /// Resolve the path to wezterm for the remote system.
-    /// We can't simply derive this from the current executable because
-    /// we are being asked to produce a path for the remote system and
-    /// we don't really know anything about it.
-    /// `path` comes from the SshDoman::remote_wezterm_path option; if set
-    /// then the user has told us where to look.
-    /// Otherwise, we have to rely on the `PATH` environment for the remote
-    /// system, and we don't know if it is even running unix, or whether
-    /// any given shell syntax will help us provide a more meaningful
-    /// message to the user.
-    fn wezterm_bin_path(path: &Option<String>) -> String {
-        path.as_deref().unwrap_or("wezterm").to_string()
-    }
-
-    fn ssh_connect(
-        &mut self,
-        ssh_dom: SshDomain,
-        initial: bool,
-        ui: &mut ConnectionUI,
-    ) -> anyhow::Result<()> {
-        let ssh_config = mux::ssh::ssh_domain_to_ssh_config(&ssh_dom)?;
-
-        let sess = ssh_connect_with_ui(ssh_config, ui)?;
-        let proxy_bin = Self::wezterm_bin_path(&ssh_dom.remote_wezterm_path);
-
-        let cmd = if let Some(cmd) = ssh_dom.override_proxy_command.clone() {
-            cmd
-        } else if initial {
-            format!("{} cli --prefer-mux proxy", proxy_bin)
-        } else {
-            format!("{} cli --prefer-mux --no-auto-start proxy", proxy_bin)
-        };
-        ui.output_str(&format!("Running: {}\n", cmd));
-        log::debug!("going to run {}", cmd);
-
-        let exec = smol::block_on(sess.exec(&cmd, None))?;
-
-        let mut stderr = exec.stderr;
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 1024];
-            while let Ok(len) = stderr.read(&mut buf) {
-                if len == 0 {
-                    break;
-                } else {
-                    let stderr = &buf[0..len];
-                    log::error!("ssh stderr: {}", String::from_utf8_lossy(stderr));
-                }
-            }
-        });
-
-        // This is a bit gross, but it helps to surface errors in running
-        // the proxy, and prevents us from hanging forever after the process
-        // has died
-        let mut child = exec.child;
-        std::thread::spawn(move || match child.wait() {
-            Err(err) => log::error!("waiting on {} failed: {:#}", cmd, err),
-            Ok(status) if !status.success() => log::error!("{}: {}", cmd, status),
-            _ => {}
-        });
-
-        let stream: Box<dyn AsyncReadAndWrite> = Box::new(Async::new(SshStream {
-            stdin: exec.stdin,
-            stdout: exec.stdout,
-        })?);
-        self.stream.replace(stream);
-        Ok(())
     }
 
     fn unix_connect(
@@ -824,114 +671,6 @@ impl Reconnectable {
             )
         })?;
 
-        // If we are reconnecting and already bootstrapped via SSH, let's see if
-        // we can connect using those same credentials and avoid running through
-        // the SSH authentication flow.
-        if let Some(Ok(_)) = tls_client.ssh_parameters() {
-            match self.try_connect(&tls_client, ui, &remote_address, remote_host_name) {
-                Ok(stream) => {
-                    self.stream.replace(stream);
-                    return Ok(());
-                }
-                Err(err) => {
-                    if let Some(ioerr) = err.root_cause().downcast_ref::<std::io::Error>() {
-                        match ioerr.kind() {
-                            std::io::ErrorKind::ConnectionRefused => {
-                                // Server isn't up yet; let's proceed with bootstrap
-                            }
-                            _ => {
-                                // If it is an IO error that implies that we had an issue
-                                // reaching or otherwise talking to the remote host.
-                                // Re-attempting the SSH bootstrap most likely will not
-                                // succeed so we let this bubble up.
-                                return Err(err);
-                            }
-                        }
-                    }
-                    ui.output_str(&format!(
-                        "Failed to reuse creds: {:?}\nWill retry bootstrap via SSH\n",
-                        err
-                    ));
-                }
-            }
-        }
-
-        if let Some(Ok(ssh_params)) = tls_client.ssh_parameters() {
-            if self.tls_creds.is_none() {
-                // We need to bootstrap via an ssh session
-
-                let mut ssh_config = wezterm_ssh::Config::new();
-                ssh_config.add_default_config_files();
-
-                let mut fields = ssh_params.host_and_port.split(':');
-                let host = fields
-                    .next()
-                    .ok_or_else(|| anyhow::anyhow!("no host component somehow"))?;
-                let port = fields.next();
-
-                let mut ssh_config = ssh_config.for_host(host);
-                if let Some(username) = &ssh_params.username {
-                    ssh_config.insert("user".to_string(), username.to_string());
-                }
-                if let Some(port) = port {
-                    ssh_config.insert("port".to_string(), port.to_string());
-                }
-
-                let sess = ssh_connect_with_ui(ssh_config, ui)?;
-
-                let creds = ui.run_and_log_error(|| {
-                    // The `tlscreds` command will start the server if needed and then
-                    // obtain client credentials that we can use for tls.
-                    let cmd = format!(
-                        "{} cli tlscreds",
-                        Self::wezterm_bin_path(&tls_client.remote_wezterm_path)
-                    );
-
-                    ui.output_str(&format!("Running: {}\n", cmd));
-                    let mut exec = smol::block_on(sess.exec(&cmd, None))
-                        .with_context(|| format!("executing `{}` on remote host", cmd))?;
-
-                    log::debug!("waiting for command to finish");
-                    let status = exec.child.wait()?;
-                    if !status.success() {
-                        anyhow::bail!("{} failed", cmd);
-                    }
-
-                    drop(exec.stdin);
-
-                    let mut stderr = exec.stderr;
-                    thread::spawn(move || {
-                        // stderr is ideally empty
-                        let mut err = String::new();
-                        let _ = stderr.read_to_string(&mut err);
-                        if !err.is_empty() {
-                            log::error!("remote: `{}` stderr -> `{}`", cmd, err);
-                        }
-                    });
-
-                    let creds = match Pdu::decode(exec.stdout)
-                        .context("reading tlscreds response")?
-                        .pdu
-                    {
-                        Pdu::GetTlsCredsResponse(creds) => creds,
-                        _ => bail!("unexpected response to tlscreds"),
-                    };
-
-                    // Save the credentials to disk, as that is currently the easiest
-                    // way to get them into openssl.  Ideally we'd keep these entirely
-                    // in memory.
-                    std::fs::write(&self.tls_creds_ca_path()?, creds.ca_cert_pem.as_bytes())?;
-                    std::fs::write(
-                        &self.tls_creds_cert_path()?,
-                        creds.client_cert_pem.as_bytes(),
-                    )?;
-                    log::info!("got TLS creds");
-                    Ok(creds)
-                })?;
-                self.tls_creds.replace(creds);
-            }
-        }
-
         let cloned_ui = ui.clone();
         let stream = cloned_ui.run_and_log_error({
             || self.try_connect(&tls_client, ui, &remote_address, remote_host_name)
@@ -949,10 +688,12 @@ impl Reconnectable {
     ) -> anyhow::Result<Box<dyn AsyncReadAndWrite>> {
         let mut connector = SslConnector::builder(SslMethod::tls())?;
 
-        let cert_file = match tls_client.pem_cert.clone() {
-            Some(cert) => cert,
-            None => self.tls_creds_cert_path()?,
-        };
+        let cert_file = tls_client.pem_cert.clone().ok_or_else(|| {
+            anyhow!(
+                "tls_client `{}` must set pem_cert; Faz no longer obtains                  certificates by bootstrapping over ssh",
+                tls_client.name
+            )
+        })?;
 
         connector
             .set_certificate_file(&cert_file, SslFiletype::PEM)
@@ -970,10 +711,12 @@ impl Reconnectable {
                 ))?;
         }
 
-        let key_file = match tls_client.pem_private_key.clone() {
-            Some(key) => key,
-            None => self.tls_creds_cert_path()?,
-        };
+        let key_file = tls_client.pem_private_key.clone().ok_or_else(|| {
+            anyhow!(
+                "tls_client `{}` must set pem_private_key; Faz no longer obtains                  keys by bootstrapping over ssh",
+                tls_client.name
+            )
+        })?;
         connector
             .set_private_key_file(&key_file, SslFiletype::PEM)
             .context(format!(
@@ -995,12 +738,6 @@ impl Reconnectable {
                 }
             } else {
                 connector.cert_store_mut().add_cert(load_cert(name)?)?;
-            }
-        }
-
-        if let Ok(ca_path) = self.tls_creds_ca_path() {
-            if ca_path.exists() {
-                connector.cert_store_mut().add_cert(load_cert(&ca_path)?)?;
             }
         }
 
@@ -1290,17 +1027,6 @@ impl Client {
         Ok(Self::new(Some(local_domain_id), reconnectable))
     }
 
-    pub fn new_ssh(
-        local_domain_id: DomainId,
-        ssh_dom: &SshDomain,
-        ui: &mut ConnectionUI,
-    ) -> anyhow::Result<Self> {
-        let mut reconnectable = Reconnectable::new(ClientDomainConfig::Ssh(ssh_dom.clone()), None);
-        let no_auto_start = true;
-        reconnectable.connect(true, ui, no_auto_start)?;
-        Ok(Self::new(Some(local_domain_id), reconnectable))
-    }
-
     pub async fn send_pdu(&self, pdu: Pdu) -> anyhow::Result<Pdu> {
         let (promise, rx) = bounded(1);
         self.sender
@@ -1366,7 +1092,6 @@ impl Client {
         GetPaneRenderableDimensionsResponse
     );
     rpc!(get_codec_version, GetCodecVersion, GetCodecVersionResponse);
-    rpc!(get_tls_creds, GetTlsCreds = (), GetTlsCredsResponse);
     rpc!(
         search_scrollback,
         SearchScrollbackRequest,

@@ -207,7 +207,6 @@ fn register_lua_modules() {
     for func in [
         battery::register,
         plugin::register,
-        ssh_funcs::register,
         url_funcs::register,
         procinfo_funcs::register,
     ] {

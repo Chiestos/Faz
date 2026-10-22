@@ -42,7 +42,7 @@ impl ClientId {
             pid: unsafe { libc::getpid() as u32 },
             epoch: *EPOCH,
             id,
-            ssh_auth_sock: crate::AgentProxy::default_ssh_auth_sock(),
+            ssh_auth_sock: None,
         }
     }
 }

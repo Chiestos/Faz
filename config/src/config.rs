@@ -16,7 +16,6 @@ use crate::keyassignment::{
 };
 use crate::keys::{DeferredKeyCode, Key, KeyNoAction, LeaderKey, Mouse};
 use crate::lua::make_lua_context;
-use crate::ssh::{SshBackend, SshDomain};
 use crate::tls::{TlsDomainClient, TlsDomainServer};
 use crate::units::Dimension;
 use crate::unix::UnixDomain;
@@ -392,11 +391,21 @@ pub struct Config {
     #[dynamic(default = "UnixDomain::default_unix_domains")]
     pub unix_domains: Vec<UnixDomain>,
 
-    #[dynamic(default)]
-    pub ssh_domains: Option<Vec<SshDomain>>,
+    /// Deprecated and ignored. Faz does not ship an SSH client; connecting is
+    /// done with the system `ssh` inside a pane. Kept as deprecated fields so
+    /// that existing `faz.lua` files carrying `config.ssh_domains` or
+    /// `config.ssh_backend` still load, with a warning, instead of failing.
+    #[dynamic(
+        default,
+        deprecated = "Faz has no built-in SSH client; use the system `ssh` in a pane"
+    )]
+    pub ssh_domains: wezterm_dynamic::Value,
 
-    #[dynamic(default)]
-    pub ssh_backend: SshBackend,
+    #[dynamic(
+        default,
+        deprecated = "Faz has no built-in SSH client; use the system `ssh` in a pane"
+    )]
+    pub ssh_backend: wezterm_dynamic::Value,
 
     /// When running in server mode, defines configuration for
     /// each of the endpoints that we'll listen for connections
@@ -422,8 +431,8 @@ pub struct Config {
     #[dynamic(default = "default_mux_output_parser_buffer_size")]
     pub mux_output_parser_buffer_size: usize,
 
-    #[dynamic(default = "default_true")]
-    pub mux_enable_ssh_agent: bool,
+    #[dynamic(default, deprecated = "Faz has no built-in SSH client")]
+    pub mux_enable_ssh_agent: wezterm_dynamic::Value,
 
     #[dynamic(default)]
     pub default_ssh_auth_sock: Option<String>,
@@ -1055,17 +1064,6 @@ impl Config {
         Self::load_with_overrides(&wezterm_dynamic::Value::default())
     }
 
-    /// It is relatively expensive to parse all the ssh config files,
-    /// so we defer producing the default list until someone explicitly
-    /// asks for it
-    pub fn ssh_domains(&self) -> Vec<SshDomain> {
-        if let Some(domains) = &self.ssh_domains {
-            domains.clone()
-        } else {
-            SshDomain::default_domains()
-        }
-    }
-
     pub fn wsl_domains(&self) -> Vec<WslDomain> {
         if let Some(domains) = &self.wsl_domains {
             domains.clone()
@@ -1570,11 +1568,6 @@ impl Config {
 
         for d in &self.unix_domains {
             check_domain(&d.name, "unix domain")?;
-        }
-        if let Some(domains) = &self.ssh_domains {
-            for d in domains {
-                check_domain(&d.name, "ssh domain")?;
-            }
         }
         for d in &self.exec_domains {
             check_domain(&d.name, "exec domain")?;

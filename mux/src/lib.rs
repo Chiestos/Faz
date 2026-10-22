@@ -50,7 +50,6 @@
 use crate::client::{ClientId, ClientInfo};
 use crate::pane::{CachePolicy, Pane, PaneId, PaneReader};
 use crate::pane_encoding::{decode_bytes_to_string, PaneOutputDecoder};
-use crate::ssh_agent::AgentProxy;
 use crate::tab::{SplitRequest, Tab, TabId};
 use crate::window::{Window, WindowId};
 use anyhow::{anyhow, Context, Error};
@@ -94,8 +93,6 @@ pub mod localpane;
 pub mod pane;
 pub mod pane_encoding;
 pub mod renderable;
-pub mod ssh;
-pub mod ssh_agent;
 pub mod tab;
 pub mod termwiztermtab;
 pub mod tmux;
@@ -179,7 +176,6 @@ pub struct Mux {
     identity: RwLock<Option<Arc<ClientId>>>,
     num_panes_by_workspace: RwLock<HashMap<String, usize>>,
     main_thread_id: std::thread::ThreadId,
-    agent: Option<AgentProxy>,
     /// Dead flags for pane reader threads, used to signal thread termination
     pane_dead_flags: RwLock<HashMap<PaneId, Arc<AtomicBool>>>,
 }
@@ -1191,12 +1187,6 @@ impl Mux {
             );
         }
 
-        let agent = if config::configuration().mux_enable_ssh_agent {
-            Some(AgentProxy::new())
-        } else {
-            None
-        };
-
         Self {
             tabs: RwLock::new(HashMap::new()),
             panes: RwLock::new(HashMap::new()),
@@ -1210,7 +1200,6 @@ impl Mux {
             identity: RwLock::new(None),
             num_panes_by_workspace: RwLock::new(HashMap::new()),
             main_thread_id: std::thread::current().id(),
-            agent,
             pane_dead_flags: RwLock::new(HashMap::new()),
         }
     }
@@ -1248,9 +1237,6 @@ impl Mux {
     pub fn client_had_input(&self, client_id: &ClientId) {
         if let Some(info) = self.clients.write().get_mut(client_id) {
             info.update_last_input();
-        }
-        if let Some(agent) = &self.agent {
-            agent.update_target();
         }
     }
 

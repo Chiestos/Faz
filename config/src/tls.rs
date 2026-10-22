@@ -33,10 +33,11 @@ pub struct TlsDomainClient {
     #[dynamic(validate = "validate_domain_name")]
     pub name: String,
 
-    /// If set, use ssh to connect, start the server, and obtain
-    /// a certificate.
-    /// The value is "user@host:port", just like "wezterm ssh" accepts.
-    pub bootstrap_via_ssh: Option<String>,
+    /// Deprecated and ignored: Faz no longer ships a built-in ssh client,
+    /// so a TLS domain can't be bootstrapped over ssh. Retained so existing
+    /// configs still load.
+    #[dynamic(default, deprecated = "the built-in ssh client was removed")]
+    pub bootstrap_via_ssh: wezterm_dynamic::Value,
 
     /// identifies the host:port pair of the remote server.
     pub remote_address: String,
@@ -94,12 +95,4 @@ pub struct TlsDomainClient {
     /// instead.
     #[dynamic(default)]
     pub overlay_lag_indicator: bool,
-}
-
-impl TlsDomainClient {
-    pub fn ssh_parameters(&self) -> Option<anyhow::Result<SshParameters>> {
-        self.bootstrap_via_ssh
-            .as_ref()
-            .map(|user_at_host_and_port| user_at_host_and_port.parse())
-    }
 }

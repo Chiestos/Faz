@@ -514,7 +514,7 @@ impl LocalDomain {
 
     async fn build_command(
         &self,
-        mux: &Mux,
+        _mux: &Mux,
         command: Option<CommandBuilder>,
         command_dir: Option<String>,
         pane_id: PaneId,
@@ -547,9 +547,6 @@ impl LocalDomain {
             cmd.env("WEZTERM_UNIX_SOCKET", sock);
         }
         cmd.env("WEZTERM_PANE", pane_id.to_string());
-        if let Some(agent) = mux.agent.as_ref() {
-            cmd.env("SSH_AUTH_SOCK", agent.path());
-        }
         self.fixup_command(&mut cmd).await?;
         Ok(cmd)
     }

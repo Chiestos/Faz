@@ -9,7 +9,6 @@ members = [
   "crates/wezterm-dynamic",
   "faz-gui",
   "crates/wezterm-open-url",
-  "crates/wezterm-ssh",
   "crates/wezterm-surface",
   "crates/wezterm-uds",
   "crates/faz-unicode-names",
@@ -160,7 +159,6 @@ lfucache = { path = "crates/lfucache" }
 libc = "0.2"
 libflate = "2"
 libloading = "0.8"
-libssh-rs = "0.3.6"
 line_drawing = "0.8"
 log = "0.4"
 logging = { path = "lua-api-crates/logging" }
@@ -238,8 +236,6 @@ socket2 = "0.5"
 spa = "0.3.1"
 spawn-funcs = { path = "lua-api-crates/spawn-funcs" }
 sqlite-cache = "0.1.4"
-ssh-funcs = { path = "lua-api-crates/ssh-funcs" }
-ssh2 = "0.9.3"
 starship-battery = "0.10"
 strsim = "0.11"
 syn = "1.0"
@@ -284,7 +280,6 @@ wezterm-gui-subcommands = { path = "crates/wezterm-gui-subcommands" }
 wezterm-input-types = { version="0.1", path = "crates/wezterm-input-types", default-features=false }
 wezterm-mux-server-impl = { path = "crates/wezterm-mux-server-impl" }
 wezterm-open-url = { path = "crates/wezterm-open-url" }
-wezterm-ssh = { path = "crates/wezterm-ssh" }
 wezterm-surface = { path = "crates/wezterm-surface" }
 wezterm-term = { path = "term" }
 wezterm-toast-notification = { path = "crates/wezterm-toast-notification" }
