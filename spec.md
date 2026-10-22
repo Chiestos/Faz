@@ -128,9 +128,17 @@
 |---|---|---|---|
 | R-101 | 通过 ssh 连接远程主机的 domain | 已移除（见 N-107） | 原 `mux/src/ssh.rs`、`crates/wezterm-ssh` |
 | R-102 | SSH agent 转发 | 已移除（见 N-107） | 原 `mux/src/ssh_agent.rs` |
-| R-103 | tmux 控制模式（`tmux -CC`）集成：远端 tmux 的 window/pane 映射为 Faz 的 tab/pane | 部分实现（见 7.1） | `mux/src/tmux.rs`、`tmux_commands.rs` |
+| R-103 | tmux 控制模式（`tmux -CC`）集成：远端 tmux 的 window/pane 映射为 Faz 的 tab/pane | 已实现（见 7.1） | `mux/src/tmux.rs`、`tmux_commands.rs` |
 
 **tmux 集成的工作机制**：tmux 的 control mode 通过终端转义序列协商。当 pane 输出中出现 `DCS 1000` 请求时，Faz 新建一个 `TmuxDomain` 接管该 pane，把后续输出当作 tmux 控制协议解析。远端发送 `%window-add`、`%layout-change`、`%output` 等控制行，Faz 据此在本地建立对应的 tab 与 pane；本地新建窗口、分屏、套选 pane 时，Faz 反向发送 `new-window`、`split-window`、`select-pane` 命令。效果是：**在 Faz 里可以原生操作远端 tmux 会话**，不需要记住 tmux 前缀键，也不需要嵌套终端。
+
+**窗口模型**：每个 `tmux -CC` 会话独占一个 Faz 窗口（domain 名 `tmux-<pane_id>`，保证多个会话不撞名）。窗口在第一个 tab 落位后才发布给 GUI，因为 `MuxWindowBuilder` 只在 drop 时发 `WindowCreated`。运行 `tmux -CC` 的那个 pane 保留在它原来的窗口里不动。
+
+**新建 tab**：在该窗口里新建 tab 会向 tmux 发 `new-window`，等 `%window-add` 回来后再建立本地 tab，带 10 秒超时避免永久挂起。
+
+**关闭窗口 = detach**：关闭承载 tmux pane 的窗口会走真正的销毁路径（macOS 上其他窗口仍然只是 `order_out()` 隐藏），并通过 `LocalPane::detach_tmux` 向原始 pane 的 pty 写 `detach\n`，等价于 `c-b d`：客户端断开，tmux 会话仍在服务端运行。注意不能用 terminal 的 writer——tmux pane 的 terminal writer 是 `TmuxPtyWriter`，会把内容转成 `send-keys` 发给远端 pane。
+
+**标题归 tmux 所有**：tmux tab 跳过用户 `format-tab-title` 回调（普通与 hover 两条路径都跳过），且忽略内部 shell 的 OSC 2 标题变化，标题始终来自 tmux 的 window 名。
 
 **为什么有用**：长时间 ssh 会话断线后，远端 tmux 里的工作不会丢；通过 control mode 接入后，这些会话在 Faz 里以本地 tab 的形式出现，可以直接用 Faz 的分屏、标签、鼠标选择、滚屏，而不是在单一块终端里看图。
 
@@ -140,16 +148,14 @@
 
 ### 7.1 控制模式集成的已知缺陷（待评估与修复）
 
-以下问题在实机 `tmux -CC` 测试中复现，尚未修复：
-
-| 编号 | 问题 | 影响 | 定位 |
+| 编号 | 问题 | 状态 | 定位 |
 |---|---|---|---|
-| R-901 | 控制模式下 pane **无法输入**：除 `q`（触发 detach）外所有按键被丢弃 | 集成几乎不可用 | `localpane.rs:485` `key_down` 中 `return Ok(())`；为上游遗留调试桩，缺少把按键转发给 tmux domain 的实现 |
-| R-902 | 关闭所有 tmux tab 后，后续 `tmux -CC` 无法再拉起新 tab/pane | 状态泄漏，使用一次后只能重启 Faz | `DeviceControlMode::Exit` 是唯一清理点，但本地关闭 tab 的路径不一定产生 DCS Exit，`tmux_domain` 因此残留 |
-| R-903 | tmux tab 与本地 tab 在标签栏中无视觉区分 | 用户无法判断当前 tab 属于哪一侧 | tab bar 渲染未携带 domain 来源信息 |
-| R-904 | 进入控制模式后提示语 `[This pane is running tmux control mode. Press q to detach]` 是机制说明而非状态标识，且 `q` 与正常键入冲突 | 提示与实际交互行为不一致 | `localpane.rs:1042` 附近 |
+| R-901 | 控制模式下 pane 无法输入 | 已修复：`TmuxPty::write` 曾返回 `Ok(0)`，使 `write_all` 以 `WriteZero` 中止 | `mux/src/tmux_pty.rs` |
+| R-902 | 关闭 tmux tab 后状态泄漏，后续 `tmux -CC` 无法再拉起新 tab/pane | 未复测 | `DeviceControlMode::Exit` 是主要清理点 |
+| R-903 | tmux tab 与本地 tab 在标签栏中无视觉区分 | 未实现 | tab bar 渲染 |
+| R-904 | 控制模式提示语 `[This pane is running tmux control mode. Press q to detach]` 与 `q` 键处理 | 保留：`q` 仍用于退出控制模式；正常输入已可用，不再冲突 | `mux/src/localpane.rs` |
 
-**评估时需要先回答的问题**：tmux 控制模式在 Faz 中是否是长期维护路径。代码带有 `TODO` 与遗留调试桩，形似从 WezTerm 继承但未完成移植。若决定维护，建议按 R-902（状态泄漏，影响后续所有会话）→ R-901（功能性）→ R-903/R-904（体验）的顺序处理；若决定不维护，应考虑移除入口而非保留半成品。
+**仍待评估**：`move-pane`、`kill-pane` 等反向命令是否完整覆盖；关闭最后一个 tab（而非整个窗口）后的状态清理属于 R-902 的未复测部分。
 
 ---
 

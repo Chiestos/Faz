@@ -1089,7 +1089,9 @@ impl TabBarState {
                 // title while still customizing the hover state. A user
                 // handler owns the title even for SSH tabs, so the hover path
                 // must consult it for the same panes the batch path does.
-                let hover_precomputed = if user_owns_titles {
+                // tmux tabs keep tmux's title in hover too; the same rule the
+                // batch path applies.
+                let hover_precomputed = if user_owns_titles && !tab_info[tab_idx].is_tmux {
                     call_format_tab_title_hover(
                         &tab_info[tab_idx],
                         tab_info,

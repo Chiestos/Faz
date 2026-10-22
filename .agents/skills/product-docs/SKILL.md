@@ -30,7 +30,7 @@ User-facing docs are public. Do not copy feature claims from a subagent summary 
 
 ## Workflow
 
-1. **Scope**: read `git log`/`gh release list` for the current version and what changed. Read the nearest crate `AGENTS.md` and `CLAUDE.md` for feature notes (e.g. `config_version` changes).
+1. **Scope**: read `git log`/`gh release list` for the current version and what changed. Read the nearest crate `AGENTS.md` for feature notes (e.g. `config_version` changes).
 2. **Inventory the site**: read the target page(s) raw to clone exact markup. Note `site-nav`, `docs-sidebar > docs-menu`, `section-toc`, `doc-content`, `doc-pager`, `footer`. ZH footer/skip-link wording differs from EN; copy the ZH variants verbatim from an existing ZH page.
 3. **Write/edit content** in plain language. New page: clone an existing doc page's full scaffold, change `<title>`/`description`/`canonical`/`hreflang`/hero/`docs-menu` current item/`section-toc`/`doc-pager`. Anchors use a `page-` prefix (`guide-...`).
 4. **Wire navigation** (a new page touches every doc page):

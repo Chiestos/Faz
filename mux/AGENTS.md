@@ -31,6 +31,16 @@ The `mux` crate owns tab, pane, domain, and mux state management.
 - **Split tree correctness**: Tab split tree mutations in `tab.rs` are tricky; always verify with a pane layout sanity check after modifications.
 - **Overlay resize regressions**: GUI overlays derive geometry from pane state. Mux changes that skip resize or removal notifications can leave AI/chat overlays stale.
 
+## tmux Control Mode
+
+`tmux -CC` is a live surface. The pieces that are easy to break:
+
+- **One window per session.** `TmuxDomain` is named `tmux-<pane_id>` so several sessions never collide in the mux name index. The window is created with `new_empty_window` and published only after the first tab lands: `MuxWindowBuilder` fires `WindowCreated` from `Drop`, so holding the builder forever keeps the window invisible.
+- **Input path.** `TmuxPty::write` must report the full buffer length. Returning `Ok(0)` makes `write_all` stop with `WriteZero`, which looks like "typing stalls after one character".
+- **Detach writes to the pty, not the terminal.** For a tmux pane the terminal writer is a `TmuxPtyWriter` that converts everything into `send-keys` for a remote pane. `LocalPane::detach_tmux` writes `detach\n` to `self.writer` so the command reaches the tmux client.
+- **Closing the window detaches.** On macOS `close_requested` hides windows with `order_out()`, which keeps the client attached; a window hosting tmux panes takes the real close path instead. `remove_window_internal` must drop the window lock before calling `detach`, which writes to a pty.
+- **Titles belong to tmux.** Tmux tabs skip the user's `format-tab-title` on both the batch and hover paths, and inner-shell `OSC 2` must not overwrite the remote window name.
+
 ## Cross-References
 
 - [`faz-gui/AGENTS.md`](../faz-gui/AGENTS.md) - GUI rendering for mux state.

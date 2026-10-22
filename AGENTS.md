@@ -137,5 +137,5 @@ Releases that touch windowing, titlebar coloring, tab bar layout, or transparenc
 - Cross-crate behavior should update every affected subsystem guide.
 - Build, CI, release, and maintainer workflow changes belong in this root file.
 - Shared agent instructions belong in tracked docs. Personal overrides belong in ignored local files.
-- One-off review reports, scorecards, and diagnostic snapshots are evidence, not durable project docs. Extract stable rules or verification gates into `AGENTS.md`, `CLAUDE.md`, subsystem guides, scripts, or tests, then remove the transient report.
+- One-off review reports, scorecards, and diagnostic snapshots are evidence, not durable project docs. Extract stable rules or verification gates into `AGENTS.md`, subsystem guides, scripts, or tests, then remove the transient report.
 - Do not hide user-visible behavior changes inside maintainability or cleanup patches. New UI, config fields, defaults, or workflow permissions should be split into their own change unless the maintainer explicitly approved that scope.
